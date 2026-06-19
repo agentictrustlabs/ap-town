@@ -1,0 +1,18 @@
+# Cloudflare Worker — demo-discovery-a2a. The agent surface: browser → A2A → MCP → GraphDB.
+# In production it reaches the MCP via a SERVICE BINDING (env.MCP) — a Worker can't fetch another
+# Worker on the same account by public URL (CF 1042). Local dev falls back to MCP_URL.
+name = "demo-discovery-a2a"
+main = "src/index.ts"
+compatibility_date = "2026-05-19"
+compatibility_flags = ["nodejs_compat"]
+
+[dev]
+port = 8791
+
+[vars]
+MCP_URL = "http://127.0.0.1:8790"
+AGENT_NAME = "discovery.agent"
+
+[[services]]
+binding = "MCP"
+service = "demo-discovery-mcp"

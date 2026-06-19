@@ -1,0 +1,12 @@
+# Cloudflare Worker — demo-discovery-mcp. MCP tools over the discovery knowledge base (GraphDB).
+# Secrets (set via `wrangler secret put`): GRAPHDB_USER, GRAPHDB_PASSWORD.
+name = "demo-discovery-mcp"
+main = "src/index.ts"
+compatibility_date = "2026-05-19"
+compatibility_flags = ["nodejs_compat"]
+
+[dev]
+port = 8790
+
+[vars]
+GRAPHDB_QUERY_URL = "https://graphdb.agentkg.io/repositories/smart-agents"

@@ -10,9 +10,10 @@ import {
 } from './lib/abox';
 import { loadLive, LIVE, type LiveAgent } from './lib/live';
 import { loadAboxGraph, type AboxDoc } from './lib/abox-graph';
+import { discover, DISCOVERY_AGENT_URL, type DiscoverResponse } from './lib/discovery-a2a';
 import { Pill, StatusPill, VerifyPill, Spinner, short } from './components/ui';
 
-type View = { tab: 'discover' } | { tab: 'agent'; slug: string } | { tab: 'findings' } | { tab: 'live' } | { tab: 'graph' };
+type View = { tab: 'discover' } | { tab: 'agent'; slug: string } | { tab: 'findings' } | { tab: 'live' } | { tab: 'graph' } | { tab: 'search' };
 
 export function App() {
   const [records, setRecords] = useState<AgentRecord[] | null>(null);
@@ -26,13 +27,16 @@ export function App() {
       <Topbar admin={admin} onToggleAdmin={() => setAdmin((a) => !a)} />
       <main className="wrap">
         <nav className="tabs" role="tablist">
+          <button className={`tab ${view.tab === 'search' ? '--active' : ''}`} onClick={() => setView({ tab: 'search' })}>Search · via A2A</button>
           <button className={`tab ${view.tab === 'discover' || view.tab === 'agent' ? '--active' : ''}`} onClick={() => setView({ tab: 'discover' })}>Discover <span className="muted" style={{ fontWeight: 600 }}>(fixtures)</span></button>
           <button className={`tab ${view.tab === 'live' ? '--active' : ''}`} onClick={() => setView({ tab: 'live' })}>Live · Base Sepolia</button>
           <button className={`tab ${view.tab === 'graph' ? '--active' : ''}`} onClick={() => setView({ tab: 'graph' })}>Indexed graph · A-box</button>
           {admin && <button className={`tab ${view.tab === 'findings' ? '--active' : ''}`} onClick={() => setView({ tab: 'findings' })}>Exposure findings</button>}
         </nav>
 
-        {view.tab === 'graph' ? (
+        {view.tab === 'search' ? (
+          <SearchView />
+        ) : view.tab === 'graph' ? (
           <GraphView />
         ) : view.tab === 'live' ? (
           <LiveView />
@@ -184,6 +188,59 @@ function Step({ n, pill, cite, children }: { n: string; pill: React.ReactNode; c
       <div style={{ margin: '.5rem 0' }}>{children}</div>
       <p className="cite">cites <b>{cite}</b></p>
     </div>
+  );
+}
+
+function SearchView() {
+  const [query, setQuery] = useState('');
+  const [intent, setIntent] = useState('');
+  const [resp, setResp] = useState<DiscoverResponse | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const run = async () => {
+    setLoading(true); setResp(null);
+    try { setResp(await discover({ query, intent: intent || undefined })); }
+    catch (e) { setResp({ ok: false, query, intent: null, results: [], error: String(e) }); }
+    finally { setLoading(false); }
+  };
+
+  return (
+    <>
+      <p className="eyebrow">Search · agent service</p>
+      <h1 style={{ marginBottom: '.4rem' }}>Ask the Discovery Agent</h1>
+      <p className="muted" style={{ marginBottom: '1rem' }}>
+        The browser never touches the chain or the graph directly — it asks the <b>Discovery A2A agent</b>, which orchestrates the <b>Discovery MCP</b> over the GraphDB knowledge base. <b>UI → A2A → MCP → GraphDB.</b> Intent + mandate weighting is the growing edge.
+      </p>
+      <div className="card" style={{ marginBottom: '1.2rem' }}>
+        <input className="input" placeholder="Query (e.g. lbsb, scripture, org)…" value={query} onChange={(e) => setQuery(e.target.value)} style={{ marginBottom: '.6rem' }} />
+        <input className="input" placeholder="Intent (optional, e.g. 'licensed scripture provider')…" value={intent} onChange={(e) => setIntent(e.target.value)} style={{ marginBottom: '.7rem' }} />
+        <div className="row" style={{ justifyContent: 'space-between' }}>
+          <button className="btn --p" onClick={run} disabled={loading}>{loading ? <Spinner /> : 'Discover'}</button>
+          <span className="cite">agent: <a href={`${DISCOVERY_AGENT_URL}/.well-known/agent-card.json`} target="_blank" rel="noreferrer">discovery.agent</a></span>
+        </div>
+      </div>
+      {loading && <div className="row"><Spinner /> <span className="muted">A2A → MCP → GraphDB…</span></div>}
+      {resp && !resp.ok && <div className="card"><Pill kind="err">error</Pill> <span className="muted">{resp.error}</span></div>}
+      {resp?.ok && (
+        <>
+          <p className="cite" style={{ marginBottom: '1rem' }}>{resp.results.length} result(s) · {resp.source}{resp.note ? ` · ${resp.note}` : ''}</p>
+          {resp.results.map((r) => (
+            <div key={r.smartAgent} className="card">
+              <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '.5rem' }}>
+                <h3 style={{ fontSize: '1rem' }}>{r.name ?? '(unnamed)'}</h3>
+                <div className="row" style={{ gap: '.4rem' }}>
+                  <Pill kind={r.shaclConforms ? 'ok' : 'err'}>{r.shaclConforms ? 'SHACL ✓' : 'SHACL ✗'}</Pill>
+                  <Pill kind={r.score >= 0.6 ? 'ok' : r.score >= 0.3 ? 'warn' : 'neutral'}>score {r.score.toFixed(2)}</Pill>
+                </div>
+              </div>
+              <p className="mono muted" style={{ fontSize: '.74rem', margin: '.3rem 0 .5rem' }}>{short(r.smartAgent, 14)}</p>
+              <p className="cite">{r.why.join(' · ')}</p>
+            </div>
+          ))}
+          {resp.results.length === 0 && <p className="muted">No agents matched.</p>}
+        </>
+      )}
+    </>
   );
 }
 

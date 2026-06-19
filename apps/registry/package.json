@@ -1,0 +1,10 @@
+{
+  "name": "@agenticprimitives-demo/discovery-a2a",
+  "version": "0.0.1-alpha.0",
+  "private": true,
+  "description": "Discovery A2A agent (demo-discovery-a2a): advertises a 'discover-agents' skill and orchestrates the discovery MCP over the knowledge base (GraphDB). Browser → A2A → MCP → GraphDB. Evolves into intent/mandate-driven best-agent matching (spec 279). Mirrors demo-bible-a2a.",
+  "type": "module",
+  "scripts": { "dev": "wrangler dev", "deploy": "wrangler deploy", "typecheck": "tsc -p tsconfig.json --noEmit" },
+  "dependencies": { "hono": "^4.6.0" },
+  "devDependencies": { "@cloudflare/workers-types": "^4.20240909.0", "typescript": "^5.5.0", "wrangler": "^3.78.0" }
+}
