@@ -9,9 +9,10 @@ import {
   type EvidencePath,
 } from './lib/abox';
 import { loadLive, LIVE, type LiveAgent } from './lib/live';
+import { loadAboxGraph, type AboxDoc } from './lib/abox-graph';
 import { Pill, StatusPill, VerifyPill, Spinner, short } from './components/ui';
 
-type View = { tab: 'discover' } | { tab: 'agent'; slug: string } | { tab: 'findings' } | { tab: 'live' };
+type View = { tab: 'discover' } | { tab: 'agent'; slug: string } | { tab: 'findings' } | { tab: 'live' } | { tab: 'graph' };
 
 export function App() {
   const [records, setRecords] = useState<AgentRecord[] | null>(null);
@@ -27,10 +28,13 @@ export function App() {
         <nav className="tabs" role="tablist">
           <button className={`tab ${view.tab === 'discover' || view.tab === 'agent' ? '--active' : ''}`} onClick={() => setView({ tab: 'discover' })}>Discover <span className="muted" style={{ fontWeight: 600 }}>(fixtures)</span></button>
           <button className={`tab ${view.tab === 'live' ? '--active' : ''}`} onClick={() => setView({ tab: 'live' })}>Live · Base Sepolia</button>
+          <button className={`tab ${view.tab === 'graph' ? '--active' : ''}`} onClick={() => setView({ tab: 'graph' })}>Indexed graph · A-box</button>
           {admin && <button className={`tab ${view.tab === 'findings' ? '--active' : ''}`} onClick={() => setView({ tab: 'findings' })}>Exposure findings</button>}
         </nav>
 
-        {view.tab === 'live' ? (
+        {view.tab === 'graph' ? (
+          <GraphView />
+        ) : view.tab === 'live' ? (
           <LiveView />
         ) : !records ? (
           <div className="row"><Spinner /> <span className="muted">Building the fixture A-box + signing cards…</span></div>
@@ -180,6 +184,49 @@ function Step({ n, pill, cite, children }: { n: string; pill: React.ReactNode; c
       <div style={{ margin: '.5rem 0' }}>{children}</div>
       <p className="cite">cites <b>{cite}</b></p>
     </div>
+  );
+}
+
+function GraphView() {
+  const [doc, setDoc] = useState<AboxDoc | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { loadAboxGraph().then(setDoc).catch((e) => setErr(String(e))); }, []);
+  const ALL_FACETS = ['naming', 'profile', 'registry', 'relationship', 'attestation'];
+
+  return (
+    <>
+      <p className="eyebrow">Indexed · A-box</p>
+      <h1 style={{ marginBottom: '.4rem' }}>The discovery knowledge graph</h1>
+      <p className="muted" style={{ marginBottom: '1rem' }}>
+        Projected by the external <b>agent-indexer</b>: every Smart Agent registered in agent-naming, with every available on-chain facet (naming · profile · registry · relationship · attestation) merged into one SHACL-shaped node keyed by the SA. In production this is queried over GraphDB (agentkg.io); here it's the indexer's JSON-LD snapshot.
+      </p>
+      {doc && (
+        <p className="cite" style={{ marginBottom: '1.2rem' }}>
+          {doc.agents.length} agents · facet coverage: {ALL_FACETS.map((f) => `${f} ${doc.facetCoverage[f] ?? 0}`).join(' · ')}
+        </p>
+      )}
+      {err ? <div className="card"><Pill kind="err">load error</Pill> <span className="muted">{err}</span></div>
+        : !doc ? <div className="row"><Spinner /> <span className="muted">Loading the A-box…</span></div>
+        : (
+          <div className="grid">
+            {doc.agents.map((a) => (
+              <div key={a.smartAgent} className="card">
+                <div className="row" style={{ justifyContent: 'space-between' }}>
+                  <h3 style={{ fontSize: '.98rem' }}>{a.name ?? '(unnamed)'}</h3>
+                  <Pill kind={a.conforms ? 'ok' : 'err'}>{a.conforms ? 'SHACL ✓' : 'SHACL ✗'}</Pill>
+                </div>
+                <p className="mono muted" style={{ fontSize: '.74rem', margin: '.3rem 0 .6rem' }}>{short(a.smartAgent, 14)}</p>
+                <div className="row" style={{ flexWrap: 'wrap', gap: '.35rem' }}>
+                  {ALL_FACETS.map((kind) => {
+                    const f = a.facets.find((x) => x.kind === kind);
+                    return <Pill key={kind} kind={f?.present ? 'ok' : 'neutral'}>{kind}{f?.present ? '' : ' —'}</Pill>;
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+    </>
   );
 }
 
