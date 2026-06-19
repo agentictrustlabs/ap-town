@@ -10,6 +10,9 @@ on the same account by public URL — CF 1042); falls back to `MCP_URL` for loca
 
 Chain: **browser → demo-discovery-a2a → demo-discovery-mcp → GraphDB knowledge base**.
 
+## Architecture
+See [`docs/architecture-and-design.md`](docs/architecture-and-design.md) for the Discovery A2A endpoint design, including the `/api/a2a` target, `/discover` shim, offering/source-observation model, reproducible discovery receipts, ranking policy, MCP contract, and source-adapter phases.
+
 ## Evolving into a full discovery app
 The `discover-agents` skill is the seam where **intent + mandate matching** grows: parse the stated
 intent/mandate, expand it (skills / geo / trust), query the graph, and return the best agents with an
