@@ -33,6 +33,19 @@ export async function fetchAgentCard(): Promise<Record<string, unknown>> {
   return res.json() as Promise<Record<string, unknown>>;
 }
 
+export interface AgentDetail {
+  ok: boolean;
+  agent?: string;
+  triples?: { p: string; o: string }[];
+  error?: string;
+}
+
+/** Fetch one agent's full A-box node (every on-chain facet) via the A2A → MCP → GraphDB. */
+export async function getAgentDetail(key: string): Promise<AgentDetail> {
+  const res = await fetch(`${A2A_URL}/agent?key=${encodeURIComponent(key)}`);
+  return (await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }))) as AgentDetail;
+}
+
 /** Invoke the discover-agents skill: query (+ optional intent / mandates) → best agents. */
 export async function discover(input: { query: string; intent?: string; mandates?: string }): Promise<DiscoverResponse> {
   const res = await fetch(`${A2A_URL}/discover`, {

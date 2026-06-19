@@ -116,6 +116,15 @@ app.post('/discover', async (c) => {
   });
 });
 
-app.get('/', (c) => c.json({ service: 'demo-discovery-a2a', card: '/.well-known/agent-card.json', discover: 'POST /discover {query,intent?,mandates?}' }));
+// Agent detail — the full A-box node for one agent (every on-chain facet), via the MCP get_agent tool.
+// Browser → A2A → MCP → GraphDB, same as discovery.
+app.get('/agent', async (c) => {
+  const key = c.req.query('key') ?? '';
+  if (!key) return c.json({ ok: false, error: 'key (name or 0x SA) required' }, 400);
+  const r = await mcpGet(c.env, `/agent?key=${encodeURIComponent(key)}`).catch((e) => ({ ok: false, error: String(e) }));
+  return c.json(r);
+});
+
+app.get('/', (c) => c.json({ service: 'demo-discovery-a2a', card: '/.well-known/agent-card.json', discover: 'POST /discover {query,intent?,mandates?}', agent: 'GET /agent?key=' }));
 
 export default app;
