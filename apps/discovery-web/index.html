@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AP Discovery · agent registry explorer (demo)</title>
+    <style>
+      :root {
+        /* demo-discovery identity — a "discovery / graph" cyan-teal, distinct from demo-gs (indigo),
+           demo-jp (teal), demo-org (emerald), demo-sso (amber). */
+        --c-primary: #0e7490; --c-primary-hover: #155e75; --c-primary-active: #164e63;
+        --c-primary-subtle: #ecfeff; --c-primary-border: #a5f3fc; --c-primary-mid: #22d3ee;
+        --c-g900: #0f172a; --c-g800: #1e293b; --c-g700: #334155; --c-g600: #475569;
+        --c-g500: #64748b; --c-g400: #94a3b8; --c-g300: #cbd5e1; --c-g200: #e2e8f0;
+        --c-g100: #f1f5f9; --c-g50: #f8fafc;
+        --ok: #047857; --ok-bg: #ecfdf5; --ok-bd: #6ee7b7;
+        --err: #b91c1c; --err-bg: #fef2f2; --err-bd: #fca5a5;
+        --warn: #b45309; --warn-bg: #fffbeb; --warn-bd: #fcd34d;
+        --r-sm: 8px; --r-md: 12px; --r-lg: 16px;
+        --sh-sm: 0 1px 2px rgba(15,23,42,.06); --sh-md: 0 4px 16px rgba(15,23,42,.08);
+        --maxw: 1080px;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; color: var(--c-g800); background: var(--c-g50);
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        line-height: 1.55; -webkit-font-smoothing: antialiased; }
+      h1,h2,h3,h4 { color: var(--c-g900); line-height: 1.18; margin: 0; letter-spacing: -.01em; }
+      p { margin: 0; } a { color: var(--c-primary); }
+      code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82em; }
+      .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.25rem; }
+      .eyebrow { font-size: .72rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--c-primary); }
+      .demo-banner { background: repeating-linear-gradient(135deg, #a5f3fc 0 14px, #67e8f9 14px 28px);
+        color: #164e63; border-bottom: 3px solid #0e7490; padding: .6rem 1rem; text-align: center;
+        font-weight: 800; font-size: clamp(.8rem,2.4vw,.92rem); line-height: 1.35; }
+      .demo-banner strong { background: #0e7490; color: #fff; padding: .12rem .6rem; border-radius: 4px; margin-right: .35rem; letter-spacing: .12em; }
+      .demo-banner small { display: block; font-weight: 600; font-size: .74rem; opacity: .85; margin-top: .15rem; }
+      .topbar { position: sticky; top: 0; z-index: 40; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--c-g200); }
+      .topbar .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+      .brand { display: flex; align-items: center; gap: .6rem; font-weight: 800; color: var(--c-g900); }
+      .brand-glyph { width: 34px; height: 34px; border-radius: 11px; background: linear-gradient(150deg, var(--c-primary-mid), var(--c-primary-active)); display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: var(--sh-sm); }
+      .brand small { display: block; font-size: .66rem; font-weight: 600; color: var(--c-g500); }
+      .powered { display: inline-flex; align-items: center; gap: .4rem; font-size: .7rem; font-weight: 700; color: var(--c-g600); background: var(--c-g100); border: 1px solid var(--c-g200); border-radius: 999px; padding: .3rem .65rem; }
+      .powered b { color: var(--c-primary); }
+      .tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--c-g200); margin: 1.4rem 0 1.6rem; }
+      .tab { min-height: 40px; padding: .5rem 1rem; border: none; background: none; cursor: pointer; font-family: inherit; font-size: .9rem; font-weight: 700; color: var(--c-g600); border-bottom: 2px solid transparent; }
+      .tab:hover { color: var(--c-primary); }
+      .tab.--active { color: var(--c-primary-active); border-bottom-color: var(--c-primary); }
+      .card { background: #fff; border: 1px solid var(--c-g200); border-radius: var(--r-lg); box-shadow: var(--sh-sm); padding: 1.1rem 1.25rem; }
+      .card + .card { margin-top: 1rem; }
+      .row { display: flex; align-items: center; gap: .6rem; }
+      .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+      .muted { color: var(--c-g500); }
+      .kv { display: grid; grid-template-columns: 160px 1fr; gap: .35rem .8rem; font-size: .86rem; }
+      .kv dt { color: var(--c-g500); font-weight: 600; }
+      .kv dd { margin: 0; word-break: break-all; }
+      .pill { display: inline-flex; align-items: center; gap: .35rem; font-size: .72rem; font-weight: 800; padding: .2rem .55rem; border-radius: 999px; border: 1px solid; letter-spacing: .02em; text-transform: uppercase; }
+      .pill-ok { color: var(--ok); background: var(--ok-bg); border-color: var(--ok-bd); }
+      .pill-err { color: var(--err); background: var(--err-bg); border-color: var(--err-bd); }
+      .pill-warn { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-bd); }
+      .pill-neutral { color: var(--c-g600); background: var(--c-g100); border-color: var(--c-g200); }
+      .input { width: 100%; padding: .6rem .8rem; border: 1.5px solid var(--c-g300); border-radius: var(--r-md); font: inherit; }
+      .input:focus { outline: none; border-color: var(--c-primary-mid); }
+      .btn { padding: .5rem .9rem; border-radius: var(--r-md); font: inherit; font-weight: 700; cursor: pointer; border: 1.5px solid var(--c-primary-border); background: #fff; color: var(--c-primary); }
+      .btn:hover { background: var(--c-primary-subtle); }
+      .btn.--p { background: var(--c-primary); color: #fff; border-color: var(--c-primary); }
+      .btn.--p:hover { background: var(--c-primary-hover); }
+      .evidence { border-left: 3px solid var(--c-primary-border); padding-left: 1rem; }
+      .evidence-step { position: relative; padding: .2rem 0 1rem; }
+      .evidence-step::before { content: ''; position: absolute; left: -1.32rem; top: .35rem; width: 11px; height: 11px; border-radius: 50%; background: var(--c-primary); border: 2px solid #fff; box-shadow: 0 0 0 1px var(--c-primary-border); }
+      .step-h { display: flex; align-items: center; gap: .5rem; font-weight: 800; color: var(--c-g900); font-size: .92rem; }
+      .cite { font-size: .74rem; color: var(--c-g500); }
+      .cite b { color: var(--c-primary); font-weight: 700; }
+      .sev-critical { color: #fff; background: #991b1b; border-color: #991b1b; }
+      .sev-high { color: var(--err); background: var(--err-bg); border-color: var(--err-bd); }
+      .sev-medium { color: var(--warn); background: var(--warn-bg); border-color: var(--warn-bd); }
+      .sev-low { color: var(--c-g600); background: var(--c-g100); border-color: var(--c-g200); }
+      .admin-bar { background: repeating-linear-gradient(135deg, #0b1120 0 11px, #334155 11px 22px); color: #fff; border-radius: var(--r-md); padding: .7rem 1rem; font-weight: 700; font-size: .85rem; display: flex; align-items: center; gap: .6rem; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      .spinner { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--c-primary); border-top-color: transparent; display: inline-block; animation: spin .6s linear infinite; }
+      footer { border-top: 1px solid var(--c-g200); padding: 2rem 0; color: var(--c-g500); font-size: .8rem; margin-top: 3rem; }
+    </style>
+  </head>
+  <body>
+    <div class="demo-banner" role="alert">
+      <strong>DEMO</strong> Reference UI over a <u>fixture A-box</u> — agents, cards, and registry entries are illustrative. The production explorer + GraphDB indexer live in external repos (ADR-0037).
+      <small>Signed cards + binding proofs are verified live in your browser with the real @agenticprimitives SDKs.</small>
+    </div>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

@@ -1,0 +1,32 @@
+{
+  "name": "@agenticprimitives-demo/discovery",
+  "version": "0.0.1-alpha.0",
+  "private": true,
+  "description": "Discovery reference UI (demo-discovery): a fixture-driven explorer for the AP-native registry kit (spec 279). Public agent search + per-agent EVIDENCE PATH (signed-card binding, registry entry, claims, SHACL status, cited public facts) verified live in the browser with @agenticprimitives/registry-kit + agent-profile, plus an admin-only ap:abox:pentest exposure-findings view. Demo only — fixture A-box; the production explorer + GraphDB indexer live in external repos (ADR-0037).",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/registry-kit": "workspace:*",
+    "@agenticprimitives/agent-profile": "workspace:*",
+    "@agenticprimitives/ontology": "workspace:*",
+    "@agenticprimitives/contracts": "workspace:*",
+    "react": "^19.2.7",
+    "react-dom": "^19.2.7",
+    "viem": "^2.52.2"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.16",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "^5.5.0",
+    "vite": "^8.0.16",
+    "vitest": "^4.1.8"
+  }
+}
