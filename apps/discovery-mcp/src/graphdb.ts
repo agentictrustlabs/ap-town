@@ -34,6 +34,33 @@ export async function sparqlSelect(env: Env, query: string): Promise<Binding[]> 
   return json.results?.bindings ?? [];
 }
 
+// ── Custody check (ADR-0040) ──────────────────────────────────────────────────────────────────────────
+// Custodian membership is PUBLIC on-chain data; the indexer projects it as OPAQUE, public, on-chain-
+// reproducible tokens — sha256(lower(credential)|lower(smartAgent)) — into a private named graph. We answer
+// "does this viewer's credential control that agent?" by recomputing the token and asking whether it EXISTS
+// (exact-match only — never an enumeration, never an agent→custodian edge). MUST hash identically to
+// demo-discovery-indexer/src/custody.ts.
+const CUSTODY_GRAPH = 'urn:ap:custody';
+const CUSTODY_MEMBER_CLASS = 'https://agenticprimitives.dev/ns/core#CustodyMember';
+
+async function custodyToken(credential: string, smartAgent: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${credential.toLowerCase()}|${smartAgent.toLowerCase()}`));
+  return '0x' + [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Which of `smartAgents` does `credential` (an EOA, passkey-PIA, or passkey credentialIdDigest) custody?
+ *  One SELECT over the membership graph; returns { saLower → boolean }. */
+export async function checkCustody(env: Env, smartAgents: string[], credential: string): Promise<Record<string, boolean>> {
+  const out: Record<string, boolean> = {};
+  const tokenBySa = new Map<string, string>(); // token → saLower
+  for (const sa of smartAgents) { out[sa.toLowerCase()] = false; tokenBySa.set(await custodyToken(credential, sa), sa.toLowerCase()); }
+  if (!tokenBySa.size) return out;
+  const values = [...tokenBySa.keys()].map((t) => `<urn:ap:cm:${t}>`).join(' ');
+  const rows = await sparqlSelect(env, `SELECT ?m WHERE { GRAPH <${CUSTODY_GRAPH}> { VALUES ?m { ${values} } ?m a <${CUSTODY_MEMBER_CLASS}> } }`);
+  for (const r of rows) { const sa = tokenBySa.get(r.m!.value.replace('urn:ap:cm:', '')); if (sa) out[sa] = true; }
+  return out;
+}
+
 const esc = (s: string) => s.replace(/["\\]/g, '\\$&');
 
 export interface AgentResult {

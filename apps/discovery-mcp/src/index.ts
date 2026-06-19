@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { searchAgents, getAgent, describeTerm, listShapes, type Env } from './graphdb.js';
+import { searchAgents, getAgent, describeTerm, listShapes, checkCustody, type Env } from './graphdb.js';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
@@ -25,6 +25,18 @@ app.get('/agent', async (c) => {
   const key = c.req.query('key') ?? '';
   if (!key) return c.json({ ok: false, error: 'key (name or 0x SA) required' }, 400);
   try { const a = await getAgent(c.env, key); return a ? c.json({ ok: true, ...a }) : c.json({ ok: false, error: 'not found' }, 404); }
+  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
+});
+
+// Custody check (ADR-0040): which of subjectAgents[] does the viewer's credential (EOA / passkey digest)
+// custody? Exact-match over the opaque membership graph — yes/no per agent, no enumeration. credential is
+// the on-chain identifier the viewer presents for THEMSELVES; we never store the request.
+app.post('/custody', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { subjectAgents?: unknown; credential?: unknown };
+  const sas = Array.isArray(body.subjectAgents) ? body.subjectAgents.filter((x): x is string => typeof x === 'string') : [];
+  const credential = typeof body.credential === 'string' ? body.credential : '';
+  if (!credential || !sas.length) return c.json({ ok: false, error: 'subjectAgents[] and credential required' }, 400);
+  try { return c.json({ ok: true, results: await checkCustody(c.env, sas, credential) }); }
   catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
 });
 
@@ -63,6 +75,11 @@ const TOOLS = [
     description: 'List the SHACL NodeShapes (C-box) the A-box is validated against.',
     inputSchema: { type: 'object', properties: {} },
   },
+  {
+    name: 'check_custody',
+    description: 'Privacy-preserving custody check (ADR-0040): which of the given Smart Agents does a credential (EOA address or passkey credentialIdDigest) custody? Exact-match over opaque, on-chain-reproducible membership tokens — yes/no per agent, never an enumeration of who controls whom.',
+    inputSchema: { type: 'object', properties: { subjectAgents: { type: 'array', items: { type: 'string' } }, credential: { type: 'string' } }, required: ['subjectAgents', 'credential'] },
+  },
 ];
 
 app.post('/mcp', async (c) => {
@@ -85,6 +102,8 @@ app.post('/mcp', async (c) => {
             ? (await describeTerm(c.env, String(args.term ?? ''))) ?? { ok: false, error: 'term not found' }
           : name === 'list_shapes'
             ? { ok: true, shapes: await listShapes(c.env) }
+          : name === 'check_custody'
+            ? { ok: true, results: await checkCustody(c.env, Array.isArray(args.subjectAgents) ? args.subjectAgents.map(String) : [], String(args.credential ?? '')) }
             : null;
         if (out === null) return fail(-32601, `unknown tool: ${name}`);
         return reply({ content: [{ type: 'text', text: JSON.stringify(out) }] });
@@ -97,6 +116,6 @@ app.post('/mcp', async (c) => {
   }
 });
 
-app.get('/', (c) => c.json({ service: 'demo-discovery-mcp', tools: TOOLS.map((t) => t.name), rest: ['/search?q=', '/agent?key='], mcp: 'POST /mcp' }));
+app.get('/', (c) => c.json({ service: 'demo-discovery-mcp', tools: TOOLS.map((t) => t.name), rest: ['/search?q=', '/agent?key=', 'POST /custody {subjectAgents,credential}'], mcp: 'POST /mcp' }));
 
 export default app;

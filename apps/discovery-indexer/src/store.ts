@@ -6,6 +6,7 @@
 import { writeFile, mkdir } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { CLASS, NS, PREDICATE, agentIri } from './ontology.js';
+import { CUSTODY_GRAPH, CUSTODY_MEMBER_CLASS, custodyMemberIri } from './custody.js';
 
 /** One on-chain facet of an agent, ontology-shaped + SHACL-tagged. Everything keys off the SA. */
 export interface ProjectedFacet {
@@ -34,6 +35,9 @@ export interface AgentNode {
 
 export interface AboxStore {
   upsert(nodes: AgentNode[]): Promise<void>;
+  /** Replace the custody-membership set (ADR-0040): opaque, public, on-chain-reproducible tokens written
+   *  to a private named graph, never as plaintext agent→custodian edges. Full-rebuild each run. */
+  setCustodyTokens(tokens: string[]): Promise<void>;
   flush(): Promise<void>;
   describe(): string;
 }
@@ -68,12 +72,16 @@ function nodeToJsonLd(n: AgentNode) {
 /** JSON-LD file store — the zero-infra default. */
 export class JsonLdFileStore implements AboxStore {
   private nodes = new Map<string, AgentNode>();
+  private custody: string[] = [];
   constructor(private path: string) {}
   async upsert(nodes: AgentNode[]) { for (const n of nodes) this.nodes.set(n.smartAgent.toLowerCase(), n); }
+  async setCustodyTokens(tokens: string[]) { this.custody = tokens; }
   async flush() {
     const doc = {
       '@context': { ap: NS.ap, apnam: NS.apnam, apreg: NS.apreg, apdisc: NS.apdisc, sh: 'http://www.w3.org/ns/shacl#', prov: 'http://www.w3.org/ns/prov#' },
       '@graph': [...this.nodes.values()].map(nodeToJsonLd),
+      // Custody membership (ADR-0040): opaque, reproducible tokens in a separate named graph — no agent link.
+      [CUSTODY_GRAPH]: this.custody.map((t) => ({ '@id': custodyMemberIri(t as `0x${string}`), '@type': CUSTODY_MEMBER_CLASS })),
     };
     await mkdir(dirname(this.path), { recursive: true });
     await writeFile(this.path, JSON.stringify(doc, null, 2));
@@ -96,8 +104,10 @@ const lit = (v: string) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
  *  agent's subject is DELETEd then re-INSERTed so re-runs converge (no duplicate triples). */
 export class SparqlGraphStore implements AboxStore {
   private pending: AgentNode[] = [];
+  private custody: string[] | null = null;
   constructor(private endpoint: string, private auth: SparqlAuth = {}) {}
   async upsert(nodes: AgentNode[]) { this.pending.push(...nodes); }
+  async setCustodyTokens(tokens: string[]) { this.custody = tokens; }
 
   private headers(): Record<string, string> {
     const h: Record<string, string> = { 'content-type': 'application/sparql-update' };
@@ -108,29 +118,43 @@ export class SparqlGraphStore implements AboxStore {
   }
 
   async flush() {
-    if (!this.pending.length) return;
-    const subjects: string[] = [];
-    const triples = this.pending.flatMap((n) => {
-      const s = `<${agentIri(n.chainId, n.smartAgent)}>`;
-      subjects.push(s);
-      const t = [`${s} a <${CLASS.Agent}> .`, `${s} <${PREDICATE.smartAgent}> ${lit(n.smartAgent)} .`];
-      if (n.name) t.push(`${s} <${PREDICATE.name}> ${lit(n.name)} .`);
-      t.push(`${s} <${PREDICATE.node}> ${lit(n.node)} .`);
-      t.push(`${s} <${PREDICATE.blockNumber}> ${n.provenance.block} .`);
-      for (const f of n.facets.filter((x) => x.present)) {
-        for (const [k, v] of Object.entries(f.data)) {
-          if (k.startsWith('http') && (typeof v === 'string' || typeof v === 'number')) {
-            t.push(`${s} <${k}> ${typeof v === 'number' ? v : lit(v)} .`);
+    const stmts: string[] = [];
+    if (this.pending.length) {
+      const subjects: string[] = [];
+      const triples = this.pending.flatMap((n) => {
+        const s = `<${agentIri(n.chainId, n.smartAgent)}>`;
+        subjects.push(s);
+        const t = [`${s} a <${CLASS.Agent}> .`, `${s} <${PREDICATE.smartAgent}> ${lit(n.smartAgent)} .`];
+        if (n.name) t.push(`${s} <${PREDICATE.name}> ${lit(n.name)} .`);
+        t.push(`${s} <${PREDICATE.node}> ${lit(n.node)} .`);
+        t.push(`${s} <${PREDICATE.blockNumber}> ${n.provenance.block} .`);
+        for (const f of n.facets.filter((x) => x.present)) {
+          for (const [k, v] of Object.entries(f.data)) {
+            if (k.startsWith('http') && (typeof v === 'string' || typeof v === 'number')) {
+              t.push(`${s} <${k}> ${typeof v === 'number' ? v : lit(v)} .`);
+            }
           }
         }
+        return t;
+      });
+      // Idempotent upsert: clear each subject's existing triples, then insert the fresh projection.
+      stmts.push(`DELETE { ?s ?p ?o } WHERE { VALUES ?s { ${subjects.join(' ')} } ?s ?p ?o }`);
+      stmts.push(`INSERT DATA {\n${triples.join('\n')}\n}`);
+    }
+    if (this.custody !== null) {
+      // Full rebuild of the opaque custody-membership graph (ADR-0040): drop then re-insert, so revoked
+      // custodians drop out. Tokens are public + on-chain-reproducible; no agent→custodian edge is stored.
+      stmts.push(`DROP SILENT GRAPH <${CUSTODY_GRAPH}>`);
+      if (this.custody.length) {
+        const cm = this.custody.map((t) => `<${custodyMemberIri(t as `0x${string}`)}> a <${CUSTODY_MEMBER_CLASS}> .`).join('\n');
+        stmts.push(`INSERT DATA { GRAPH <${CUSTODY_GRAPH}> {\n${cm}\n} }`);
       }
-      return t;
-    });
-    // Idempotent upsert: clear each subject's existing triples, then insert the fresh projection.
-    const update = `DELETE { ?s ?p ?o } WHERE { VALUES ?s { ${subjects.join(' ')} } ?s ?p ?o };\nINSERT DATA {\n${triples.join('\n')}\n}`;
-    const res = await fetch(this.endpoint, { method: 'POST', headers: this.headers(), body: update });
+    }
+    if (!stmts.length) return;
+    const res = await fetch(this.endpoint, { method: 'POST', headers: this.headers(), body: stmts.join(';\n') });
     if (!res.ok) throw new Error(`SPARQL update failed: ${res.status} ${await res.text().catch(() => '')}`);
     this.pending = [];
+    this.custody = null;
   }
   describe() { return `SPARQL/GraphDB → ${this.endpoint}${this.auth.user || this.auth.token || this.auth.gdbToken ? ' (authed)' : ' (no auth)'}`; }
 }

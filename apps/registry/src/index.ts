@@ -27,6 +27,11 @@ const mcpGet = async (env: Env, path: string) => {
   const res = env.MCP ? await env.MCP.fetch(`https://mcp${path}`) : await fetch(`${mcpUrl(env)}${path}`);
   return res.json() as Promise<any>;
 };
+const mcpPost = async (env: Env, path: string, body: unknown) => {
+  const init = { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) };
+  const res = env.MCP ? await env.MCP.fetch(`https://mcp${path}`, init) : await fetch(`${mcpUrl(env)}${path}`, init);
+  return res.json() as Promise<any>;
+};
 
 app.get('/health', (c) => c.json({ ok: true, service: 'demo-discovery-a2a' }));
 
@@ -125,6 +130,16 @@ app.get('/agent', async (c) => {
   return c.json(r);
 });
 
-app.get('/', (c) => c.json({ service: 'demo-discovery-a2a', card: '/.well-known/agent-card.json', discover: 'POST /discover {query,intent?,mandates?}', agent: 'GET /agent?key=' }));
+// Custody check (ADR-0040) — which candidate agents does the viewer's credential custody? Proxies the MCP
+// check_custody tool (exact-match over opaque, on-chain-reproducible membership tokens). Browser → A2A →
+// MCP → GraphDB. The credential is the viewer's own on-chain identifier (EOA / passkey digest); nothing is
+// stored, and the answer reveals nothing the chain doesn't.
+app.post('/custody', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { subjectAgents?: unknown; credential?: unknown };
+  const r = await mcpPost(c.env, '/custody', { subjectAgents: body.subjectAgents, credential: body.credential }).catch((e) => ({ ok: false, error: String(e) }));
+  return c.json(r);
+});
+
+app.get('/', (c) => c.json({ service: 'demo-discovery-a2a', card: '/.well-known/agent-card.json', discover: 'POST /discover {query,intent?,mandates?}', agent: 'GET /agent?key=', custody: 'POST /custody {subjectAgents,credential}' }));
 
 export default app;

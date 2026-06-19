@@ -72,3 +72,14 @@ export const ATTESTATION_ABI = [
   },
   { type: 'function', name: 'isValid', stateMutability: 'view', inputs: [{ name: 'uid', type: 'bytes32' }], outputs: [{ type: 'bool' }] },
 ] as const satisfies Abi;
+
+/** AgentAccount custody-membership events (PUBLIC on-chain, ADR-0040). `initialize` re-emits these for the
+ *  INITIAL set too (AgentAccount.sol:371/409-410), so scanning the four events alone — filtered to the
+ *  enumerated agent set — yields the complete CURRENT custodian membership (EOA custodians + the PIA the
+ *  passkey path also adds) and passkey digests. No factory-event decoding needed. */
+export const CUSTODY_EVENTS_ABI = [
+  { type: 'event', name: 'CustodianAdded', inputs: [{ name: 'owner', type: 'address', indexed: true }] },
+  { type: 'event', name: 'CustodianRemoved', inputs: [{ name: 'owner', type: 'address', indexed: true }] },
+  { type: 'event', name: 'PasskeyAdded', inputs: [{ name: 'credentialIdDigest', type: 'bytes32', indexed: true }, { name: 'x', type: 'uint256', indexed: false }, { name: 'y', type: 'uint256', indexed: false }, { name: 'rpIdHash', type: 'bytes32', indexed: false }] },
+  { type: 'event', name: 'PasskeyRemoved', inputs: [{ name: 'credentialIdDigest', type: 'bytes32', indexed: true }] },
+] as const satisfies Abi;

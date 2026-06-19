@@ -36,6 +36,7 @@ const cfg: IndexerConfig = {
   concurrency: Number(process.env.CONCURRENCY ?? 8),
   attestLookback: Number(process.env.ATTEST_LOOKBACK ?? 300000),
   attestChunk: Number(process.env.ATTEST_CHUNK ?? 9000),
+  custodyWindow: Number(process.env.CUSTODY_WINDOW ?? 9),
 };
 
 const store = storeFromEnv();
@@ -43,10 +44,10 @@ console.log(`[agent-indexer] chain ${cfg.chainId} · TLDs [${cfg.tlds.join(', ')
 console.log(`[agent-indexer] projectors: ${PROJECTORS.map((p) => p.kind).join(', ')}`);
 
 const t0 = Date.now();
-const { count, registered, nodes } = await new DiscoveryIndexer(cfg, store).run();
+const { count, registered, custodyTokens, nodes } = await new DiscoveryIndexer(cfg, store).run();
 const ms = Date.now() - t0;
 
-console.log(`\n[agent-indexer] projected ${count} named Smart Agents (${registered} with a registry entry) in ${ms} ms`);
+console.log(`\n[agent-indexer] projected ${count} named Smart Agents (${registered} with a registry entry, ${custodyTokens} custody tokens) in ${ms} ms`);
 const coverage: Record<string, number> = {};
 for (const n of nodes) for (const f of n.facets) if (f.present) coverage[f.kind] = (coverage[f.kind] ?? 0) + 1;
 console.log('[agent-indexer] facet coverage:', coverage);
