@@ -1,0 +1,20 @@
+{
+  "name": "@agenticprimitives-demo/discovery-indexer",
+  "version": "0.0.1-alpha.0",
+  "private": true,
+  "description": "Discovery indexer (demo-discovery-indexer): enumerates every Smart Agent in agent-naming and projects available on-chain facets into the discovery A-box (GraphDB @ agentkg.io), then loads the agentic-trust ontology so the KB self-describes. Demo-grade reference; a production agent-indexer graduates to an external repo (ADR-0037) when packages publish.",
+  "type": "module",
+  "scripts": {
+    "index": "tsx src/main.ts",
+    "load-ontology": "tsx src/load-ontology.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@agenticprimitives/types": "workspace:*",
+    "@agenticprimitives/registry-kit": "workspace:*",
+    "@agenticprimitives/ontology": "workspace:*",
+    "viem": "^2.52.2"
+  },
+  "devDependencies": { "@types/node": "^22.7.0", "tsx": "^4.19.0", "typescript": "^5.5.0", "vitest": "^4.1.8" }
+}
