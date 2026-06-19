@@ -16,7 +16,9 @@ PROFILE_RESOLVER = "0xc448EB159B2a35F07f6E1814CC8d125244d7384B"
 RELATIONSHIP = "0xE6B8F6C7F1c9857013dA356DF08D0384334A9607"
 ATTESTATION_REGISTRY = "0xaE3861fd299c74D96F6FCA25f19c7ACf8b9020ed"
 DISCOVERY_REGISTRY_ID = "urn:ap:registry:impact-agents"
-WATCH_MAX_BLOCKS = "90"
+# Log scans (custody, watcher) use a public RPC with a 2000-block eth_getLogs range (Alchemy free = 10).
+LOGS_RPC_URL = "https://sepolia.base.org"
+WATCH_MAX_BLOCKS = "20000"
 
 # Event-driven watcher: a cron tick scans new blocks for naming/registry/custody events and re-projects the
 # affected agents (catches agents created/registered/recovered OUTSIDE this home — other apps, CLI).

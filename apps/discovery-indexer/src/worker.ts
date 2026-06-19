@@ -20,6 +20,7 @@ interface Env {
   GRAPHDB_USER?: string;
   GRAPHDB_PASSWORD?: string;
   RPC_URL?: string;
+  LOGS_RPC_URL?: string;
   CHAIN_ID?: string;
   NAME_REGISTRY?: string;
   RESOLVER?: string;
@@ -48,7 +49,7 @@ async function watchTick(env: Env): Promise<{ ok: true; from: string; to: string
     const last = await env.INDEXER_STATE?.get(CURSOR_KEY);
     const from = last ? BigInt(last) + 1n : latest; // first run: watch forward only
     if (from > latest) return { ok: true, from: from.toString(), to: latest.toString(), affected: 0, projected: [] };
-    const max = BigInt(env.WATCH_MAX_BLOCKS ?? '90');
+    const max = BigInt(env.WATCH_MAX_BLOCKS ?? '20000');
     const to = from + max > latest ? latest : from + max;
     const sas = (await idx.scanEvents(from, to)).slice(0, AGENTS_MAX); // bound per-tick projection work
     const projected = sas.length ? (await idx.projectAgents(sas)).projected : [];
@@ -62,6 +63,7 @@ async function watchTick(env: Env): Promise<{ ok: true; from: string; to: string
 function cfg(env: Env): IndexerConfig {
   return {
     rpcUrl: env.RPC_URL ?? 'https://sepolia.base.org',
+    logsRpcUrl: env.LOGS_RPC_URL ?? 'https://sepolia.base.org',
     chainId: Number(env.CHAIN_ID ?? 84532),
     nameRegistry: (env.NAME_REGISTRY ?? '0x15F7ed064A230C011b0244A14fD9653f011d609B') as Address,
     resolver: (env.RESOLVER ?? '0x7d777d2d0bbc1806B9Cc779121C27fbaAaFDb60b') as Address,

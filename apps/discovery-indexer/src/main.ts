@@ -23,6 +23,8 @@ if (existsSync('.env')) {
 // Base Sepolia deployment (agenticprimitives deployments-base-sepolia.json). Override via env.
 const cfg: IndexerConfig = {
   rpcUrl: process.env.RPC_URL ?? 'https://sepolia.base.org',
+  // Log scans get their own RPC (public Base allows a 2000-block eth_getLogs range vs Alchemy free-tier 10).
+  logsRpcUrl: process.env.LOGS_RPC_URL ?? 'https://sepolia.base.org',
   chainId: Number(process.env.CHAIN_ID ?? 84532),
   nameRegistry: (process.env.NAME_REGISTRY ?? '0x15F7ed064A230C011b0244A14fD9653f011d609B') as Address,
   resolver: (process.env.RESOLVER ?? '0x7d777d2d0bbc1806B9Cc779121C27fbaAaFDb60b') as Address,
@@ -35,7 +37,7 @@ const cfg: IndexerConfig = {
   maxDepth: Number(process.env.MAX_DEPTH ?? 3),
   concurrency: Number(process.env.CONCURRENCY ?? 8),
   attestLookback: Number(process.env.ATTEST_LOOKBACK ?? 300000),
-  attestChunk: Number(process.env.ATTEST_CHUNK ?? 9000),
+  attestChunk: Number(process.env.ATTEST_CHUNK ?? 1999), // logs RPC range cap (public Base = 2000)
   custodyWindow: Number(process.env.CUSTODY_WINDOW ?? 9),
 };
 

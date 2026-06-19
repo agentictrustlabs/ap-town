@@ -14,7 +14,11 @@ import { PROJECTORS, type ProjectCtx, type AttestationHit } from './projectors.j
 import { custodyToken } from './custody.js';
 
 export interface IndexerConfig {
+  /** RPC for state reads (readContract enumeration, eth_getCode) — a reliable endpoint (e.g. Alchemy). */
   rpcUrl: string;
+  /** RPC for `eth_getLogs` scans (attestations, custody, watcher). Public Base allows a 2000-block range
+   *  vs Alchemy free-tier's 10 — so log scans get their own RPC + ~2000-block windows. Defaults to rpcUrl. */
+  logsRpcUrl: string;
   chainId: number;
   nameRegistry: Address;
   resolver: Address;
@@ -69,8 +73,11 @@ async function retry<R>(fn: () => Promise<R>, tries = 3): Promise<R> {
 
 export class DiscoveryIndexer {
   private client: PublicClient;
+  /** Dedicated client for eth_getLogs (bigger range cap than the reads RPC). */
+  private logsClient: PublicClient;
   constructor(private cfg: IndexerConfig, private store: AboxStore) {
     this.client = createPublicClient({ transport: http(cfg.rpcUrl) });
+    this.logsClient = createPublicClient({ transport: http(cfg.logsRpcUrl || cfg.rpcUrl) });
   }
 
   /** One bounded, chunked Attested-log sweep → subject(lowercased) → attestations (+ validity). */
@@ -83,7 +90,7 @@ export class DiscoveryIndexer {
     for (let start = from; start <= latest; start += step + 1n) {
       const end = start + step > latest ? latest : start + step;
       try {
-        const logs = await this.client.getLogs({ address: this.cfg.attestationRegistry, event: ATTESTED_EVENT, fromBlock: start, toBlock: end });
+        const logs = await this.logsClient.getLogs({ address: this.cfg.attestationRegistry, event: ATTESTED_EVENT, fromBlock: start, toBlock: end });
         for (const l of logs) {
           const a = l.args as { subject?: Address; issuer?: Address; credentialType?: Hex; uid?: Hex };
           if (a.subject && a.uid) { raw.push({ subject: a.subject, issuer: a.issuer!, credentialType: a.credentialType!, uid: a.uid }); uids.add(a.uid); }
@@ -120,9 +127,9 @@ export class DiscoveryIndexer {
     const tokens = new Set<string>();
     // `initialize` emits the initial custody set AT the deploy block, so we bisect that block (eth_getCode
     // is NOT range-limited) and scan a tiny [deploy, deploy + custodyWindow] window for the events. getLogs
-    // is chunked so the block SPAN ≤ LOG_CHUNK, because public RPC free tiers cap eth_getLogs at a 10-block
-    // range (span of 9 = 10 blocks inclusive).
-    const LOG_CHUNK = 9n;
+    // is chunked so the block SPAN ≤ LOG_CHUNK to respect the logs RPC's eth_getLogs range cap (public Base
+    // = 2000; with a 10-block free-tier RPC, lower it via the constant below).
+    const LOG_CHUNK = 1999n;
     const window = BigInt(Math.max(0, this.cfg.custodyWindow));
     let dropped = 0;
     await pool(agents, Math.min(2, this.cfg.concurrency), async (sa) => {
@@ -135,7 +142,7 @@ export class DiscoveryIndexer {
         for (let start = dep; start <= end; start += LOG_CHUNK + 1n) {
           const to = start + LOG_CHUNK > end ? end : start + LOG_CHUNK;
           try {
-            const logs = await retry(() => this.client.getLogs({ address: sa, event: ev, fromBlock: start, toBlock: to }));
+            const logs = await retry(() => this.logsClient.getLogs({ address: sa, event: ev, fromBlock: start, toBlock: to }));
             for (const l of logs) {
               const a = l.args as { owner?: Address; credentialIdDigest?: Hex };
               const cred = (a.owner ?? a.credentialIdDigest)?.toLowerCase();
@@ -184,20 +191,20 @@ export class DiscoveryIndexer {
    *  topic-only (the emitter is the SA). Caller hands the SAs to projectAgents (which skips unnamed). */
   async scanEvents(from: bigint, to: bigint): Promise<Address[]> {
     if (to < from) return [];
-    const SPAN = 9n;
+    const SPAN = 1999n; // logs RPC range cap (public Base = 2000)
     const sas = new Set<string>();
     const windows = async (fn: (s: bigint, e: bigint) => Promise<void>) => {
       for (let s = from; s <= to; s += SPAN + 1n) { const e = s + SPAN > to ? to : s + SPAN; await fn(s, e); }
     };
     // 1) PrimaryNameSet → agent (the SA) directly.
     await windows(async (s, e) => {
-      const logs = await retry(() => this.client.getLogs({ address: this.cfg.nameRegistry, event: NAMING_EVENTS_ABI[0], fromBlock: s, toBlock: e })).catch(() => []);
+      const logs = await retry(() => this.logsClient.getLogs({ address: this.cfg.nameRegistry, event: NAMING_EVENTS_ABI[0], fromBlock: s, toBlock: e })).catch(() => []);
       for (const l of logs) { const a = (l.args as { agent?: Address }).agent; if (a) sas.add(a.toLowerCase()); }
     });
     // 2) Registry lifecycle. Registered carries subjectAgent; others resolve it via getEntry.
     for (const ev of REGISTRY_EVENTS_ABI) {
       await windows(async (s, e) => {
-        const logs = await retry(() => this.client.getLogs({ address: this.cfg.registry, event: ev, fromBlock: s, toBlock: e })).catch(() => []);
+        const logs = await retry(() => this.logsClient.getLogs({ address: this.cfg.registry, event: ev, fromBlock: s, toBlock: e })).catch(() => []);
         for (const l of logs) {
           const a = l.args as { subjectAgent?: Address; registryId?: Hex; entryId?: Hex };
           if (a.subjectAgent) { sas.add(a.subjectAgent.toLowerCase()); continue; }
@@ -211,7 +218,7 @@ export class DiscoveryIndexer {
     // 3) Custody (recovery / new deploy) — topic-only; the emitter address IS the SA.
     for (const ev of CUSTODY_EVENTS_ABI) {
       await windows(async (s, e) => {
-        const logs = await retry(() => this.client.getLogs({ event: ev, fromBlock: s, toBlock: e })).catch(() => []);
+        const logs = await retry(() => this.logsClient.getLogs({ event: ev, fromBlock: s, toBlock: e })).catch(() => []);
         for (const l of logs) { const sa = (l.address as Address)?.toLowerCase(); if (sa) sas.add(sa); }
       });
     }
