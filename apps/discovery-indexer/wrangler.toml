@@ -1,0 +1,18 @@
+# demo-discovery-indexer — targeted-projection HTTP trigger (POST /project). The batch `pnpm index` run
+# stays a Node script; this Worker exposes only the on-create projection the home calls.
+# Secrets (wrangler secret put): GRAPHDB_USER, GRAPHDB_PASSWORD, RPC_URL (funded RPC recommended).
+name = "demo-discovery-indexer"
+main = "src/worker.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+GRAPHDB_URL = "https://graphdb.agentkg.io/repositories/smart-agents/statements"
+CHAIN_ID = "84532"
+NAME_REGISTRY = "0x15F7ed064A230C011b0244A14fD9653f011d609B"
+RESOLVER = "0x7d777d2d0bbc1806B9Cc779121C27fbaAaFDb60b"
+REGISTRY = "0xe320947b18D3C71710DCB75D4bf200147ded18Df"
+PROFILE_RESOLVER = "0xc448EB159B2a35F07f6E1814CC8d125244d7384B"
+RELATIONSHIP = "0xE6B8F6C7F1c9857013dA356DF08D0384334A9607"
+ATTESTATION_REGISTRY = "0xaE3861fd299c74D96F6FCA25f19c7ACf8b9020ed"
+DISCOVERY_REGISTRY_ID = "urn:ap:registry:impact-agents"

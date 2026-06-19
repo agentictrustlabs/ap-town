@@ -36,8 +36,10 @@ export interface AgentNode {
 export interface AboxStore {
   upsert(nodes: AgentNode[]): Promise<void>;
   /** Replace the custody-membership set (ADR-0040): opaque, public, on-chain-reproducible tokens written
-   *  to a private named graph, never as plaintext agent→custodian edges. Full-rebuild each run. */
+   *  to a private named graph, never as plaintext agent→custodian edges. Full-rebuild — for the full run. */
   setCustodyTokens(tokens: string[]): Promise<void>;
+  /** Add custody tokens WITHOUT a full rebuild (the targeted on-create projection — must not wipe others). */
+  addCustodyTokens(tokens: string[]): Promise<void>;
   flush(): Promise<void>;
   describe(): string;
 }
@@ -76,6 +78,7 @@ export class JsonLdFileStore implements AboxStore {
   constructor(private path: string) {}
   async upsert(nodes: AgentNode[]) { for (const n of nodes) this.nodes.set(n.smartAgent.toLowerCase(), n); }
   async setCustodyTokens(tokens: string[]) { this.custody = tokens; }
+  async addCustodyTokens(tokens: string[]) { this.custody = [...new Set([...this.custody, ...tokens])]; }
   async flush() {
     const doc = {
       '@context': { ap: NS.ap, apnam: NS.apnam, apreg: NS.apreg, apdisc: NS.apdisc, sh: 'http://www.w3.org/ns/shacl#', prov: 'http://www.w3.org/ns/prov#' },
@@ -105,9 +108,11 @@ const lit = (v: string) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 export class SparqlGraphStore implements AboxStore {
   private pending: AgentNode[] = [];
   private custody: string[] | null = null;
+  private custodyInsert: string[] = [];
   constructor(private endpoint: string, private auth: SparqlAuth = {}) {}
   async upsert(nodes: AgentNode[]) { this.pending.push(...nodes); }
   async setCustodyTokens(tokens: string[]) { this.custody = tokens; }
+  async addCustodyTokens(tokens: string[]) { this.custodyInsert.push(...tokens); }
 
   private headers(): Record<string, string> {
     const h: Record<string, string> = { 'content-type': 'application/sparql-update' };
@@ -150,11 +155,17 @@ export class SparqlGraphStore implements AboxStore {
         stmts.push(`INSERT DATA { GRAPH <${CUSTODY_GRAPH}> {\n${cm}\n} }`);
       }
     }
+    if (this.custodyInsert.length) {
+      // Targeted projection: ADD this agent's tokens without dropping the graph (don't disturb others).
+      const cm = this.custodyInsert.map((t) => `<${custodyMemberIri(t as `0x${string}`)}> a <${CUSTODY_MEMBER_CLASS}> .`).join('\n');
+      stmts.push(`INSERT DATA { GRAPH <${CUSTODY_GRAPH}> {\n${cm}\n} }`);
+    }
     if (!stmts.length) return;
     const res = await fetch(this.endpoint, { method: 'POST', headers: this.headers(), body: stmts.join(';\n') });
     if (!res.ok) throw new Error(`SPARQL update failed: ${res.status} ${await res.text().catch(() => '')}`);
     this.pending = [];
     this.custody = null;
+    this.custodyInsert = [];
   }
   describe() { return `SPARQL/GraphDB → ${this.endpoint}${this.auth.user || this.auth.token || this.auth.gdbToken ? ' (authed)' : ' (no auth)'}`; }
 }

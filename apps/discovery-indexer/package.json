@@ -7,6 +7,7 @@
   "scripts": {
     "index": "tsx src/main.ts",
     "load-ontology": "tsx src/load-ontology.ts",
+    "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run --passWithNoTests"
   },
@@ -14,12 +15,14 @@
     "@agenticprimitives/types": "workspace:*",
     "@agenticprimitives/registry-kit": "workspace:*",
     "@agenticprimitives/ontology": "workspace:*",
+    "hono": "^4.6.0",
     "viem": "^2.52.2"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "wrangler": "^3.80.0"
   }
 }

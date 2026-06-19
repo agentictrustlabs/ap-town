@@ -173,6 +173,27 @@ export class DiscoveryIndexer {
     });
   }
 
+  /** Targeted projection (the on-create / auto-index trigger): project EXACTLY these named SAs into the
+   *  store incrementally, skipping the full TLD enumeration. Only agents that reverse-resolve to a name
+   *  reach the public KB (ADR-0040 — junk/unnamed SAs are ignored). Custody tokens are INSERTED, not
+   *  full-rebuilt, so one agent's projection never disturbs the rest. Idempotent (per-subject upsert). */
+  async projectAgents(sas: Address[]): Promise<{ projected: string[]; custodyTokens: number }> {
+    const latest = await this.client.getBlockNumber();
+    const block = Number(latest);
+    const nodes: AgentNode[] = [];
+    for (const sa of sas) {
+      const name = ((await this.client.readContract({ address: this.cfg.resolver, abi: RESOLVER_ABI, functionName: 'reverseResolveString', args: [sa] }).catch(() => '')) as string) || null;
+      if (!name) continue; // not a named agent → not in the public discovery KB
+      nodes.push(await this.projectAgent(sa, name, namehash(name), block, new Map()));
+    }
+    if (!nodes.length) return { projected: [], custodyTokens: 0 };
+    const tokens = await this.scanCustody(latest, nodes.map((n) => n.smartAgent as Address));
+    await this.store.upsert(nodes);
+    await this.store.addCustodyTokens(tokens);
+    await this.store.flush();
+    return { projected: nodes.map((n) => n.name as string), custodyTokens: tokens.length };
+  }
+
   async run(): Promise<{ count: number; registered: number; custodyTokens: number; nodes: AgentNode[] }> {
     const latest = await this.client.getBlockNumber();
     const attestations = await this.prefetchAttestations(latest);
