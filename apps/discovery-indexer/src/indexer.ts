@@ -8,7 +8,7 @@
 // grouped by subject) so per-agent projection stays read-only views.
 
 import { createPublicClient, http, keccak256, toBytes, encodePacked, type Address, type Hex, type PublicClient } from 'viem';
-import { NAME_REGISTRY_ABI, RESOLVER_ABI, ATTESTATION_ABI, CUSTODY_EVENTS_ABI } from './abi.js';
+import { NAME_REGISTRY_ABI, RESOLVER_ABI, REGISTRY_ABI, ATTESTATION_ABI, CUSTODY_EVENTS_ABI, NAMING_EVENTS_ABI, REGISTRY_EVENTS_ABI } from './abi.js';
 import type { AboxStore, AgentNode } from './store.js';
 import { PROJECTORS, type ProjectCtx, type AttestationHit } from './projectors.js';
 import { custodyToken } from './custody.js';
@@ -171,6 +171,51 @@ export class DiscoveryIndexer {
       }
       if (depth < this.cfg.maxDepth) await this.collect(node, depth + 1, block, attestations, acc);
     });
+  }
+
+  /** Current chain head. */
+  async head(): Promise<bigint> { return this.client.getBlockNumber(); }
+
+  /** Event-driven watcher (chain → KB). Scan [from, to] for the events that signal an agent needs
+   *  (re)projection — PrimaryNameSet (a SA got a name), the AgentRegistryBase lifecycle events (registration
+   *  changed), and the custody events (recovery / new deploy) — and return the DISTINCT affected SAs. getLogs
+   *  is windowed at SPAN ≤ 9 (free-tier eth_getLogs cap); the watcher only ever scans the small tail of new
+   *  blocks per tick, so that's 1–few windows. Naming/registry filter by contract address; custody is
+   *  topic-only (the emitter is the SA). Caller hands the SAs to projectAgents (which skips unnamed). */
+  async scanEvents(from: bigint, to: bigint): Promise<Address[]> {
+    if (to < from) return [];
+    const SPAN = 9n;
+    const sas = new Set<string>();
+    const windows = async (fn: (s: bigint, e: bigint) => Promise<void>) => {
+      for (let s = from; s <= to; s += SPAN + 1n) { const e = s + SPAN > to ? to : s + SPAN; await fn(s, e); }
+    };
+    // 1) PrimaryNameSet → agent (the SA) directly.
+    await windows(async (s, e) => {
+      const logs = await retry(() => this.client.getLogs({ address: this.cfg.nameRegistry, event: NAMING_EVENTS_ABI[0], fromBlock: s, toBlock: e })).catch(() => []);
+      for (const l of logs) { const a = (l.args as { agent?: Address }).agent; if (a) sas.add(a.toLowerCase()); }
+    });
+    // 2) Registry lifecycle. Registered carries subjectAgent; others resolve it via getEntry.
+    for (const ev of REGISTRY_EVENTS_ABI) {
+      await windows(async (s, e) => {
+        const logs = await retry(() => this.client.getLogs({ address: this.cfg.registry, event: ev, fromBlock: s, toBlock: e })).catch(() => []);
+        for (const l of logs) {
+          const a = l.args as { subjectAgent?: Address; registryId?: Hex; entryId?: Hex };
+          if (a.subjectAgent) { sas.add(a.subjectAgent.toLowerCase()); continue; }
+          if (a.registryId && a.entryId) {
+            const entry = (await this.client.readContract({ address: this.cfg.registry, abi: REGISTRY_ABI, functionName: 'getEntry', args: [a.registryId, a.entryId] }).catch(() => null)) as { subjectAgent: Address } | null;
+            if (entry?.subjectAgent && entry.subjectAgent !== ZERO_ADDR) sas.add(entry.subjectAgent.toLowerCase());
+          }
+        }
+      });
+    }
+    // 3) Custody (recovery / new deploy) — topic-only; the emitter address IS the SA.
+    for (const ev of CUSTODY_EVENTS_ABI) {
+      await windows(async (s, e) => {
+        const logs = await retry(() => this.client.getLogs({ event: ev, fromBlock: s, toBlock: e })).catch(() => []);
+        for (const l of logs) { const sa = (l.address as Address)?.toLowerCase(); if (sa) sas.add(sa); }
+      });
+    }
+    return [...sas] as Address[];
   }
 
   /** Targeted projection (the on-create / auto-index trigger): project EXACTLY these named SAs into the

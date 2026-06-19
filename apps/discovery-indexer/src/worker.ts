@@ -14,6 +14,7 @@ import type { Address } from 'viem';
 import { DiscoveryIndexer, type IndexerConfig } from './indexer.js';
 import { SparqlGraphStore } from './store.js';
 
+interface KV { get(key: string): Promise<string | null>; put(key: string, value: string): Promise<void> }
 interface Env {
   GRAPHDB_URL: string;
   GRAPHDB_USER?: string;
@@ -27,9 +28,36 @@ interface Env {
   RELATIONSHIP?: string;
   ATTESTATION_REGISTRY?: string;
   DISCOVERY_REGISTRY_ID?: string;
+  /** Cursor store for the event watcher (last block scanned). */
+  INDEXER_STATE?: KV;
+  /** Max blocks to scan per cron tick (catch-up bound). */
+  WATCH_MAX_BLOCKS?: string;
 }
 
 const AGENTS_MAX = 20;
+const CURSOR_KEY = 'watch:lastBlock';
+
+const store = (env: Env) => new SparqlGraphStore(env.GRAPHDB_URL, { user: env.GRAPHDB_USER, password: env.GRAPHDB_PASSWORD });
+
+/** One watcher tick: scan [cursor+1, …] for naming/registry/custody events → project the affected agents.
+ *  Forward-only from the chain head on the very first run (the batch `pnpm index` does any backfill). */
+async function watchTick(env: Env): Promise<{ ok: true; from: string; to: string; affected: number; projected: string[] } | { ok: false; error: string }> {
+  try {
+    const idx = new DiscoveryIndexer(cfg(env), store(env));
+    const latest = await idx.head();
+    const last = await env.INDEXER_STATE?.get(CURSOR_KEY);
+    const from = last ? BigInt(last) + 1n : latest; // first run: watch forward only
+    if (from > latest) return { ok: true, from: from.toString(), to: latest.toString(), affected: 0, projected: [] };
+    const max = BigInt(env.WATCH_MAX_BLOCKS ?? '90');
+    const to = from + max > latest ? latest : from + max;
+    const sas = (await idx.scanEvents(from, to)).slice(0, AGENTS_MAX); // bound per-tick projection work
+    const projected = sas.length ? (await idx.projectAgents(sas)).projected : [];
+    await env.INDEXER_STATE?.put(CURSOR_KEY, to.toString());
+    return { ok: true, from: from.toString(), to: to.toString(), affected: sas.length, projected };
+  } catch (e) {
+    return { ok: false, error: String((e as Error).message) };
+  }
+}
 
 function cfg(env: Env): IndexerConfig {
   return {
@@ -54,15 +82,23 @@ app.post('/project', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { agents?: unknown };
   const agents = Array.isArray(body.agents) ? body.agents.filter((x): x is string => typeof x === 'string').slice(0, AGENTS_MAX) : [];
   if (!agents.length) return c.json({ ok: false, error: 'agents[] required' }, 400);
-  const store = new SparqlGraphStore(c.env.GRAPHDB_URL, { user: c.env.GRAPHDB_USER, password: c.env.GRAPHDB_PASSWORD });
   try {
-    const r = await new DiscoveryIndexer(cfg(c.env), store).projectAgents(agents as Address[]);
+    const r = await new DiscoveryIndexer(cfg(c.env), store(c.env)).projectAgents(agents as Address[]);
     return c.json({ ok: true, ...r });
   } catch (e) {
     return c.json({ ok: false, error: String((e as Error).message) }, 502);
   }
 });
 
-app.get('/', (c) => c.json({ service: 'demo-discovery-indexer', project: 'POST /project {agents:[sa,…]}' }));
+// Manual watcher trigger (same logic the cron runs) — for testing / forcing a catch-up tick.
+app.post('/watch', async (c) => c.json(await watchTick(c.env)));
 
-export default app;
+app.get('/', (c) => c.json({ service: 'demo-discovery-indexer', project: 'POST /project {agents:[sa,…]}', watch: 'POST /watch (also runs on cron)' }));
+
+// fetch + scheduled (cron): the watcher reacts to on-chain naming/registry/custody events every tick.
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: unknown, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
+    ctx.waitUntil(watchTick(env).then((r) => console.log('[watch]', JSON.stringify(r))));
+  },
+};

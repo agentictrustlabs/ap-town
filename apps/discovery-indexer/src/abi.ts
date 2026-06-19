@@ -73,6 +73,21 @@ export const ATTESTATION_ABI = [
   { type: 'function', name: 'isValid', stateMutability: 'view', inputs: [{ name: 'uid', type: 'bytes32' }], outputs: [{ type: 'bool' }] },
 ] as const satisfies Abi;
 
+/** AgentNameRegistry — the "this SA now has a name" signal for the event-driven watcher. `agent` is the SA
+ *  (indexed), so a PrimaryNameSet log directly names an SA to (re)project. */
+export const NAMING_EVENTS_ABI = [
+  { type: 'event', name: 'PrimaryNameSet', inputs: [{ name: 'agent', type: 'address', indexed: true }, { name: 'node', type: 'bytes32', indexed: true }] },
+] as const satisfies Abi;
+
+/** AgentRegistryBase lifecycle events — the "registration changed" signal. Registered carries subjectAgent
+ *  directly; renew/suspend/revoke carry (registryId, entryId) only → resolve subjectAgent via getEntry. */
+export const REGISTRY_EVENTS_ABI = [
+  { type: 'event', name: 'RegistryEntryRegistered', inputs: [{ name: 'registryId', type: 'bytes32', indexed: true }, { name: 'entryId', type: 'bytes32', indexed: true }, { name: 'subjectAgent', type: 'address', indexed: true }, { name: 'cardHash', type: 'bytes32', indexed: false }, { name: 'bindingProofHash', type: 'bytes32', indexed: false }] },
+  { type: 'event', name: 'RegistryEntryRenewed', inputs: [{ name: 'registryId', type: 'bytes32', indexed: true }, { name: 'entryId', type: 'bytes32', indexed: true }, { name: 'expiresAt', type: 'uint64', indexed: false }] },
+  { type: 'event', name: 'RegistryEntrySuspended', inputs: [{ name: 'registryId', type: 'bytes32', indexed: true }, { name: 'entryId', type: 'bytes32', indexed: true }, { name: 'reasonHash', type: 'bytes32', indexed: false }] },
+  { type: 'event', name: 'RegistryEntryRevoked', inputs: [{ name: 'registryId', type: 'bytes32', indexed: true }, { name: 'entryId', type: 'bytes32', indexed: true }, { name: 'reasonHash', type: 'bytes32', indexed: false }] },
+] as const satisfies Abi;
+
 /** AgentAccount custody-membership events (PUBLIC on-chain, ADR-0040). `initialize` re-emits these for the
  *  INITIAL set too (AgentAccount.sol:371/409-410), so scanning the four events alone — filtered to the
  *  enumerated agent set — yields the complete CURRENT custodian membership (EOA custodians + the PIA the
