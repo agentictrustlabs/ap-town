@@ -90,11 +90,21 @@ export async function searchAgents(env: Env, q: string, limit = 25): Promise<Age
   }));
 }
 
-/** Which facet edges this agent has in the A-box (naming/profile/registry/relationship/attestation). */
+/** Which facets this agent has in the A-box. The indexer's SPARQL store writes each facet's DATA
+ *  predicates directly on the subject (apnam:/apreg:/approf:), NOT `core#has*` edges — so detect facets by
+ *  their distinctive predicates. registry = `apreg:lifecycleStatus` specifically (NOT apreg:blockNumber,
+ *  which every node carries). */
 async function facetsOf(env: Env, agentIri: string): Promise<string[]> {
-  const rows = await sparqlSelect(env, `
-    SELECT DISTINCT ?fp WHERE { <${agentIri}> ?fp ?o . FILTER(STRSTARTS(STR(?fp), "https://agenticprimitives.dev/ns/core#has")) }`);
-  return rows.map((r) => r.fp!.value.split('#has')[1]!.toLowerCase());
+  const NAMING = 'https://agenticprimitives.dev/ns/naming#';
+  const PROFILE = 'https://agenticprimitives.dev/ns/profile#';
+  const LIFECYCLE = 'https://agenticprimitives.dev/ns/registry#lifecycleStatus';
+  const rows = await sparqlSelect(env, `SELECT DISTINCT ?p WHERE { <${agentIri}> ?p ?o }`);
+  const preds = rows.map((r) => r.p!.value);
+  const facets: string[] = [];
+  if (preds.some((p) => p.startsWith(NAMING))) facets.push('naming');
+  if (preds.includes(LIFECYCLE)) facets.push('registry');
+  if (preds.some((p) => p.startsWith(PROFILE))) facets.push('profile');
+  return facets;
 }
 
 /** Describe an ontology term FROM THE GRAPH (the loaded T-box/C-box): label, comment, type, domain,
