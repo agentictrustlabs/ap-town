@@ -94,10 +94,17 @@ export async function searchAgents(env: Env, q: string, limit = 25): Promise<Age
       OPTIONAL { ?a <http://www.w3.org/ns/shacl#conforms> ?conforms }
       ${filter}
     } ORDER BY ?name LIMIT ${Math.min(Math.max(limit, 1), 200)}`);
-  return Promise.all(rows.map(async (r) => {
-    const agent = r.a!.value;
+  // Facets are derived from the fields the single query ALREADY binds — name → naming, lifecycleStatus →
+  // registry, displayName/description/skills → profile. This deliberately AVOIDS a per-agent
+  // `SELECT DISTINCT ?p` (N concurrent DISTINCT queries blew GraphDB's group-by/distinct heap guard on the
+  // grown dataset). One query, no DISTINCT — the live-relevant facets without the memory blowup.
+  return rows.map((r) => {
+    const facets: string[] = [];
+    if (r.name?.value) facets.push('naming');
+    if (r.status?.value) facets.push('registry');
+    if (r.dn?.value || r.desc?.value || r.skills?.value) facets.push('profile');
     return {
-      agent,
+      agent: r.a!.value,
       smartAgent: r.sa?.value ?? '',
       name: r.name?.value ?? null,
       shaclConforms: r.conforms?.value !== 'false',
@@ -105,26 +112,9 @@ export async function searchAgents(env: Env, q: string, limit = 25): Promise<Age
       displayName: r.dn?.value ?? null,
       description: r.desc?.value ?? null,
       skills: r.skills?.value ?? null,
-      facets: await facetsOf(env, agent),
+      facets,
     };
-  }));
-}
-
-/** Which facets this agent has in the A-box. The indexer's SPARQL store writes each facet's DATA
- *  predicates directly on the subject (apnam:/apreg:/approf:), NOT `core#has*` edges — so detect facets by
- *  their distinctive predicates. registry = `apreg:lifecycleStatus` specifically (NOT apreg:blockNumber,
- *  which every node carries). */
-async function facetsOf(env: Env, agentIri: string): Promise<string[]> {
-  const NAMING = 'https://agenticprimitives.dev/ns/naming#';
-  const PROFILE = 'https://agenticprimitives.dev/ns/profile#';
-  const LIFECYCLE = 'https://agenticprimitives.dev/ns/registry#lifecycleStatus';
-  const rows = await sparqlSelect(env, `SELECT DISTINCT ?p WHERE { <${agentIri}> ?p ?o }`);
-  const preds = rows.map((r) => r.p!.value);
-  const facets: string[] = [];
-  if (preds.some((p) => p.startsWith(NAMING))) facets.push('naming');
-  if (preds.includes(LIFECYCLE)) facets.push('registry');
-  if (preds.some((p) => p.startsWith(PROFILE))) facets.push('profile');
-  return facets;
+  });
 }
 
 /** Describe an ontology term FROM THE GRAPH (the loaded T-box/C-box): label, comment, type, domain,
