@@ -89,26 +89,32 @@ function GraphView({ onOpen }: { onOpen: (key: string, label: string) => void })
 }
 
 function SearchView({ onOpen }: { onOpen: (key: string, label: string) => void }) {
-  const [query, setQuery] = useState('');
   const [intent, setIntent] = useState('');
+  const [requireRegistered, setRequireRegistered] = useState(false);
+  const [requireSkill, setRequireSkill] = useState('');
   const [resp, setResp] = useState<DiscoverResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const run = async () => {
     setLoading(true); setResp(null);
-    try { setResp(await discover({ query, intent: intent || undefined })); }
-    catch (e) { setResp({ ok: false, query, intent: null, results: [], error: String(e) }); }
+    try { setResp(await discover({ intent: intent || undefined, mandates: { requireRegistered, requireSkill: requireSkill.trim() || undefined } })); }
+    catch (e) { setResp({ ok: false, query: '', intent: null, results: [], error: String(e) }); }
     finally { setLoading(false); }
   };
   return (
     <>
       <p className="eyebrow">Search · agent service</p>
-      <h1 style={{ marginBottom: '.4rem' }}>Ask the Discovery Agent</h1>
+      <h1 style={{ marginBottom: '.4rem' }}>Find an agent for what you need</h1>
       <p className="muted" style={{ marginBottom: '1rem' }}>
-        <b>UI → A2A → MCP → GraphDB.</b> The agent ranks by relevance + verifiable trust; intent + mandate weighting is the growing edge. Click a result for its full node.
+        <b>UI → A2A → MCP → GraphDB.</b> Describe your need; the agent ranks candidates by fit + verifiable trust (0.6·fit + 0.4·trust). Add mandates to hard-filter. Click a result for its full node.
       </p>
       <div className="card" style={{ marginBottom: '1.2rem' }}>
-        <input className="input" placeholder="Query (e.g. lbsb, scripture, org)…" value={query} onChange={(e) => setQuery(e.target.value)} style={{ marginBottom: '.6rem' }} />
-        <input className="input" placeholder="Intent (optional, e.g. 'licensed scripture provider')…" value={intent} onChange={(e) => setIntent(e.target.value)} style={{ marginBottom: '.7rem' }} />
+        <input className="input" placeholder="What do you need? e.g. 'help managing a treasury'" value={intent} onChange={(e) => setIntent(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') run(); }} style={{ marginBottom: '.6rem' }} />
+        <div className="row" style={{ gap: '1rem', flexWrap: 'wrap', marginBottom: '.7rem', alignItems: 'center' }}>
+          <label className="row" style={{ gap: '.4rem', cursor: 'pointer', fontSize: '.85rem' }}>
+            <input type="checkbox" checked={requireRegistered} onChange={(e) => setRequireRegistered(e.target.checked)} /> Registered only
+          </label>
+          <input className="input" placeholder="Required skill (optional)…" value={requireSkill} onChange={(e) => setRequireSkill(e.target.value)} style={{ flex: 1, minWidth: 160, marginBottom: 0 }} />
+        </div>
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <button className="btn --p" onClick={run} disabled={loading}>{loading ? <Spinner /> : 'Discover'}</button>
           <span className="cite">agent: <a href={`${DISCOVERY_AGENT_URL}/.well-known/agent-card.json`} target="_blank" rel="noreferrer">discovery.agent</a></span>
@@ -118,21 +124,29 @@ function SearchView({ onOpen }: { onOpen: (key: string, label: string) => void }
       {resp && !resp.ok && <div className="card"><Pill kind="err">error</Pill> <span className="muted">{resp.error}</span></div>}
       {resp?.ok && (
         <>
-          <p className="cite" style={{ marginBottom: '1rem' }}>{resp.results.length} result(s) · {resp.source}{resp.note ? ` · ${resp.note}` : ''}</p>
-          {resp.results.map((r) => (
+          <p className="cite" style={{ marginBottom: '1rem' }}>{resp.results.length} match(es){typeof resp.droppedByMandates === 'number' && resp.droppedByMandates > 0 ? ` · ${resp.droppedByMandates} dropped by mandates` : ''} · {resp.source}</p>
+          {resp.results.map((r) => {
+            const skills = (r.skills ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+            return (
             <button key={r.smartAgent} className="card" style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit', width: '100%' }} onClick={() => onOpen(r.name ?? r.smartAgent, r.name ?? short(r.smartAgent, 10))}>
               <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '.5rem' }}>
                 <h3 style={{ fontSize: '1rem' }}>{r.name ?? '(unnamed)'}</h3>
                 <div className="row" style={{ gap: '.4rem' }}>
+                  {r.registered && <Pill kind="ok">registered</Pill>}
                   <Pill kind={r.shaclConforms ? 'ok' : 'err'}>{r.shaclConforms ? 'SHACL ✓' : 'SHACL ✗'}</Pill>
                   <Pill kind={r.score >= 0.6 ? 'ok' : r.score >= 0.3 ? 'warn' : 'neutral'}>score {r.score.toFixed(2)}</Pill>
                 </div>
               </div>
               <p className="mono muted" style={{ fontSize: '.74rem', margin: '.3rem 0 .5rem' }}>{short(r.smartAgent, 14)}</p>
+              {skills.length > 0 && (
+                <div className="row" style={{ gap: '.3rem', flexWrap: 'wrap', marginBottom: '.5rem' }}>
+                  {skills.map((s) => <Pill key={s} kind="neutral">{s}</Pill>)}
+                </div>
+              )}
               <p className="cite">{r.why.join(' · ')}</p>
             </button>
-          ))}
-          {resp.results.length === 0 && <p className="muted">No agents matched.</p>}
+          ); })}
+          {resp.results.length === 0 && <p className="muted">No agents matched — try a broader need or drop a mandate.</p>}
         </>
       )}
     </>

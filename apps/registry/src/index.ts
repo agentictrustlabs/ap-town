@@ -156,9 +156,12 @@ app.post('/discover', async (c) => {
   };
   const intent: Intent = typeof body.intent === 'string' ? { need: body.intent } : (body.intent ?? {});
   const mandates = body.mandates;
-  const limit = body.limit ?? 25;
-  // Text seed for the MCP search: explicit query, else the intent need (empty = the full candidate set).
-  const q = (body.query || intent.need || '').toString();
+  // An explicit `query` is a precise substring FILTER at the MCP; an intent `need` is a natural-language
+  // DESCRIPTION that should RANK (fitScore), not filter — so we fetch the broad candidate set (no MCP text
+  // filter) and let the matcher rank it. Without this, "help managing a treasury" filtered to 0 (no name
+  // contains that phrase). Fetch wider when intent-driven so ranking has the full field to work over.
+  const q = (body.query ?? '').toString();
+  const limit = body.limit ?? (q ? 25 : 100);
 
   const mcp = await mcpGet(c.env, `/search?q=${encodeURIComponent(q)}&limit=${limit}`).catch((e) => ({ ok: false, error: String(e) }));
   if (!mcp?.ok) return c.json({ ok: false, error: mcp?.error ?? 'discovery MCP unavailable' }, 502);
