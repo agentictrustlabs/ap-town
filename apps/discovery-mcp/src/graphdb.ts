@@ -69,24 +69,41 @@ export interface AgentResult {
   smartAgent: string;
   facets: string[];
   shaclConforms: boolean;
+  /** Enriched matchable facets (spec 281; present when in the A-box, else null/empty). */
+  registryStatus?: string | null; // apreg:lifecycleStatus ('active' | 'suspended' | 'revoked' | null)
+  displayName?: string | null;     // approf:displayName
+  description?: string | null;     // approf:description
 }
 
-/** Free-text search over the A-box: match name (and, when present, profile displayName/description). */
+/** Free-text search over the A-box, enriched with the matchable facets the intent/mandate matcher needs
+ *  (spec 281): registry lifecycle status + profile displayName/description. All public, on-chain-derived
+ *  (ADR-0040). Match name OR profile text when a query is given. */
 export async function searchAgents(env: Env, q: string, limit = 25): Promise<AgentResult[]> {
   const filter = q.trim()
-    ? `FILTER( CONTAINS(LCASE(STR(?name)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?dn)), LCASE("${esc(q)}")) )`
+    ? `FILTER( CONTAINS(LCASE(STR(?name)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?dn)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?desc)), LCASE("${esc(q)}")) )`
     : '';
   const rows = await sparqlSelect(env, `
-    SELECT ?a ?sa ?name ?conforms WHERE {
+    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?status WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa .
       OPTIONAL { ?a apnam:name ?name }
       OPTIONAL { ?a approf:displayName ?dn }
+      OPTIONAL { ?a approf:description ?desc }
+      OPTIONAL { ?a apreg:lifecycleStatus ?status }
       OPTIONAL { ?a <http://www.w3.org/ns/shacl#conforms> ?conforms }
       ${filter}
     } ORDER BY ?name LIMIT ${Math.min(Math.max(limit, 1), 200)}`);
   return Promise.all(rows.map(async (r) => {
     const agent = r.a!.value;
-    return { agent, smartAgent: r.sa?.value ?? '', name: r.name?.value ?? null, shaclConforms: r.conforms?.value !== 'false', facets: await facetsOf(env, agent) };
+    return {
+      agent,
+      smartAgent: r.sa?.value ?? '',
+      name: r.name?.value ?? null,
+      shaclConforms: r.conforms?.value !== 'false',
+      registryStatus: r.status?.value ?? null,
+      displayName: r.dn?.value ?? null,
+      description: r.desc?.value ?? null,
+      facets: await facetsOf(env, agent),
+    };
   }));
 }
 

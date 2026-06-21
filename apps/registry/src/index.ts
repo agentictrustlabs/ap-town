@@ -17,7 +17,14 @@ interface Env {
   MCP?: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
 }
 
-interface AgentResult { agent: string; name: string | null; smartAgent: string; facets: string[]; shaclConforms: boolean }
+interface AgentResult {
+  agent: string; name: string | null; smartAgent: string; facets: string[]; shaclConforms: boolean;
+  registryStatus?: string | null; displayName?: string | null; description?: string | null;
+}
+
+// spec 281 — structured intent (soft rank) + mandates (hard filters).
+interface Intent { need?: string; skills?: string[]; geo?: string }
+interface Mandates { requireRegistered?: boolean; requireShaclConforms?: boolean; requireKind?: string; requireSkill?: string; geo?: string }
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
@@ -62,25 +69,64 @@ app.get('/.well-known/agent-card.json', (c) => {
 const APDISC = 'https://agenticprimitives.dev/ns/discovery#';
 const AP = 'https://agenticprimitives.dev/ns/core#';
 
-/** Rank a candidate → an ontology-typed apdisc:MatchCandidate with a TrustDetermination (confidence +
- *  cited evidence) and an EvidencePath. v1 weighting is lexical + facet-richness + SHACL; the intent/
- *  mandate inputs are the seam where skill/geo/trust expansion + mandate constraints grow. */
-function matchCandidate(a: AgentResult, q: string) {
-  const cites: string[] = [];
-  let conf = 0;
-  const ql = q.trim().toLowerCase();
-  if (ql && a.name?.toLowerCase().includes(ql)) { conf += 0.5; cites.push(`name matches “${q}”`); }
-  else if (!ql) conf += 0.1;
-  conf += Math.min(a.facets.length, 5) * 0.08;
+// spec 281 — filter → score → surface (ported from smart-agent 001, adapted to rank AGENTS).
+const W_FIT = 0.6;   // intent fit (soft)        — smart-agent's proximity weight
+const W_TRUST = 0.4; // public trust signals     — smart-agent's outcome weight
+const isRegistered = (a: AgentResult) => a.registryStatus === 'active' || a.facets.includes('registry');
+
+/** Hard MANDATE filter: returns the list of satisfied mandate keys, or null if ANY required mandate fails
+ *  (→ candidate dropped). Derived purely from public facets (ADR-0040). */
+function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | null {
+  const satisfied: string[] = [];
+  if (!m) return satisfied;
+  if (m.requireRegistered) { if (!isRegistered(a)) return null; satisfied.push('registered'); }
+  if (m.requireShaclConforms) { if (!a.shaclConforms) return null; satisfied.push('shaclConforms'); }
+  if (m.requireSkill) { const hit = (a.description ?? '').toLowerCase().includes(m.requireSkill.toLowerCase()) || (a.displayName ?? '').toLowerCase().includes(m.requireSkill.toLowerCase()); if (!hit) return null; satisfied.push(`skill:${m.requireSkill}`); }
+  if (m.geo) { if (!(a.description ?? '').toLowerCase().includes(m.geo.toLowerCase())) return null; satisfied.push(`geo:${m.geo}`); }
+  if (m.requireKind) { satisfied.push(`kind:${m.requireKind}`); } // best-effort (agentKind facet projection pending) — recorded, not yet hard-enforced
+  return satisfied;
+}
+
+/** Soft INTENT fit (0..1): lexical relevance of the need against name + profile text + skills. */
+function fitScore(a: AgentResult, intent: Intent, cites: string[]): number {
+  const need = (intent.need ?? '').trim().toLowerCase();
+  const hay = [a.name, a.displayName, a.description].filter(Boolean).join(' ').toLowerCase();
+  let s = 0;
+  if (!need) { s = 0.15; }
+  else {
+    if (a.name?.toLowerCase().includes(need)) { s += 0.6; cites.push(`name matches “${intent.need}”`); }
+    if (a.displayName?.toLowerCase().includes(need) || a.description?.toLowerCase().includes(need)) { s += 0.4; cites.push('profile text matches the need'); }
+    const toks = need.split(/\s+/).filter((t) => t.length > 2);
+    const tokHits = toks.filter((t) => hay.includes(t)).length;
+    if (toks.length) { s += 0.4 * (tokHits / toks.length); if (tokHits) cites.push(`${tokHits}/${toks.length} need term(s) matched`); }
+  }
+  for (const sk of intent.skills ?? []) { if (hay.includes(sk.toLowerCase())) { s += 0.2; cites.push(`skill “${sk}” present`); } }
+  return Math.min(s, 1);
+}
+
+/** Absolute public-trust signal (0..1) — registry-active + SHACL + facet richness (attestation/relationship
+ *  edges count once projected). Requester-relative proximity + outcome history are deferred (spec 281). */
+function trustScore(a: AgentResult, cites: string[]): number {
+  let s = 0;
+  if (isRegistered(a)) { s += 0.5; cites.push('active registry entry'); }
+  if (a.shaclConforms) { s += 0.2; cites.push('SHACL-conformant (cbox shapes)'); }
+  s += Math.min(a.facets.length, 5) * 0.06;
   if (a.facets.length) cites.push(`${a.facets.length} on-chain facet(s): ${a.facets.join(', ')}`);
-  if (a.shaclConforms) { conf += 0.1; cites.push('SHACL-conformant (cbox shapes)'); }
-  const confidence = Math.round(Math.min(conf, 1) * 100) / 100;
+  return Math.min(s, 1);
+}
+
+/** Score + surface one mandate-passing candidate as an ontology-typed apdisc:MatchCandidate. */
+function matchCandidate(a: AgentResult, intent: Intent, satisfiedMandates: string[]) {
+  const cites: string[] = [];
+  const fit = fitScore(a, intent, cites);
+  const trust = trustScore(a, cites);
+  const score = Math.round(Math.min(W_FIT * fit + W_TRUST * trust, 1) * 100) / 100;
   return {
     '@type': `${APDISC}MatchCandidate`,
     [`${APDISC}candidateAgent`]: { '@type': `${AP}Agent`, [`${AP}smartAgent`]: a.smartAgent, name: a.name, facets: a.facets },
     [`${APDISC}hasTrustDetermination`]: {
       '@type': `${APDISC}TrustDetermination`,
-      [`${APDISC}confidence`]: confidence,
+      [`${APDISC}confidence`]: score,
       [`${APDISC}citesEvidence`]: cites,
       note: 'over PUBLIC evidence — informs ranking, not authority to act',
     },
@@ -89,33 +135,50 @@ function matchCandidate(a: AgentResult, q: string) {
       'sh:conforms': a.shaclConforms,
       citedFacets: a.facets,
       agentNode: a.agent,
+      basis: { fitScore: Math.round(fit * 100) / 100, trustScore: Math.round(trust * 100) / 100, weights: { fit: W_FIT, trust: W_TRUST } },
     },
-    [`${APDISC}matchScore`]: confidence,
+    [`${APDISC}matchScore`]: score,
+    [`${APDISC}matchScoreBasis`]: Math.round(score * 10000), // smart-agent SHACL-precision convention (0..10000)
+    satisfiedMandates,
     // flattened convenience fields (UI):
     name: a.name, smartAgent: a.smartAgent, facets: a.facets, shaclConforms: a.shaclConforms,
-    score: confidence, why: cites,
+    registered: isRegistered(a), score, why: cites,
   };
 }
 
-// The discover skill (A2A-style invocation over JSON; browser/clients POST here).
+// The discover skill (A2A-style; browser/clients POST here). Filter → score → surface (spec 281):
+//   mandates = HARD filters (drop failures) · intent = SOFT rank (0.6·fit + 0.4·trust) · evidence path out.
+// `intent` may be a structured object {need,skills?,geo?} OR a bare string (legacy = the need); a bare
+// {query} still works (free-text), so existing callers (the Registry tab's loadRegistry) are unaffected.
 app.post('/discover', async (c) => {
-  const { query = '', intent, mandates, limit = 25 } = (await c.req.json().catch(() => ({}))) as {
-    query?: string; intent?: string; mandates?: unknown; limit?: number;
+  const body = (await c.req.json().catch(() => ({}))) as {
+    query?: string; intent?: Intent | string; mandates?: Mandates; limit?: number;
   };
-  const q = (query || intent || '').toString();
+  const intent: Intent = typeof body.intent === 'string' ? { need: body.intent } : (body.intent ?? {});
+  const mandates = body.mandates;
+  const limit = body.limit ?? 25;
+  // Text seed for the MCP search: explicit query, else the intent need (empty = the full candidate set).
+  const q = (body.query || intent.need || '').toString();
+
   const mcp = await mcpGet(c.env, `/search?q=${encodeURIComponent(q)}&limit=${limit}`).catch((e) => ({ ok: false, error: String(e) }));
   if (!mcp?.ok) return c.json({ ok: false, error: mcp?.error ?? 'discovery MCP unavailable' }, 502);
-  const ranked = (mcp.results as AgentResult[])
-    .map((a) => matchCandidate(a, q))
+
+  const candidates = mcp.results as AgentResult[];
+  let dropped = 0;
+  const ranked = candidates
+    .map((a) => { const sat = mandatePass(a, mandates); if (sat === null) { dropped++; return null; } return matchCandidate(a, intent, sat); })
+    .filter((x): x is ReturnType<typeof matchCandidate> => x !== null)
     .sort((x, y) => (y.score as number) - (x.score as number));
+
   return c.json({
     ok: true,
     '@context': { apdisc: APDISC, ap: AP, sh: 'http://www.w3.org/ns/shacl#' },
     '@type': `${APDISC}CandidateQuery`,
     query: q,
-    intent: intent ?? null,
+    intent,
     mandates: mandates ?? null,
-    note: intent || mandates ? 'intent/mandate accepted; weighted matching evolving' : undefined,
+    matched: ranked.length,
+    droppedByMandates: dropped,
     source: 'discovery-mcp → GraphDB (agentic-trust ontology: T-box + C-box SHACL + A-box)',
     results: ranked,
   });
@@ -140,6 +203,6 @@ app.post('/custody', async (c) => {
   return c.json(r);
 });
 
-app.get('/', (c) => c.json({ service: 'demo-discovery-a2a', card: '/.well-known/agent-card.json', discover: 'POST /discover {query,intent?,mandates?}', agent: 'GET /agent?key=', custody: 'POST /custody {subjectAgents,credential}' }));
+app.get('/', (c) => c.json({ service: 'demo-discovery-a2a', card: '/.well-known/agent-card.json', discover: 'POST /discover {query?, intent?:{need,skills?,geo?}, mandates?:{requireRegistered?,requireShaclConforms?,requireKind?,requireSkill?,geo?}}', agent: 'GET /agent?key=', custody: 'POST /custody {subjectAgents,credential}' }));
 
 export default app;
