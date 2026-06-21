@@ -19,7 +19,7 @@ interface Env {
 
 interface AgentResult {
   agent: string; name: string | null; smartAgent: string; facets: string[]; shaclConforms: boolean;
-  registryStatus?: string | null; displayName?: string | null; description?: string | null;
+  registryStatus?: string | null; displayName?: string | null; description?: string | null; skills?: string | null;
 }
 
 // spec 281 — structured intent (soft rank) + mandates (hard filters).
@@ -81,7 +81,7 @@ function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | null {
   if (!m) return satisfied;
   if (m.requireRegistered) { if (!isRegistered(a)) return null; satisfied.push('registered'); }
   if (m.requireShaclConforms) { if (!a.shaclConforms) return null; satisfied.push('shaclConforms'); }
-  if (m.requireSkill) { const hit = (a.description ?? '').toLowerCase().includes(m.requireSkill.toLowerCase()) || (a.displayName ?? '').toLowerCase().includes(m.requireSkill.toLowerCase()); if (!hit) return null; satisfied.push(`skill:${m.requireSkill}`); }
+  if (m.requireSkill) { const hay = [a.skills, a.description, a.displayName].filter(Boolean).join(' ').toLowerCase(); if (!hay.includes(m.requireSkill.toLowerCase())) return null; satisfied.push(`skill:${m.requireSkill}`); }
   if (m.geo) { if (!(a.description ?? '').toLowerCase().includes(m.geo.toLowerCase())) return null; satisfied.push(`geo:${m.geo}`); }
   if (m.requireKind) { satisfied.push(`kind:${m.requireKind}`); } // best-effort (agentKind facet projection pending) — recorded, not yet hard-enforced
   return satisfied;
@@ -90,7 +90,7 @@ function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | null {
 /** Soft INTENT fit (0..1): lexical relevance of the need against name + profile text + skills. */
 function fitScore(a: AgentResult, intent: Intent, cites: string[]): number {
   const need = (intent.need ?? '').trim().toLowerCase();
-  const hay = [a.name, a.displayName, a.description].filter(Boolean).join(' ').toLowerCase();
+  const hay = [a.name, a.displayName, a.description, a.skills].filter(Boolean).join(' ').toLowerCase();
   let s = 0;
   if (!need) { s = 0.15; }
   else {

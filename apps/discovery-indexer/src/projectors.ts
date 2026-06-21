@@ -35,7 +35,10 @@ export interface FacetProjector {
 }
 
 const ZERO32 = `0x${'00'.repeat(32)}`;
-const pred = (s: string) => keccak256(toBytes(s));
+// On-chain profile predicate id. AgentProfileResolver writes under keccak256("atl:<key>")
+// (AgentProfilePredicates.ATL_*); the bare keccak256("<key>") used before never matched, so profile facets
+// silently never projected. Prefix the canonical `atl:` namespace so reads hit the stored predicate.
+const pred = (key: string) => keccak256(toBytes(`atl:${key}`));
 const sha = (b: Hex) => `sha256:${b.slice(2)}`;
 const urn = (s: string) => keccak256(toBytes(s));
 
@@ -52,6 +55,7 @@ const PROFILE_KEYS: Array<[string, string]> = [
   ['authOrigin', PREDICATE.authOrigin],
   ['displayName', PREDICATE.displayName],
   ['description', PREDICATE.description],
+  ['skills', PREDICATE.skills], // spec 282 — publicly-asserted skill labels (atl:skills)
 ];
 const profile: FacetProjector = {
   kind: 'profile',

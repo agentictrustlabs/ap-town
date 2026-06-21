@@ -73,6 +73,7 @@ export interface AgentResult {
   registryStatus?: string | null; // apreg:lifecycleStatus ('active' | 'suspended' | 'revoked' | null)
   displayName?: string | null;     // approf:displayName
   description?: string | null;     // approf:description
+  skills?: string | null;          // approf:skills — publicly-asserted skill labels (spec 282)
 }
 
 /** Free-text search over the A-box, enriched with the matchable facets the intent/mandate matcher needs
@@ -80,14 +81,15 @@ export interface AgentResult {
  *  (ADR-0040). Match name OR profile text when a query is given. */
 export async function searchAgents(env: Env, q: string, limit = 25): Promise<AgentResult[]> {
   const filter = q.trim()
-    ? `FILTER( CONTAINS(LCASE(STR(?name)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?dn)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?desc)), LCASE("${esc(q)}")) )`
+    ? `FILTER( CONTAINS(LCASE(STR(?name)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?dn)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?desc)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?skills)), LCASE("${esc(q)}")) )`
     : '';
   const rows = await sparqlSelect(env, `
-    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?status WHERE {
+    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?status ?skills WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa .
       OPTIONAL { ?a apnam:name ?name }
       OPTIONAL { ?a approf:displayName ?dn }
       OPTIONAL { ?a approf:description ?desc }
+      OPTIONAL { ?a approf:skills ?skills }
       OPTIONAL { ?a apreg:lifecycleStatus ?status }
       OPTIONAL { ?a <http://www.w3.org/ns/shacl#conforms> ?conforms }
       ${filter}
@@ -102,6 +104,7 @@ export async function searchAgents(env: Env, q: string, limit = 25): Promise<Age
       registryStatus: r.status?.value ?? null,
       displayName: r.dn?.value ?? null,
       description: r.desc?.value ?? null,
+      skills: r.skills?.value ?? null,
       facets: await facetsOf(env, agent),
     };
   }));

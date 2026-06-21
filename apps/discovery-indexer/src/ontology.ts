@@ -23,6 +23,7 @@ export const PREDICATE = {
   displayName: `${NS.approf}displayName`,
   description: `${NS.approf}description`,
   authOrigin: `${NS.approf}authOrigin`,
+  skills: `${NS.approf}skills`,
   claimsRoot: `${NS.apreg}claimsRoot`,
   blockNumber: `${NS.apreg}blockNumber`,
   lifecycleStatus: `${NS.apreg}lifecycleStatus`,
