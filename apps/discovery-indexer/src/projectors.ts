@@ -159,24 +159,31 @@ async function digestOf(body: string): Promise<string> {
  *  observedAt / cardDigest). Single-tenant hosts serve exactly one SA, so we fetch `<a2aEndpoint>/offerings`
  *  with NO tenant param and REQUIRE the host's self-reported agentId to equal the SA we're crawling (a host
  *  may not project offerings for a different SA). PUBLIC view only — private/operational skills are never
- *  fetched, never indexed. A failed/absent/foreign crawl returns empty (present:false) — never a fallback
- *  to a second source (ADR-0013). */
+ *  fetched, never indexed.
+ *
+ *  CRAWL FAILURE ≠ ZERO OFFERINGS (ADR-0013). A fetch error / non-ok / foreign-SA / missing endpoint returns
+ *  the facet with NO `children` key (undefined) → present:false → the store PRESERVES whatever offerings are
+ *  already indexed (a failed read must not destroy good data). Only a SUCCESSFUL crawl returns a defined
+ *  `children` array (possibly empty = genuinely zero) → the store then refreshes/clears them. This matters
+ *  because the indexer Worker cannot fetch a same-account host (Cloudflare loopback, CF error 1042) — only
+ *  the Node CLI can — so the Worker cron's crawl always fails and MUST leave the CLI-populated offerings be. */
 const offerings: FacetProjector = {
   kind: 'offerings',
   async project({ client, nameResolver, sa, node, chainId }): Promise<ProjectedFacet> {
-    const empty = (pending?: string): ProjectedFacet => ({ kind: 'offerings', present: false, shapeIri: SHAPE.Offering, conforms: true, data: {}, children: [], pending });
+    // Failure/unknown: NO children key → store preserves existing offering nodes (never wipes on a failed read).
+    const unknown = (pending?: string): ProjectedFacet => ({ kind: 'offerings', present: false, shapeIri: SHAPE.Offering, conforms: true, data: {}, pending });
     // a2aEndpoint is a node-keyed record on the AgentNameResolver (spec 280) — NOT on the profile resolver.
     const a2a = (await client.readContract({ address: nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getString', args: [node, pred('a2aEndpoint')] }).catch(() => '')) as string;
-    if (!a2a) return empty();
+    if (!a2a) return unknown();
     const url = `${a2a.replace(/\/$/, '')}/offerings?view=public`;
     try {
       const res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(CRAWL_TIMEOUT_MS) });
-      if (!res.ok) return empty(`crawl ${url} → HTTP ${res.status}`);
+      if (!res.ok) return unknown(`crawl ${url} → HTTP ${res.status}`);
       const text = await res.text();
       const card = JSON.parse(text) as OfferingsCard;
       // Single-tenant trust check: the host must claim exactly this SA, or we don't index its offerings.
       if (card.agentId && card.agentId.toLowerCase() !== sa.toLowerCase()) {
-        return empty(`crawl ${url} → agentId ${card.agentId} ≠ ${sa} (foreign-SA card; not indexed)`);
+        return unknown(`crawl ${url} → agentId ${card.agentId} ≠ ${sa} (foreign-SA card; not indexed)`);
       }
       const list = Array.isArray(card.offerings) ? card.offerings : [];
       const observedAt = typeof card.observedAt === 'number' ? card.observedAt : Math.floor(Date.now() / 1000);
@@ -199,9 +206,10 @@ const offerings: FacetProjector = {
         if (o.requiredCapabilities?.length) data[PREDICATE.requiredCapability] = o.requiredCapabilities;
         return { iri: offeringIri(chainId, sa, o.skillId!), type: OFFERING_CLASS, linkPredicate: PREDICATE.hasOffering, data };
       });
-      return { kind: 'offerings', present: children.length > 0, shapeIri: SHAPE.Offering, conforms: true, data: { [PREDICATE.sourceEndpoint]: a2a, [PREDICATE.observedAt]: observedAt }, children };
+      // Successful crawl → present:true (even with zero offerings, so the store refreshes/clears stale ones).
+      return { kind: 'offerings', present: true, shapeIri: SHAPE.Offering, conforms: true, data: { [PREDICATE.sourceEndpoint]: a2a, [PREDICATE.observedAt]: observedAt }, children };
     } catch (e) {
-      return empty(`crawl ${url} → ${String((e as Error)?.message ?? e)}`);
+      return unknown(`crawl ${url} → ${String((e as Error)?.message ?? e)}`);
     }
   },
 };

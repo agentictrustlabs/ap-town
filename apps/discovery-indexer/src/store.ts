@@ -141,7 +141,12 @@ export class SparqlGraphStore implements AboxStore {
     const stmts: string[] = [];
     if (this.pending.length) {
       const subjects: string[] = [];
-      const childLinkPreds = new Set<string>();
+      // Agents with a FRESH child projection this batch (a facet returned a defined `children` array, i.e. the
+      // crawl SUCCEEDED). Only these get their child nodes + links cleared and rewritten; an agent whose crawl
+      // FAILED (children undefined → facet present:false) keeps its existing children (a failed read is
+      // "unknown", not "zero" — ADR-0013). The discovery indexer Worker cannot fetch a same-account host
+      // (Cloudflare loopback), so its crawl always fails and MUST preserve the CLI-populated offerings.
+      const freshChildSubjects: string[] = [];
       const triples = this.pending.flatMap((n) => {
         const s = `<${agentIri(n.chainId, n.smartAgent)}>`;
         subjects.push(s);
@@ -155,28 +160,35 @@ export class SparqlGraphStore implements AboxStore {
               t.push(`${s} <${k}> ${typeof v === 'number' ? v : lit(v)} .`);
             }
           }
-          // First-class child nodes (spec 286 Offerings): own subject, typed, linked from the agent.
-          for (const c of f.children ?? []) {
-            const ci = `<${c.iri}>`;
-            childLinkPreds.add(c.linkPredicate);
-            t.push(`${s} <${c.linkPredicate}> ${ci} .`, `${ci} a <${c.type}> .`, `${ci} <${PREDICATE.ofAgent}> ${s} .`);
-            for (const [k, v] of Object.entries(c.data)) {
-              if (!k.startsWith('http')) continue;
-              for (const item of Array.isArray(v) ? v : [v]) {
-                t.push(`${ci} <${k}> ${typeof item === 'number' ? item : lit(item)} .`);
+          // First-class child nodes (spec 286 Offerings): own subject, typed, linked from the agent. A defined
+          // `children` array (even empty) marks a SUCCESSFUL crawl → this agent's children get refreshed below.
+          if (Array.isArray(f.children)) {
+            freshChildSubjects.push(s);
+            for (const c of f.children) {
+              const ci = `<${c.iri}>`;
+              t.push(`${s} <${c.linkPredicate}> ${ci} .`, `${ci} a <${c.type}> .`, `${ci} <${PREDICATE.ofAgent}> ${s} .`);
+              for (const [k, v] of Object.entries(c.data)) {
+                if (!k.startsWith('http')) continue;
+                for (const item of Array.isArray(v) ? v : [v]) {
+                  t.push(`${ci} <${k}> ${typeof item === 'number' ? item : lit(item)} .`);
+                }
               }
             }
           }
         }
         return t;
       });
-      // Idempotent upsert. Clear the agent's existing CHILD nodes first (while the link still exists — covers
-      // children that disappeared between crawls), then the agent's own triples, then insert the fresh set.
-      if (childLinkPreds.size) {
-        const lps = [...childLinkPreds].map((p) => `<${p}>`).join(' ');
-        stmts.push(`DELETE { ?c ?p ?o } WHERE { VALUES ?a { ${subjects.join(' ')} } VALUES ?lp { ${lps} } ?a ?lp ?c . ?c ?p ?o }`);
+      const OFFERING_LINK = `<${PREDICATE.hasOffering}>`; // the only child-link predicate today
+      const fresh = [...new Set(freshChildSubjects)];
+      // (a) For agents with a fresh successful crawl: clear their OLD offering child nodes (reachable via the
+      //     link, while it still exists) + the links themselves; both are re-inserted below.
+      if (fresh.length) {
+        stmts.push(`DELETE { ?c ?p ?o } WHERE { VALUES ?a { ${fresh.join(' ')} } ?a ${OFFERING_LINK} ?c . ?c ?p ?o }`);
+        stmts.push(`DELETE { ?a ${OFFERING_LINK} ?c } WHERE { VALUES ?a { ${fresh.join(' ')} } ?a ${OFFERING_LINK} ?c }`);
       }
-      stmts.push(`DELETE { ?s ?p ?o } WHERE { VALUES ?s { ${subjects.join(' ')} } ?s ?p ?o }`);
+      // (b) Idempotent reset of each agent's OWN triples — but PRESERVE the offering links so a failed/absent
+      //     crawl never orphans previously-indexed offerings (fresh agents already cleared theirs in (a)).
+      stmts.push(`DELETE { ?s ?p ?o } WHERE { VALUES ?s { ${subjects.join(' ')} } ?s ?p ?o FILTER(?p != ${OFFERING_LINK}) }`);
       stmts.push(`INSERT DATA {\n${triples.join('\n')}\n}`);
     }
     if (this.custody !== null) {
