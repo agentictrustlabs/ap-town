@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { searchAgents, getAgent, describeTerm, listShapes, checkCustody, type Env } from './graphdb.js';
+import { searchAgents, getAgent, getOfferings, describeTerm, listShapes, checkCustody, type Env } from './graphdb.js';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
@@ -25,6 +25,15 @@ app.get('/agent', async (c) => {
   const key = c.req.query('key') ?? '';
   if (!key) return c.json({ ok: false, error: 'key (name or 0x SA) required' }, 400);
   try { const a = await getAgent(c.env, key); return a ? c.json({ ok: true, ...a }) : c.json({ ok: false, error: 'not found' }, 404); }
+  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
+});
+
+// Offerings (spec 286): the crawled per-skill Offerings an agent advertises (from its public A2A card,
+// host-asserted + provenance). The full per-skill set the matcher ranks over, queryable offline.
+app.get('/offerings', async (c) => {
+  const key = c.req.query('key') ?? '';
+  if (!key) return c.json({ ok: false, error: 'key (name or 0x SA) required' }, 400);
+  try { return c.json({ ok: true, key, offerings: await getOfferings(c.env, key) }); }
   catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
 });
 
@@ -66,6 +75,11 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] },
   },
   {
+    name: 'get_offerings',
+    description: 'Get the crawled per-skill Offerings (spec 286) one agent advertises — from its public A2A card, host-asserted with provenance (source endpoint / observedAt / card digest). Each offering: skillId, effect, exposure, family, status, required capabilities. Use to rank which agent best services an intent/mandate. Key = name or 0x SA.',
+    inputSchema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] },
+  },
+  {
     name: 'describe_term',
     description: 'Define an agentic-trust ontology term FROM THE KNOWLEDGE GRAPH (loaded T-box/C-box): label, comment, type, domain, range. Accepts an IRI or local name (e.g. "TrustDetermination", "RegistryEntry").',
     inputSchema: { type: 'object', properties: { term: { type: 'string' } }, required: ['term'] },
@@ -98,6 +112,8 @@ app.post('/mcp', async (c) => {
           ? { ok: true, results: await searchAgents(c.env, String(args.q ?? ''), Number(args.limit ?? 25)) }
           : name === 'get_agent'
             ? (await getAgent(c.env, String(args.key ?? ''))) ?? { ok: false, error: 'not found' }
+          : name === 'get_offerings'
+            ? { ok: true, offerings: await getOfferings(c.env, String(args.key ?? '')) }
           : name === 'describe_term'
             ? (await describeTerm(c.env, String(args.term ?? ''))) ?? { ok: false, error: 'term not found' }
           : name === 'list_shapes'
@@ -116,6 +132,6 @@ app.post('/mcp', async (c) => {
   }
 });
 
-app.get('/', (c) => c.json({ service: 'demo-discovery-mcp', tools: TOOLS.map((t) => t.name), rest: ['/search?q=', '/agent?key=', 'POST /custody {subjectAgents,credential}'], mcp: 'POST /mcp' }));
+app.get('/', (c) => c.json({ service: 'demo-discovery-mcp', tools: TOOLS.map((t) => t.name), rest: ['/search?q=', '/agent?key=', '/offerings?key=', 'POST /custody {subjectAgents,credential}'], mcp: 'POST /mcp' }));
 
 export default app;

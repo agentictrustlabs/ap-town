@@ -17,14 +17,19 @@ interface Env {
   MCP?: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
 }
 
+/** A crawled per-skill offering (spec 286), as surfaced by the MCP get_offerings tool. */
+interface OfferingLite { skillId: string; effect?: string | null; family?: string | null; status?: string | null }
 interface AgentResult {
   agent: string; name: string | null; smartAgent: string; facets: string[]; shaclConforms: boolean;
   registryStatus?: string | null; displayName?: string | null; description?: string | null; skills?: string | null;
+  /** Crawled offerings (spec 286), attached on demand when skill-level matching is requested. */
+  offerings?: OfferingLite[];
 }
 
-// spec 281 — structured intent (soft rank) + mandates (hard filters).
+// spec 281 — structured intent (soft rank) + mandates (hard filters). `requireSkillId` (spec 286) is an
+// EXACT per-skill mandate over the agent's crawled Offerings (vs `requireSkill`, fuzzy over coarse labels).
 interface Intent { need?: string; skills?: string[]; geo?: string }
-interface Mandates { requireRegistered?: boolean; requireShaclConforms?: boolean; requireKind?: string; requireSkill?: string; geo?: string }
+interface Mandates { requireRegistered?: boolean; requireShaclConforms?: boolean; requireKind?: string; requireSkill?: string; requireSkillId?: string; geo?: string }
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
@@ -39,6 +44,24 @@ const mcpPost = async (env: Env, path: string, body: unknown) => {
   const res = env.MCP ? await env.MCP.fetch(`https://mcp${path}`, init) : await fetch(`${mcpUrl(env)}${path}`, init);
   return res.json() as Promise<any>;
 };
+
+// spec 286 — attach each candidate's crawled Offerings (MCP get_offerings) so the matcher ranks over the
+// full per-skill set. Bounded to keep one /discover call from fanning out to hundreds of MCP reads; the cap
+// is LOGGED (never a silent truncation — ADR-0013). A per-agent fetch failure leaves `offerings` undefined
+// (the matcher degrades to coarse-label matching for that agent — empty is an answer, not a fallback).
+const OFFERINGS_FETCH_CAP = 40;
+async function enrichOfferings(env: Env, agents: AgentResult[]): Promise<void> {
+  const slice = agents.slice(0, OFFERINGS_FETCH_CAP);
+  if (agents.length > OFFERINGS_FETCH_CAP) {
+    console.warn(`[discovery-a2a] offering enrichment capped at ${OFFERINGS_FETCH_CAP}/${agents.length} candidates — narrow the query for full per-skill ranking`);
+  }
+  await Promise.all(slice.map(async (a) => {
+    const r = await mcpGet(env, `/offerings?key=${encodeURIComponent(a.smartAgent || a.name || '')}`).catch(() => null);
+    if (r?.ok && Array.isArray(r.offerings)) {
+      a.offerings = r.offerings.map((o: OfferingLite) => ({ skillId: o.skillId, effect: o.effect ?? null, family: o.family ?? null, status: o.status ?? null }));
+    }
+  }));
+}
 
 app.get('/health', (c) => c.json({ ok: true, service: 'demo-discovery-a2a' }));
 
@@ -81,7 +104,8 @@ function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | null {
   if (!m) return satisfied;
   if (m.requireRegistered) { if (!isRegistered(a)) return null; satisfied.push('registered'); }
   if (m.requireShaclConforms) { if (!a.shaclConforms) return null; satisfied.push('shaclConforms'); }
-  if (m.requireSkill) { const hay = [a.skills, a.description, a.displayName].filter(Boolean).join(' ').toLowerCase(); if (!hay.includes(m.requireSkill.toLowerCase())) return null; satisfied.push(`skill:${m.requireSkill}`); }
+  if (m.requireSkill) { const hay = [a.skills, a.description, a.displayName, ...(a.offerings ?? []).map((o) => o.skillId)].filter(Boolean).join(' ').toLowerCase(); if (!hay.includes(m.requireSkill.toLowerCase())) return null; satisfied.push(`skill:${m.requireSkill}`); }
+  if (m.requireSkillId) { const want = m.requireSkillId.toLowerCase(); if (!(a.offerings ?? []).some((o) => o.skillId.toLowerCase().includes(want))) return null; satisfied.push(`offering:${m.requireSkillId}`); }
   if (m.geo) { if (!(a.description ?? '').toLowerCase().includes(m.geo.toLowerCase())) return null; satisfied.push(`geo:${m.geo}`); }
   if (m.requireKind) { satisfied.push(`kind:${m.requireKind}`); } // best-effort (agentKind facet projection pending) — recorded, not yet hard-enforced
   return satisfied;
@@ -101,6 +125,14 @@ function fitScore(a: AgentResult, intent: Intent, cites: string[]): number {
     if (toks.length) { s += 0.4 * (tokHits / toks.length); if (tokHits) cites.push(`${tokHits}/${toks.length} need term(s) matched`); }
   }
   for (const sk of intent.skills ?? []) { if (hay.includes(sk.toLowerCase())) { s += 0.2; cites.push(`skill “${sk}” present`); } }
+  // spec 286 — boost on the crawled per-skill Offerings (a precise, callable advertisement, stronger than a
+  // coarse label match): an offered skillId matching the need tokens or an intent skill.
+  const offered = (a.offerings ?? []).map((o) => o.skillId.toLowerCase());
+  if (offered.length) {
+    const wantToks = [...(intent.skills ?? []).map((s2) => s2.toLowerCase()), ...((need ? need.split(/\s+/) : []).filter((t) => t.length > 2))];
+    const matched = [...new Set(offered.filter((id) => wantToks.some((t) => id.includes(t))))];
+    if (matched.length) { s += Math.min(0.3, 0.15 * matched.length); cites.push(`offers ${matched.length} matching skill(s): ${matched.slice(0, 3).join(', ')}`); }
+  }
   return Math.min(s, 1);
 }
 
@@ -143,6 +175,7 @@ function matchCandidate(a: AgentResult, intent: Intent, satisfiedMandates: strin
     // flattened convenience fields (UI):
     name: a.name, smartAgent: a.smartAgent, facets: a.facets, shaclConforms: a.shaclConforms,
     registered: isRegistered(a), score, why: cites,
+    offerings: a.offerings ?? [],
   };
 }
 
@@ -167,6 +200,13 @@ app.post('/discover', async (c) => {
   if (!mcp?.ok) return c.json({ ok: false, error: mcp?.error ?? 'discovery MCP unavailable' }, 502);
 
   const candidates = mcp.results as AgentResult[];
+
+  // spec 286 — when matching turns on skill granularity (a skill mandate or intent skills), enrich candidates
+  // with their crawled Offerings so the filter/rank works over the FULL per-skill set, not just coarse
+  // labels. Bounded + logged (no silent truncation, ADR-0013); skip entirely when no skill signal is given.
+  const needsOfferings = !!(mandates?.requireSkillId || mandates?.requireSkill || intent.skills?.length);
+  if (needsOfferings) await enrichOfferings(c.env, candidates);
+
   let dropped = 0;
   const ranked = candidates
     .map((a) => { const sat = mandatePass(a, mandates); if (sat === null) { dropped++; return null; } return matchCandidate(a, intent, sat); })
@@ -193,6 +233,15 @@ app.get('/agent', async (c) => {
   const key = c.req.query('key') ?? '';
   if (!key) return c.json({ ok: false, error: 'key (name or 0x SA) required' }, 400);
   const r = await mcpGet(c.env, `/agent?key=${encodeURIComponent(key)}`).catch((e) => ({ ok: false, error: String(e) }));
+  return c.json(r);
+});
+
+// Offerings (spec 286) — the crawled per-skill Offerings one agent advertises (from its public A2A card,
+// host-asserted + provenance). Browser → A2A → MCP → GraphDB. The drill-down behind a discovery result.
+app.get('/offerings', async (c) => {
+  const key = c.req.query('key') ?? '';
+  if (!key) return c.json({ ok: false, error: 'key (name or 0x SA) required' }, 400);
+  const r = await mcpGet(c.env, `/offerings?key=${encodeURIComponent(key)}`).catch((e) => ({ ok: false, error: String(e) }));
   return c.json(r);
 });
 

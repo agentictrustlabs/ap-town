@@ -8,9 +8,21 @@ import { dirname } from 'node:path';
 import { CLASS, NS, PREDICATE, agentIri } from './ontology.js';
 import { CUSTODY_GRAPH, CUSTODY_MEMBER_CLASS, custodyMemberIri } from './custody.js';
 
+/** A first-class CHILD node a facet projects alongside the agent (spec 286 Offerings). It is its OWN
+ *  subject (deterministic IRI), `rdf:type`d, linked from the agent via `linkPredicate`, and carries its own
+ *  scalar/multivalued triples. Re-crawls converge: the store deletes an agent's existing children (by the
+ *  link predicate) before re-inserting, so removed children drop out. */
+export interface ProjectedChildNode {
+  iri: string;
+  type: string;            // rdf:type IRI
+  linkPredicate: string;   // agent → child predicate IRI (also drives idempotent cleanup)
+  /** Child's own props, IRI-keyed. A string[] value emits one triple per element (multivalued). */
+  data: Record<string, string | number | string[]>;
+}
+
 /** One on-chain facet of an agent, ontology-shaped + SHACL-tagged. Everything keys off the SA. */
 export interface ProjectedFacet {
-  /** Facet source, e.g. 'naming' | 'profile' | 'registry' | 'relationship' | 'attestation'. */
+  /** Facet source, e.g. 'naming' | 'profile' | 'registry' | 'relationship' | 'attestation' | 'offerings'. */
   kind: string;
   /** Whether this facet exists on-chain for the agent. */
   present: boolean;
@@ -20,6 +32,8 @@ export interface ProjectedFacet {
   conforms: boolean;
   /** Ontology-IRI-keyed facet data (the triples). */
   data: Record<string, unknown>;
+  /** First-class child nodes this facet projects (own subjects, linked from the agent). Optional. */
+  children?: ProjectedChildNode[];
   /** If not yet implemented: the on-chain source this projector will read. */
   pending?: string;
 }
@@ -50,6 +64,7 @@ const FACET_PRED: Record<string, string> = {
   registry: `${NS.ap}hasRegistryEntry`,
   relationship: `${NS.ap}hasRelationship`,
   attestation: `${NS.ap}hasAttestation`,
+  offerings: `${NS.ap}hasOfferings`,
 };
 
 function nodeToJsonLd(n: AgentNode) {
@@ -63,7 +78,7 @@ function nodeToJsonLd(n: AgentNode) {
     'sh:conforms': present.every((f) => f.conforms),
     ...Object.fromEntries(present.map((f) => [
       FACET_PRED[f.kind] ?? `${NS.ap}has_${f.kind}`,
-      { ...f.data, 'sh:shape': f.shapeIri, 'sh:conforms': f.conforms },
+      { ...f.data, 'sh:shape': f.shapeIri, 'sh:conforms': f.conforms, ...(f.children?.length ? { 'ap:children': f.children } : {}) },
     ])),
     'ap:facetCoverage': n.facets.map((f) => ({ kind: f.kind, present: f.present, pending: f.pending ?? null })),
     'prov:wasDerivedFrom': n.provenance.source,
@@ -126,6 +141,7 @@ export class SparqlGraphStore implements AboxStore {
     const stmts: string[] = [];
     if (this.pending.length) {
       const subjects: string[] = [];
+      const childLinkPreds = new Set<string>();
       const triples = this.pending.flatMap((n) => {
         const s = `<${agentIri(n.chainId, n.smartAgent)}>`;
         subjects.push(s);
@@ -139,10 +155,27 @@ export class SparqlGraphStore implements AboxStore {
               t.push(`${s} <${k}> ${typeof v === 'number' ? v : lit(v)} .`);
             }
           }
+          // First-class child nodes (spec 286 Offerings): own subject, typed, linked from the agent.
+          for (const c of f.children ?? []) {
+            const ci = `<${c.iri}>`;
+            childLinkPreds.add(c.linkPredicate);
+            t.push(`${s} <${c.linkPredicate}> ${ci} .`, `${ci} a <${c.type}> .`, `${ci} <${PREDICATE.ofAgent}> ${s} .`);
+            for (const [k, v] of Object.entries(c.data)) {
+              if (!k.startsWith('http')) continue;
+              for (const item of Array.isArray(v) ? v : [v]) {
+                t.push(`${ci} <${k}> ${typeof item === 'number' ? item : lit(item)} .`);
+              }
+            }
+          }
         }
         return t;
       });
-      // Idempotent upsert: clear each subject's existing triples, then insert the fresh projection.
+      // Idempotent upsert. Clear the agent's existing CHILD nodes first (while the link still exists — covers
+      // children that disappeared between crawls), then the agent's own triples, then insert the fresh set.
+      if (childLinkPreds.size) {
+        const lps = [...childLinkPreds].map((p) => `<${p}>`).join(' ');
+        stmts.push(`DELETE { ?c ?p ?o } WHERE { VALUES ?a { ${subjects.join(' ')} } VALUES ?lp { ${lps} } ?a ?lp ?c . ?c ?p ?o }`);
+      }
       stmts.push(`DELETE { ?s ?p ?o } WHERE { VALUES ?s { ${subjects.join(' ')} } ?s ?p ?o }`);
       stmts.push(`INSERT DATA {\n${triples.join('\n')}\n}`);
     }

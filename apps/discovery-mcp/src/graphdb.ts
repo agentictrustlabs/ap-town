@@ -13,6 +13,7 @@ PREFIX ap: <https://agenticprimitives.dev/ns/core#>
 PREFIX apnam: <https://agenticprimitives.dev/ns/naming#>
 PREFIX apreg: <https://agenticprimitives.dev/ns/registry#>
 PREFIX approf: <https://agenticprimitives.dev/ns/profile#>
+PREFIX apdisc: <https://agenticprimitives.dev/ns/discovery#>
 `;
 
 function authHeader(env: Env): Record<string, string> {
@@ -136,6 +137,70 @@ export async function listShapes(env: Env): Promise<{ shape: string; label: stri
   const rows = await sparqlSelect(env, `
     SELECT ?s ?l WHERE { ?s a <http://www.w3.org/ns/shacl#NodeShape> . OPTIONAL { ?s <http://www.w3.org/2000/01/rdf-schema#label> ?l } } ORDER BY ?s`);
   return rows.map((r) => ({ shape: r.s!.value, label: r.l?.value ?? null }));
+}
+
+/** A crawled offering (spec 286) — one public skill a service agent advertises, projected into the A-box
+ *  from its public A2A card (host-asserted + provenance). */
+export interface OfferingResult {
+  skillId: string;
+  name: string | null;
+  effect: string | null;
+  exposure: string | null;
+  family: string | null;
+  status: string | null;
+  hasInputSchema: boolean;
+  requiredCapabilities: string[];
+  sourceEndpoint: string | null;
+  observedAt: number | null;
+  cardDigest: string | null;
+}
+
+/** The crawled Offerings of one agent (by name or SA). Each is a first-class `apdisc:Offering` node linked
+ *  from the agent via `apdisc:hasOffering` (spec 286). `requiredCapabilities` is multivalued → grouped. */
+export async function getOfferings(env: Env, key: string): Promise<OfferingResult[]> {
+  const sel = key.startsWith('0x')
+    ? `?a ap:smartAgent ?sa . FILTER(LCASE(STR(?sa)) = LCASE("${esc(key)}"))`
+    : `?a apnam:name "${esc(key)}" .`;
+  const rows = await sparqlSelect(env, `
+    SELECT ?o ?skill ?name ?effect ?exposure ?family ?status ?schema ?cap ?src ?obs ?dig WHERE {
+      ?a a ap:Agent . ${sel}
+      ?a apdisc:hasOffering ?o .
+      ?o apdisc:skillId ?skill .
+      OPTIONAL { ?o apdisc:offeringName ?name }
+      OPTIONAL { ?o apdisc:effect ?effect }
+      OPTIONAL { ?o apdisc:exposure ?exposure }
+      OPTIONAL { ?o apdisc:family ?family }
+      OPTIONAL { ?o apdisc:offeringStatus ?status }
+      OPTIONAL { ?o apdisc:hasInputSchema ?schema }
+      OPTIONAL { ?o apdisc:requiredCapability ?cap }
+      OPTIONAL { ?o apdisc:sourceEndpoint ?src }
+      OPTIONAL { ?o apdisc:observedAt ?obs }
+      OPTIONAL { ?o apdisc:cardDigest ?dig }
+    } ORDER BY ?skill`);
+  // Group by offering node — requiredCapability is multivalued so a skill spans multiple rows.
+  const byNode = new Map<string, OfferingResult>();
+  for (const r of rows) {
+    const id = r.o!.value;
+    let cur = byNode.get(id);
+    if (!cur) {
+      cur = {
+        skillId: r.skill?.value ?? '',
+        name: r.name?.value ?? null,
+        effect: r.effect?.value ?? null,
+        exposure: r.exposure?.value ?? null,
+        family: r.family?.value ?? null,
+        status: r.status?.value ?? null,
+        hasInputSchema: r.schema?.value === 'true',
+        requiredCapabilities: [],
+        sourceEndpoint: r.src?.value ?? null,
+        observedAt: r.obs?.value ? Number(r.obs.value) : null,
+        cardDigest: r.dig?.value ?? null,
+      };
+      byNode.set(id, cur);
+    }
+    if (r.cap?.value && !cur.requiredCapabilities.includes(r.cap.value)) cur.requiredCapabilities.push(r.cap.value);
+  }
+  return [...byNode.values()];
 }
 
 /** All triples for one agent (by name or SA) — the full A-box node. */

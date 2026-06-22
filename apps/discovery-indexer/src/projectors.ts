@@ -6,8 +6,8 @@
 
 import { keccak256, toBytes, type Address, type Hex, type PublicClient } from 'viem';
 import { RESOLVER_ABI, REGISTRY_ABI, REGISTRY_STATUS, PROFILE_RESOLVER_ABI, RELATIONSHIP_ABI, EDGE_STATUS } from './abi.js';
-import { PREDICATE, SHAPE } from './ontology.js';
-import type { ProjectedFacet } from './store.js';
+import { PREDICATE, SHAPE, OFFERING_CLASS, offeringIri } from './ontology.js';
+import type { ProjectedChildNode, ProjectedFacet } from './store.js';
 
 void RESOLVER_ABI;
 
@@ -124,5 +124,74 @@ const attestation: FacetProjector = {
   },
 };
 
-/** The projector registry — every on-chain source that relates to a Smart Agent. Extend here. */
-export const PROJECTORS: FacetProjector[] = [naming, profile, registry, relationship, attestation];
+/** One offering as served by a service host's public `GET /offerings` card (spec 286 / service-agent
+ *  `projectOfferings`). We type only the fields we project; unknown fields are ignored. */
+interface CardOffering {
+  agentId?: string; skillId?: string; version?: string; name?: string; description?: string;
+  effect?: string; exposure?: string; family?: string; requiredCapabilities?: string[];
+  hasInputSchema?: boolean; status?: string;
+}
+interface OfferingsCard { ok?: boolean; agentId?: string; view?: string; observedAt?: number; offerings?: CardOffering[] }
+
+const CRAWL_TIMEOUT_MS = 5000;
+/** sha256 of the raw card body (provenance digest). Web Crypto is available in the Worker (nodejs_compat)
+ *  + Node 20 runtimes the indexer runs in. */
+async function digestOf(body: string): Promise<string> {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(body));
+  return 'sha256:' + [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+/** Offerings facet (spec 286, ADR-0040 amended) — crawl the agent's PUBLIC A2A card and project each public
+ *  skill as a first-class Offering CHILD node, typed host-asserted + carrying provenance (sourceEndpoint /
+ *  observedAt / cardDigest). Single-tenant hosts serve exactly one SA, so we fetch `<a2aEndpoint>/offerings`
+ *  with NO tenant param and REQUIRE the host's self-reported agentId to equal the SA we're crawling (a host
+ *  may not project offerings for a different SA). PUBLIC view only — private/operational skills are never
+ *  fetched, never indexed. A failed/absent/foreign crawl returns empty (present:false) — never a fallback
+ *  to a second source (ADR-0013). */
+const offerings: FacetProjector = {
+  kind: 'offerings',
+  async project({ client, profileResolver, sa, chainId }): Promise<ProjectedFacet> {
+    const empty = (pending?: string): ProjectedFacet => ({ kind: 'offerings', present: false, shapeIri: SHAPE.Offering, conforms: true, data: {}, children: [], pending });
+    const a2a = (await client.readContract({ address: profileResolver, abi: PROFILE_RESOLVER_ABI, functionName: 'getStringProperty', args: [sa, pred('a2aEndpoint')] }).catch(() => '')) as string;
+    if (!a2a) return empty();
+    const url = `${a2a.replace(/\/$/, '')}/offerings?view=public`;
+    try {
+      const res = await fetch(url, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(CRAWL_TIMEOUT_MS) });
+      if (!res.ok) return empty(`crawl ${url} → HTTP ${res.status}`);
+      const text = await res.text();
+      const card = JSON.parse(text) as OfferingsCard;
+      // Single-tenant trust check: the host must claim exactly this SA, or we don't index its offerings.
+      if (card.agentId && card.agentId.toLowerCase() !== sa.toLowerCase()) {
+        return empty(`crawl ${url} → agentId ${card.agentId} ≠ ${sa} (foreign-SA card; not indexed)`);
+      }
+      const list = Array.isArray(card.offerings) ? card.offerings : [];
+      const observedAt = typeof card.observedAt === 'number' ? card.observedAt : Math.floor(Date.now() / 1000);
+      const cardDigest = await digestOf(text);
+      const children: ProjectedChildNode[] = list.filter((o) => o.skillId).map((o) => {
+        const data: Record<string, string | number | string[]> = {
+          [PREDICATE.skillId]: o.skillId!,
+          [PREDICATE.sourceEndpoint]: a2a,
+          [PREDICATE.observedAt]: observedAt,
+          [PREDICATE.cardDigest]: cardDigest,
+        };
+        if (o.version) data[PREDICATE.offeringVersion] = o.version;
+        if (o.name) data[PREDICATE.offeringName] = o.name;
+        if (o.description) data[PREDICATE.description] = o.description;
+        if (o.effect) data[PREDICATE.effect] = o.effect;
+        if (o.exposure) data[PREDICATE.exposure] = o.exposure;
+        if (o.family) data[PREDICATE.offeringFamily] = o.family;
+        if (typeof o.hasInputSchema === 'boolean') data[PREDICATE.hasInputSchema] = String(o.hasInputSchema);
+        if (o.status) data[PREDICATE.offeringStatus] = o.status;
+        if (o.requiredCapabilities?.length) data[PREDICATE.requiredCapability] = o.requiredCapabilities;
+        return { iri: offeringIri(chainId, sa, o.skillId!), type: OFFERING_CLASS, linkPredicate: PREDICATE.hasOffering, data };
+      });
+      return { kind: 'offerings', present: children.length > 0, shapeIri: SHAPE.Offering, conforms: true, data: { [PREDICATE.sourceEndpoint]: a2a, [PREDICATE.observedAt]: observedAt }, children };
+    } catch (e) {
+      return empty(`crawl ${url} → ${String((e as Error)?.message ?? e)}`);
+    }
+  },
+};
+
+/** The projector registry — every PUBLIC source that relates to a Smart Agent (on-chain + the agent's own
+ *  public A2A card, ADR-0040 amended). Extend here. */
+export const PROJECTORS: FacetProjector[] = [naming, profile, registry, relationship, attestation, offerings];
