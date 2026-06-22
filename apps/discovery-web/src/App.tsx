@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CONTRACTS } from '@agenticprimitives/contracts/deployments/base-sepolia';
 import { CLASS } from '@agenticprimitives/ontology';
 import { loadAboxGraph, type AboxDoc } from './lib/abox-graph';
-import { discover, getAgentDetail, DISCOVERY_AGENT_URL, type DiscoverResponse, type AgentDetail } from './lib/discovery-a2a';
+import { discover, getAgentDetail, fetchA2aCard, DISCOVERY_AGENT_URL, type DiscoverResponse, type AgentDetail, type A2aCard } from './lib/discovery-a2a';
 import { Pill, Spinner, short } from './components/ui';
 
 type View = { tab: 'graph' } | { tab: 'search' } | { tab: 'agent'; key: string; label: string; back: 'graph' | 'search' };
@@ -162,6 +162,8 @@ function AgentDetailView({ agentKey, label, onBack }: { agentKey: string; label:
   const rows = (data?.triples ?? []).filter((t) => !t.p.endsWith('#type'));
   const conforms = (data?.triples ?? []).find((t) => t.p.endsWith('shacl#conforms'))?.o;
   const types = (data?.triples ?? []).filter((t) => t.p.endsWith('#type')).map((t) => local(t.o));
+  // spec 280 — the agent's bound A2A host (its live skills card). Present once the indexer projects it.
+  const a2aEndpoint = (data?.triples ?? []).find((t) => t.p.endsWith('a2aEndpoint'))?.o;
 
   return (
     <>
@@ -190,11 +192,62 @@ function AgentDetailView({ agentKey, label, onBack }: { agentKey: string; label:
                 ))}
               </dl>
             </div>
+            <A2aSkillsPanel discovered={a2aEndpoint} />
             <p className="cite" style={{ marginTop: '.8rem' }}>
               Read live through <b>discovery.agent → MCP → GraphDB</b>. Facets populate as the agent's on-chain data grows (a registry entry is written during onboarding; the indexer projects it here). The card + binding proof become client-side re-verifiable once the registrant publishes their bodies by hash.
             </p>
           </>
         )}
     </>
+  );
+}
+
+const TREASURY_A2A_DEFAULT = 'https://demo-treasury-a2a.richardpedersen3.workers.dev';
+
+/** Live A2A skills for a smart agent: fetch its bound a2aEndpoint card (/.well-known/agent-card.json) and
+ *  show the skills it advertises. `discovered` is the indexed a2aEndpoint (spec 280); when absent you can
+ *  enter one (prefilled with the treasury host) so the flow is demoable before a reindex. */
+function A2aSkillsPanel({ discovered }: { discovered?: string }) {
+  const [endpoint, setEndpoint] = useState(discovered ?? TREASURY_A2A_DEFAULT);
+  const [view, setView] = useState<'public' | 'authenticated'>('public');
+  const [card, setCard] = useState<A2aCard | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => { if (discovered) setEndpoint(discovered); }, [discovered]);
+
+  const load = async () => {
+    setLoading(true); setErr(null); setCard(null);
+    try { setCard(await fetchA2aCard(endpoint, view === 'authenticated' ? 'authenticated' : undefined)); }
+    catch (e) { setErr(String(e)); }
+    finally { setLoading(false); }
+  };
+  const skills = card?.skills ?? [];
+
+  return (
+    <div className="card" style={{ marginTop: '1rem' }}>
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '.5rem' }}>
+        <h3 style={{ fontSize: '.95rem' }}>A2A skills {discovered ? '' : <span className="muted" style={{ fontWeight: 400 }}>(no a2aEndpoint indexed — enter one)</span>}</h3>
+        <div className="row" style={{ gap: '.4rem' }}>
+          <select className="input" value={view} onChange={(e) => setView(e.target.value as 'public' | 'authenticated')} style={{ marginBottom: 0, width: 'auto' }}>
+            <option value="public">public · families</option>
+            <option value="authenticated">authenticated · fine</option>
+          </select>
+          <button className="btn --p" onClick={load} disabled={loading || !endpoint}>{loading ? <Spinner /> : 'Fetch card'}</button>
+        </div>
+      </div>
+      <input className="input mono" value={endpoint} onChange={(e) => setEndpoint(e.target.value)} placeholder="https://…a2a host" style={{ margin: '.5rem 0', fontSize: '.78rem' }} />
+      {err && <div className="row"><Pill kind="err">error</Pill> <span className="muted">{err}</span></div>}
+      {card && (
+        <>
+          <p className="cite" style={{ marginBottom: '.5rem' }}>{card.name ?? 'agent'}{card.type ? ` · ${card.type}` : ''} · {String(card.view ?? view)} card · {skills.length} skill(s)</p>
+          {skills.length > 0 ? (
+            <div className="row" style={{ gap: '.3rem', flexWrap: 'wrap' }}>
+              {skills.map((s) => <Pill key={s.id} kind="neutral">{s.name ?? s.id}{s.effect ? ` · ${s.effect}` : ''}</Pill>)}
+            </div>
+          ) : <span className="muted">No skills advertised on this card.</span>}
+        </>
+      )}
+      <p className="cite" style={{ marginTop: '.6rem' }}>Fetched live from the agent&apos;s A2A host card. Card visibility ≠ authorization — invocation re-checks entitlement ∩ delegation ∩ assertion ∩ policy.</p>
+    </div>
   );
 }

@@ -56,6 +56,8 @@ const PROFILE_KEYS: Array<[string, string]> = [
   ['displayName', PREDICATE.displayName],
   ['description', PREDICATE.description],
   ['skills', PREDICATE.skills], // spec 282 — publicly-asserted skill labels (atl:skills)
+  ['a2aEndpoint', PREDICATE.a2aEndpoint], // spec 280 — the agent's A2A host (its live skills card)
+  ['mcpEndpoint', PREDICATE.mcpEndpoint],
 ];
 const profile: FacetProjector = {
   kind: 'profile',

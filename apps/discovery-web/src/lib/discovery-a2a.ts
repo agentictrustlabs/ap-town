@@ -40,6 +40,20 @@ export async function fetchAgentCard(): Promise<Record<string, unknown>> {
   return res.json() as Promise<Record<string, unknown>>;
 }
 
+/** A skill as listed on an arbitrary agent's A2A card (treasury/discovery/etc. all carry `skills[]`). */
+export interface A2aCardSkill { id: string; name?: string; description?: string; effect?: string }
+export interface A2aCard { name?: string; type?: string; view?: string; skills?: A2aCardSkill[] }
+
+/** Fetch ANY agent's live A2A card from its bound endpoint (spec 280 a2aEndpoint → /.well-known/agent-card.json).
+ *  The host must allow cross-origin GET (the treasury + discovery hosts set CORS). `view='authenticated'`
+ *  requests the fine-skill card (card visibility is NOT authorization — invocation re-checks). */
+export async function fetchA2aCard(endpoint: string, view?: 'authenticated'): Promise<A2aCard> {
+  const base = endpoint.replace(/\/+$/, '');
+  const res = await fetch(`${base}/.well-known/agent-card.json${view ? '?view=authenticated' : ''}`);
+  if (!res.ok) throw new Error(`agent-card ${res.status}`);
+  return res.json() as Promise<A2aCard>;
+}
+
 export interface AgentDetail {
   ok: boolean;
   agent?: string;
