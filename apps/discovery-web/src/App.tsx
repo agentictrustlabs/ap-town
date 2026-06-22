@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CONTRACTS } from '@agenticprimitives/contracts/deployments/base-sepolia';
 import { CLASS } from '@agenticprimitives/ontology';
 import { loadAboxGraph, type AboxDoc } from './lib/abox-graph';
-import { discover, getAgentDetail, fetchA2aCard, DISCOVERY_AGENT_URL, type DiscoverResponse, type AgentDetail, type A2aCard } from './lib/discovery-a2a';
+import { discover, getAgentDetail, fetchA2aCard, getOfferings, DISCOVERY_AGENT_URL, type DiscoverResponse, type AgentDetail, type A2aCard, type CrawledOffering } from './lib/discovery-a2a';
 import { Pill, Spinner, short } from './components/ui';
 
 type View = { tab: 'graph' } | { tab: 'search' } | { tab: 'agent'; key: string; label: string; back: 'graph' | 'search' };
@@ -192,6 +192,7 @@ function AgentDetailView({ agentKey, label, onBack }: { agentKey: string; label:
                 ))}
               </dl>
             </div>
+            <IndexedOfferingsPanel agentKey={agentKey} />
             <A2aSkillsPanel discovered={a2aEndpoint} />
             <p className="cite" style={{ marginTop: '.8rem' }}>
               Read live through <b>discovery.agent → MCP → GraphDB</b>. Facets populate as the agent's on-chain data grows (a registry entry is written during onboarding; the indexer projects it here). The card + binding proof become client-side re-verifiable once the registrant publishes their bodies by hash.
@@ -199,6 +200,60 @@ function AgentDetailView({ agentKey, label, onBack }: { agentKey: string; label:
           </>
         )}
     </>
+  );
+}
+
+/** Indexed Offerings (spec 286 P3): the agent's per-skill Offerings as CRAWLED INTO THE A-BOX ahead of time
+ *  (from its public A2A card), so discovery can rank over them offline. This is the queryable, host-asserted
+ *  view with provenance — distinct from the live-card panel below (which re-fetches the freshest snapshot). */
+function IndexedOfferingsPanel({ agentKey }: { agentKey: string }) {
+  const [offerings, setOfferings] = useState<CrawledOffering[] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setOfferings(null); setErr(null);
+    getOfferings(agentKey)
+      .then((r) => { if (cancelled) return; if (r.ok) setOfferings(r.offerings ?? []); else setErr(r.error ?? 'no offerings'); })
+      .catch((e) => { if (!cancelled) setErr(String(e)); });
+    return () => { cancelled = true; };
+  }, [agentKey]);
+
+  const prov = offerings?.find((o) => o.sourceEndpoint || o.observedAt);
+  return (
+    <div className="card" style={{ marginTop: '1rem' }}>
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '.5rem' }}>
+        <h3 style={{ fontSize: '.95rem' }}>Indexed offerings <span className="muted" style={{ fontWeight: 400 }}>· crawled into the knowledge base</span></h3>
+        {offerings && <Pill kind="neutral">{offerings.length} skill(s)</Pill>}
+      </div>
+      {!offerings && !err && <div className="row" style={{ marginTop: '.5rem' }}><Spinner /> <span className="muted">A2A → MCP → GraphDB…</span></div>}
+      {err && <div className="row" style={{ marginTop: '.5rem' }}><Pill kind="err">error</Pill> <span className="muted">{err}</span></div>}
+      {offerings && offerings.length === 0 && <span className="muted">No offerings crawled yet — the indexer projects them from the agent&apos;s public A2A card on its next run.</span>}
+      {offerings && offerings.length > 0 && (
+        <>
+          <table className="tbl" style={{ width: '100%', marginTop: '.5rem', fontSize: '.82rem' }}>
+            <thead><tr><th style={{ textAlign: 'left' }}>skill</th><th style={{ textAlign: 'left' }}>effect</th><th style={{ textAlign: 'left' }}>exposure</th><th style={{ textAlign: 'left' }}>family</th><th style={{ textAlign: 'left' }}>status</th></tr></thead>
+            <tbody>
+              {offerings.map((o) => (
+                <tr key={o.skillId}>
+                  <td className="mono">{o.skillId}{o.hasInputSchema ? ' ·⃝' : ''}</td>
+                  <td>{o.effect ?? '—'}</td>
+                  <td>{o.exposure ?? '—'}</td>
+                  <td>{o.family ?? '—'}</td>
+                  <td>{o.status ? <Pill kind={o.status === 'suspended' ? 'err' : 'ok'}>{o.status}</Pill> : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {prov && (
+            <p className="cite" style={{ marginTop: '.6rem' }}>
+              Host-asserted, crawled from {prov.sourceEndpoint ?? 'the public card'}
+              {prov.observedAt ? ` · observed ${new Date(prov.observedAt * 1000).toISOString().slice(0, 16).replace('T', ' ')}` : ''}
+              {prov.cardDigest ? ` · ${prov.cardDigest.slice(0, 16)}…` : ''}. A cache of public card data (ADR-0040 amended) — re-fetch the live card below to re-verify; on-chain a2aEndpoint + atl:skills remain the authority.
+            </p>
+          )}
+        </>
+      )}
+    </div>
   );
 }
 

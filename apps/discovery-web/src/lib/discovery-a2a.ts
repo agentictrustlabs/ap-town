@@ -67,6 +67,31 @@ export async function getAgentDetail(key: string): Promise<AgentDetail> {
   return (await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }))) as AgentDetail;
 }
 
+/** One crawled offering (spec 286) — a public skill an agent advertises, projected into the A-box from its
+ *  public A2A card (host-asserted + provenance: where + when it was observed). */
+export interface CrawledOffering {
+  skillId: string;
+  name: string | null;
+  effect: string | null;
+  exposure: string | null;
+  family: string | null;
+  status: string | null;
+  hasInputSchema: boolean;
+  requiredCapabilities: string[];
+  sourceEndpoint: string | null;
+  observedAt: number | null;
+  cardDigest: string | null;
+}
+export interface OfferingsResponse { ok: boolean; key?: string; offerings?: CrawledOffering[]; error?: string }
+
+/** Fetch one agent's CRAWLED offerings from the A-box (UI → A2A → MCP → GraphDB). This is the indexed,
+ *  query-ready view (spec 286 P3) — distinct from `fetchA2aCard` which hits the LIVE card for the freshest
+ *  snapshot / re-verification. */
+export async function getOfferings(key: string): Promise<OfferingsResponse> {
+  const res = await fetch(`${A2A_URL}/offerings?key=${encodeURIComponent(key)}`);
+  return (await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }))) as OfferingsResponse;
+}
+
 /** Invoke the discover-agents skill: an intent DESCRIPTION (+ optional precise query + mandates) → ranked
  *  agents. `intent` ranks (fitScore); `query` is a precise substring filter; mandates hard-filter. */
 export async function discover(input: { query?: string; intent?: string; mandates?: DiscoverMandates }): Promise<DiscoverResponse> {
