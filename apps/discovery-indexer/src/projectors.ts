@@ -5,7 +5,7 @@
 // by the SA. Adding a source = drop a FacetProjector here; the pipeline, store, and UI are unchanged.
 
 import { keccak256, toBytes, type Address, type Hex, type PublicClient } from 'viem';
-import { RESOLVER_ABI, REGISTRY_ABI, REGISTRY_STATUS, PROFILE_RESOLVER_ABI, RELATIONSHIP_ABI, EDGE_STATUS } from './abi.js';
+import { RESOLVER_ABI, REGISTRY_ABI, REGISTRY_STATUS, PROFILE_RESOLVER_ABI, NAME_ATTR_RESOLVER_ABI, RELATIONSHIP_ABI, EDGE_STATUS } from './abi.js';
 import { PREDICATE, SHAPE, OFFERING_CLASS, offeringIri } from './ontology.js';
 import type { ProjectedChildNode, ProjectedFacet } from './store.js';
 
@@ -21,6 +21,8 @@ export interface ProjectCtx {
   name: string | null;
   node: Hex;
   resolver: Address;
+  /** AgentNameResolver attribute store (spec 280) — node-keyed a2aEndpoint/mcpEndpoint read via getString. */
+  nameResolver: Address;
   registry: Address;
   profileResolver: Address;
   relationship: Address;
@@ -50,21 +52,32 @@ const naming: FacetProjector = {
   },
 };
 
-/** Profile facet — on-chain profile properties via AgentProfileResolver.getStringProperty(SA, predicate). */
+// Profile properties keyed by SA on the AgentProfileResolver (getStringProperty).
 const PROFILE_KEYS: Array<[string, string]> = [
   ['authOrigin', PREDICATE.authOrigin],
   ['displayName', PREDICATE.displayName],
   ['description', PREDICATE.description],
   ['skills', PREDICATE.skills], // spec 282 — publicly-asserted skill labels (atl:skills)
-  ['a2aEndpoint', PREDICATE.a2aEndpoint], // spec 280 — the agent's A2A host (its live skills card)
+];
+// Endpoint records keyed by NODE on the AgentNameResolver attribute store (getString) — spec 280. These
+// live on a DIFFERENT resolver than the profile properties (the connect ceremony writes them via
+// setStringAttribute(node, …)); reading them off the profileResolver/by-address silently returned nothing.
+const NAME_ATTR_KEYS: Array<[string, string]> = [
+  ['a2aEndpoint', PREDICATE.a2aEndpoint], // the agent's A2A host (its live skills card + offering crawl source)
   ['mcpEndpoint', PREDICATE.mcpEndpoint],
 ];
+/** Profile facet — profile properties (AgentProfileResolver, SA-keyed) + the spec-280 endpoint records
+ *  (AgentNameResolver, node-keyed). */
 const profile: FacetProjector = {
   kind: 'profile',
-  async project({ client, profileResolver, sa }) {
+  async project({ client, profileResolver, nameResolver, sa, node }) {
     const data: Record<string, unknown> = {};
     for (const [key, iri] of PROFILE_KEYS) {
       const v = (await client.readContract({ address: profileResolver, abi: PROFILE_RESOLVER_ABI, functionName: 'getStringProperty', args: [sa, pred(key)] }).catch(() => '')) as string;
+      if (v) data[iri] = v;
+    }
+    for (const [key, iri] of NAME_ATTR_KEYS) {
+      const v = (await client.readContract({ address: nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getString', args: [node, pred(key)] }).catch(() => '')) as string;
       if (v) data[iri] = v;
     }
     const present = Object.keys(data).length > 0;
@@ -150,9 +163,10 @@ async function digestOf(body: string): Promise<string> {
  *  to a second source (ADR-0013). */
 const offerings: FacetProjector = {
   kind: 'offerings',
-  async project({ client, profileResolver, sa, chainId }): Promise<ProjectedFacet> {
+  async project({ client, nameResolver, sa, node, chainId }): Promise<ProjectedFacet> {
     const empty = (pending?: string): ProjectedFacet => ({ kind: 'offerings', present: false, shapeIri: SHAPE.Offering, conforms: true, data: {}, children: [], pending });
-    const a2a = (await client.readContract({ address: profileResolver, abi: PROFILE_RESOLVER_ABI, functionName: 'getStringProperty', args: [sa, pred('a2aEndpoint')] }).catch(() => '')) as string;
+    // a2aEndpoint is a node-keyed record on the AgentNameResolver (spec 280) — NOT on the profile resolver.
+    const a2a = (await client.readContract({ address: nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getString', args: [node, pred('a2aEndpoint')] }).catch(() => '')) as string;
     if (!a2a) return empty();
     const url = `${a2a.replace(/\/$/, '')}/offerings?view=public`;
     try {

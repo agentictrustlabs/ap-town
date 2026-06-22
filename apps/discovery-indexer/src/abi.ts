@@ -45,6 +45,14 @@ export const PROFILE_RESOLVER_ABI = [
   { type: 'function', name: 'getBytes32Property', stateMutability: 'view', inputs: [{ name: 'agent', type: 'address' }, { name: 'predicate', type: 'bytes32' }], outputs: [{ type: 'bytes32' }] },
 ] as const satisfies Abi;
 
+/** AgentNameResolver attribute store (spec 280) — node-keyed string attributes (a2aEndpoint, mcpEndpoint,
+ *  displayName, …) written by the connect ceremony's `setStringAttribute`. Read by `getString(node,
+ *  predicate)`. DISTINCT from the AgentProfileResolver (address-keyed `getStringProperty`) and from the
+ *  universal resolver (`resolveName`); a2a/mcp endpoints live HERE, not on the profile resolver. */
+export const NAME_ATTR_RESOLVER_ABI = [
+  { type: 'function', name: 'getString', stateMutability: 'view', inputs: [{ name: 'subject', type: 'bytes32' }, { name: 'predicate', type: 'bytes32' }], outputs: [{ type: 'string' }] },
+] as const satisfies Abi;
+
 /** AgentRelationship — per-SA trust-fabric edges (spec 230). Clean per-subject/object views. */
 export const RELATIONSHIP_ABI = [
   { type: 'function', name: 'getEdgesBySubject', stateMutability: 'view', inputs: [{ name: 'subject', type: 'address' }], outputs: [{ type: 'bytes32[]' }] },

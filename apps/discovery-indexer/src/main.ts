@@ -28,6 +28,7 @@ const cfg: IndexerConfig = {
   chainId: Number(process.env.CHAIN_ID ?? 84532),
   nameRegistry: (process.env.NAME_REGISTRY ?? '0x15F7ed064A230C011b0244A14fD9653f011d609B') as Address,
   resolver: (process.env.RESOLVER ?? '0x7d777d2d0bbc1806B9Cc779121C27fbaAaFDb60b') as Address,
+  nameResolver: (process.env.NAME_RESOLVER ?? '0xcC9855A23C7a4D4592E68Fe47E195C2f9D832473') as Address,
   registry: (process.env.REGISTRY ?? '0xe320947b18D3C71710DCB75D4bf200147ded18Df') as Address,
   profileResolver: (process.env.PROFILE_RESOLVER ?? '0xc448EB159B2a35F07f6E1814CC8d125244d7384B') as Address,
   relationship: (process.env.RELATIONSHIP ?? '0xE6B8F6C7F1c9857013dA356DF08D0384334A9607') as Address,
