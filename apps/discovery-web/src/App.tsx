@@ -1,17 +1,19 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CONTRACTS } from '@agenticprimitives/contracts/deployments/base-sepolia';
 import { CLASS } from '@agenticprimitives/ontology';
-import { loadAboxGraph, type AboxDoc } from './lib/abox-graph';
 import { discover, getAgentDetail, fetchA2aCard, getOfferings, DISCOVERY_AGENT_URL, type DiscoverResponse, type AgentDetail, type A2aCard, type CrawledOffering } from './lib/discovery-a2a';
 import { Pill, Spinner, short } from './components/ui';
 
-type View = { tab: 'graph' } | { tab: 'search' } | { tab: 'agent'; key: string; label: string; back: 'graph' | 'search' };
+// Single live source of truth: everything reads the GraphDB A-box through the discovery agent + MCP. (The
+// former "Indexed graph · A-box" tab read a static JSON-LD snapshot that drifted from the live tier — dropped
+// in favour of this one live path; agent discovery + the detail drill-down both query GraphDB.)
+type View = { tab: 'search' } | { tab: 'agent'; key: string; label: string };
 
 const REGISTRY_ADDRESS = CONTRACTS.agentRegistryBase as string;
 
 export function App() {
-  const [view, setView] = useState<View>({ tab: 'graph' });
-  const open = (key: string, label: string, back: 'graph' | 'search') => setView({ tab: 'agent', key, label, back });
+  const [view, setView] = useState<View>({ tab: 'search' });
+  const open = (key: string, label: string) => setView({ tab: 'agent', key, label });
 
   return (
     <>
@@ -25,65 +27,15 @@ export function App() {
         </div>
       </header>
       <main className="wrap">
-        <nav className="tabs" role="tablist">
-          <button className={`tab ${view.tab === 'graph' ? '--active' : ''}`} onClick={() => setView({ tab: 'graph' })}>Indexed graph · A-box</button>
-          <button className={`tab ${view.tab === 'search' ? '--active' : ''}`} onClick={() => setView({ tab: 'search' })}>Search · via A2A</button>
-        </nav>
-
-        {view.tab === 'graph' ? <GraphView onOpen={(k, l) => open(k, l, 'graph')} />
-          : view.tab === 'search' ? <SearchView onOpen={(k, l) => open(k, l, 'search')} />
-          : <AgentDetailView agentKey={view.key} label={view.label} onBack={() => setView({ tab: view.back })} />}
+        {view.tab === 'agent'
+          ? <AgentDetailView agentKey={view.key} label={view.label} onBack={() => setView({ tab: 'search' })} />
+          : <SearchView onOpen={open} />}
       </main>
       <footer className="wrap">
         Discovery knowledge graph · registry <code>{short(REGISTRY_ADDRESS, 10)}</code> on Base Sepolia ·
         agents enumerated from agent-naming, projected with the agentic-trust ontology
         (<code>{CLASS.RegistryEntry.split('/ns/')[1]}</code>) into GraphDB · read through the discovery agent + MCP.
       </footer>
-    </>
-  );
-}
-
-function GraphView({ onOpen }: { onOpen: (key: string, label: string) => void }) {
-  const [doc, setDoc] = useState<AboxDoc | null>(null);
-  const [err, setErr] = useState<string | null>(null);
-  const [q, setQ] = useState('');
-  useEffect(() => { loadAboxGraph().then(setDoc).catch((e) => setErr(String(e))); }, []);
-  const ALL = ['naming', 'profile', 'registry', 'relationship', 'attestation'];
-
-  const agents = useMemo(() => {
-    if (!doc) return [];
-    const t = q.trim().toLowerCase();
-    return doc.agents.filter((a) => !t || (a.name ?? '').toLowerCase().includes(t) || a.smartAgent.toLowerCase().includes(t));
-  }, [doc, q]);
-
-  return (
-    <>
-      <p className="eyebrow">Indexed · A-box</p>
-      <h1 style={{ marginBottom: '.4rem' }}>The discovery knowledge graph</h1>
-      <p className="muted" style={{ marginBottom: '1rem' }}>
-        Every Smart Agent enumerated from agent-naming, projected with its available on-chain facets into the agentic-trust ontology graph. Click an agent for its full node.
-      </p>
-      {doc && <p className="cite" style={{ marginBottom: '1rem' }}>{doc.agents.length} agents · facet coverage: {ALL.map((f) => `${f} ${doc.facetCoverage[f] ?? 0}`).join(' · ')}</p>}
-      <input className="input" placeholder="Filter by name or address…" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginBottom: '1.4rem' }} />
-      {err ? <div className="card"><Pill kind="err">load error</Pill> <span className="muted">{err}</span></div>
-        : !doc ? <div className="row"><Spinner /> <span className="muted">Loading the A-box…</span></div>
-        : (
-          <div className="grid">
-            {agents.map((a) => (
-              <button key={a.smartAgent} className="card" style={{ textAlign: 'left', cursor: 'pointer', font: 'inherit' }} onClick={() => onOpen(a.name ?? a.smartAgent, a.name ?? short(a.smartAgent, 10))}>
-                <div className="row" style={{ justifyContent: 'space-between' }}>
-                  <h3 style={{ fontSize: '.98rem' }}>{a.name ?? '(unnamed)'}</h3>
-                  <Pill kind={a.conforms ? 'ok' : 'err'}>{a.conforms ? 'SHACL ✓' : 'SHACL ✗'}</Pill>
-                </div>
-                <p className="mono muted" style={{ fontSize: '.74rem', margin: '.3rem 0 .6rem' }}>{short(a.smartAgent, 14)}</p>
-                <div className="row" style={{ flexWrap: 'wrap', gap: '.35rem' }}>
-                  {ALL.map((kind) => { const f = a.facets.find((x) => x.kind === kind); return <Pill key={kind} kind={f?.present ? 'ok' : 'neutral'}>{kind}{f?.present ? '' : ' —'}</Pill>; })}
-                </div>
-              </button>
-            ))}
-            {agents.length === 0 && <p className="muted">No agents match “{q}”.</p>}
-          </div>
-        )}
     </>
   );
 }
