@@ -51,6 +51,7 @@ export const PROFILE_RESOLVER_ABI = [
  *  universal resolver (`resolveName`); a2a/mcp endpoints live HERE, not on the profile resolver. */
 export const NAME_ATTR_RESOLVER_ABI = [
   { type: 'function', name: 'getString', stateMutability: 'view', inputs: [{ name: 'subject', type: 'bytes32' }, { name: 'predicate', type: 'bytes32' }], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'getBytes32', stateMutability: 'view', inputs: [{ name: 'subject', type: 'bytes32' }, { name: 'predicate', type: 'bytes32' }], outputs: [{ type: 'bytes32' }] },
 ] as const satisfies Abi;
 
 /** AgentRelationship — per-SA trust-fabric edges (spec 230). Clean per-subject/object views. */

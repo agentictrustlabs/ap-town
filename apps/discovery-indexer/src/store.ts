@@ -43,6 +43,10 @@ export interface AgentNode {
   smartAgent: string;
   name: string | null;
   node: string;
+  /** The agent-kind subclass IRI (ap:PersonAgent / OrganizationAgent / ServiceAgent), decoded from the
+   *  on-chain `agentKind` — null when the agent declares no kind on-chain (then it's typed only ap:Agent;
+   *  we never infer kind from names/heuristics, ADR-0040). */
+  kindClass?: string | null;
   facets: ProjectedFacet[];
   provenance: { source: string; block: number; indexedAt: string };
 }
@@ -71,7 +75,7 @@ function nodeToJsonLd(n: AgentNode) {
   const present = n.facets.filter((f) => f.present);
   return {
     '@id': agentIri(n.chainId, n.smartAgent),
-    '@type': CLASS.Agent,
+    '@type': n.kindClass ? [CLASS.Agent, n.kindClass] : CLASS.Agent,
     [PREDICATE.smartAgent]: n.smartAgent,
     [PREDICATE.name]: n.name,
     [PREDICATE.node]: n.node,
@@ -151,6 +155,7 @@ export class SparqlGraphStore implements AboxStore {
         const s = `<${agentIri(n.chainId, n.smartAgent)}>`;
         subjects.push(s);
         const t = [`${s} a <${CLASS.Agent}> .`, `${s} <${PREDICATE.smartAgent}> ${lit(n.smartAgent)} .`];
+        if (n.kindClass) t.push(`${s} a <${n.kindClass}> .`); // agent-kind subclass, when declared on-chain
         if (n.name) t.push(`${s} <${PREDICATE.name}> ${lit(n.name)} .`);
         t.push(`${s} <${PREDICATE.node}> ${lit(n.node)} .`);
         t.push(`${s} <${PREDICATE.blockNumber}> ${n.provenance.block} .`);

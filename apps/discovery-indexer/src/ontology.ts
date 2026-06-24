@@ -3,10 +3,28 @@
 // attestation FACET predicates the indexer projects that the ontology package's PREDICATE map doesn't
 // expose yet — built on the package's canonical NS (and ideally promoted into the ontology later).
 
+import { keccak256, toHex, type Hex } from 'viem';
 import { NS, CLASS as ONT_CLASS, SHAPE as ONT_SHAPE, PREDICATE as ONT_PREDICATE } from '@agenticprimitives/ontology';
 
 export { NS };
 export const CLASS = ONT_CLASS;
+
+/** On-chain `agentKind` (bytes32) → the kind subclass IRI (spec 225 / tbox). The value is the canonical
+ *  enum id keccak256(toHex("person"|"org"|"service")) (agent-naming AGENT_KIND_ID / AgentNamePredicates),
+ *  read node-keyed off the AgentNameResolver. Maps the 3 on-chain agentKinds onto the OWL kind subclasses so
+ *  the A-box agents can be queried as PersonAgent / OrganizationAgent / ServiceAgent — never inferred from
+ *  names or any other heuristic (ADR-0040: only on-chain-derivable facts). Returns null when unset/unknown. */
+export const AGENT_KIND_PRED: Hex = keccak256(toHex('atl:agentKind'));
+const AGENT_KIND_CLASS: Record<string, string> = {
+  [keccak256(toHex('person'))]: ONT_CLASS.PersonAgent,
+  [keccak256(toHex('org'))]: ONT_CLASS.OrganizationAgent,
+  [keccak256(toHex('service'))]: ONT_CLASS.ServiceAgent,
+};
+const ZERO_B32 = `0x${'00'.repeat(32)}`;
+export function agentKindClass(value: Hex | string | null | undefined): string | null {
+  if (!value || value === ZERO_B32) return null;
+  return AGENT_KIND_CLASS[value.toLowerCase()] ?? null;
+}
 
 export const SHAPE = {
   ...ONT_SHAPE,

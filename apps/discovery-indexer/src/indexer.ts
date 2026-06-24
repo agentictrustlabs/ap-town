@@ -8,8 +8,9 @@
 // grouped by subject) so per-agent projection stays read-only views.
 
 import { createPublicClient, http, keccak256, toBytes, encodePacked, type Address, type Hex, type PublicClient } from 'viem';
-import { NAME_REGISTRY_ABI, RESOLVER_ABI, REGISTRY_ABI, ATTESTATION_ABI, CUSTODY_EVENTS_ABI, NAMING_EVENTS_ABI, REGISTRY_EVENTS_ABI } from './abi.js';
+import { NAME_REGISTRY_ABI, RESOLVER_ABI, REGISTRY_ABI, ATTESTATION_ABI, CUSTODY_EVENTS_ABI, NAMING_EVENTS_ABI, REGISTRY_EVENTS_ABI, NAME_ATTR_RESOLVER_ABI } from './abi.js';
 import type { AboxStore, AgentNode } from './store.js';
+import { AGENT_KIND_PRED, agentKindClass } from './ontology.js';
 import { PROJECTORS, type ProjectCtx, type AttestationHit } from './projectors.js';
 import { custodyToken } from './custody.js';
 
@@ -168,7 +169,10 @@ export class DiscoveryIndexer {
   private async projectAgent(sa: Address, name: string | null, node: Hex, block: number, attestations: Map<string, AttestationHit[]>): Promise<AgentNode> {
     const ctx: ProjectCtx = { client: this.client, chainId: this.cfg.chainId, sa, name, node, resolver: this.cfg.resolver, nameResolver: this.cfg.nameResolver, registry: this.cfg.registry, profileResolver: this.cfg.profileResolver, relationship: this.cfg.relationship, discoveryRegistryId: this.cfg.discoveryRegistryId, attestations };
     const facets = await Promise.all(PROJECTORS.map((p) => p.project(ctx).catch((e) => ({ kind: p.kind, present: false, shapeIri: null, conforms: false, data: {}, pending: `error: ${String((e as Error)?.message ?? e)}` }))));
-    return { chainId: this.cfg.chainId, smartAgent: sa, name, node, facets, provenance: { source: 'agent-naming:childLabelhashes', block, indexedAt: new Date().toISOString() } };
+    // Agent-kind subclass from on-chain agentKind (node-keyed on the AgentNameResolver). Null = not declared
+    // on-chain → typed only ap:Agent (never inferred from the name; ADR-0040).
+    const agentKind = (await this.client.readContract({ address: this.cfg.nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getBytes32', args: [node, AGENT_KIND_PRED] }).catch(() => null)) as Hex | null;
+    return { chainId: this.cfg.chainId, smartAgent: sa, name, node, kindClass: agentKindClass(agentKind), facets, provenance: { source: 'agent-naming:childLabelhashes', block, indexedAt: new Date().toISOString() } };
   }
 
   private async collect(parentNode: Hex, depth: number, block: number, attestations: Map<string, AttestationHit[]>, acc: Map<string, AgentNode>): Promise<void> {
