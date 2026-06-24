@@ -35,6 +35,31 @@ export async function sparqlSelect(env: Env, query: string): Promise<Binding[]> 
   return json.results?.bindings ?? [];
 }
 
+// ── Read-only SPARQL passthrough for the admin KB browser ──────────────────────────────────────────────
+// The KB is world-readable (ADR-0040), so exposing READ SPARQL is fine; but we hard-reject any update verb
+// and cap unbounded SELECTs. Returns the result head (column order, incl. unbound optionals) + flat rows.
+const FORBIDDEN_SPARQL = /\b(INSERT|DELETE|LOAD|CLEAR|DROP|CREATE|ADD|MOVE|COPY|MODIFY)\b/i;
+const RESULT_CAP = 2000;
+export interface KbResult { vars: string[]; rows: Record<string, string>[] }
+
+export async function runKbQuery(env: Env, query: string): Promise<KbResult> {
+  const q = query.trim();
+  if (!q) throw new Error('empty query');
+  if (FORBIDDEN_SPARQL.test(q)) throw new Error('read-only: SPARQL update operations are not allowed');
+  const capped = /\bselect\b/i.test(q) && !/\blimit\b/i.test(q) ? `${q}\nLIMIT ${RESULT_CAP}` : q;
+  const res = await fetch(env.GRAPHDB_QUERY_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/sparql-query', accept: 'application/sparql-results+json', ...authHeader(env) },
+    body: PREFIXES + capped,
+  });
+  if (!res.ok) throw new Error(`GraphDB ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
+  const json = (await res.json()) as { head?: { vars?: string[] }; results?: { bindings?: Binding[] }; boolean?: boolean };
+  if (typeof json.boolean === 'boolean') return { vars: ['result'], rows: [{ result: String(json.boolean) }] };
+  const vars = json.head?.vars ?? [];
+  const rows = (json.results?.bindings ?? []).map((b) => Object.fromEntries(vars.map((v) => [v, b[v]?.value ?? ''])));
+  return { vars, rows };
+}
+
 // ── Custody check (ADR-0040) ──────────────────────────────────────────────────────────────────────────
 // Custodian membership is PUBLIC on-chain data; the indexer projects it as OPAQUE, public, on-chain-
 // reproducible tokens — sha256(lower(credential)|lower(smartAgent)) — into a private named graph. We answer

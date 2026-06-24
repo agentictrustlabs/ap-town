@@ -6,12 +6,21 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { searchAgents, getAgent, getOfferings, describeTerm, listShapes, checkCustody, type Env } from './graphdb.js';
+import { searchAgents, getAgent, getOfferings, describeTerm, listShapes, checkCustody, runKbQuery, type Env } from './graphdb.js';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
 
 app.get('/health', (c) => c.json({ ok: true, service: 'demo-discovery-mcp', kb: c.env.GRAPHDB_QUERY_URL }));
+
+// Read-only SPARQL passthrough for the admin KB browser (T-box / C-box / A-box navigation). The KB is
+// world-readable (ADR-0040); update verbs are rejected + SELECTs capped in runKbQuery. CORS is open (above).
+app.post('/kb/query', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { query?: string };
+  if (!body.query) return c.json({ ok: false, error: 'query required' }, 400);
+  try { return c.json({ ok: true, ...(await runKbQuery(c.env, body.query)) }); }
+  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 400); }
+});
 
 // ── REST tool seam (what the A2A agent calls) ──
 app.get('/search', async (c) => {
