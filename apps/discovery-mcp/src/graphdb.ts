@@ -36,9 +36,17 @@ export async function sparqlSelect(env: Env, query: string): Promise<Binding[]> 
 }
 
 // ── Read-only SPARQL passthrough for the admin KB browser ──────────────────────────────────────────────
-// The KB is world-readable (ADR-0040), so exposing READ SPARQL is fine; but we hard-reject any update verb
-// and cap unbounded SELECTs. Returns the result head (column order, incl. unbound optionals) + flat rows.
+// The public A-box is world-readable (ADR-0040), so exposing READ SPARQL over it is fine; but we hard-reject
+// any update verb, cap unbounded SELECTs, and (KC-2, seam audit) block two shapes an update-verb filter
+// misses: SPARQL federation (SERVICE) and any reference to the custody membership graph.
 const FORBIDDEN_SPARQL = /\b(INSERT|DELETE|LOAD|CLEAR|DROP|CREATE|ADD|MOVE|COPY|MODIFY)\b/i;
+// KC-2: a SERVICE clause makes the GraphDB backend fetch an arbitrary URL during query evaluation → SSRF from
+// the server's network position. A read-only KB browser never needs federation.
+const FORBIDDEN_SERVICE = /\bSERVICE\b/i;
+// KC-2 / ADR-0040: the custody membership graph answers EXACT-MATCH existence only (checkCustody recomputes a
+// single token and asks "does it exist"), NEVER enumeration. A direct query referencing it (GRAPH/FROM
+// <urn:ap:custody>) would dump every unsalted token, so reject any query that names it.
+const CUSTODY_GRAPH_REF = /urn:ap:custody/i;
 const RESULT_CAP = 2000;
 export interface KbResult { vars: string[]; rows: Record<string, string>[] }
 
@@ -46,6 +54,8 @@ export async function runKbQuery(env: Env, query: string): Promise<KbResult> {
   const q = query.trim();
   if (!q) throw new Error('empty query');
   if (FORBIDDEN_SPARQL.test(q)) throw new Error('read-only: SPARQL update operations are not allowed');
+  if (FORBIDDEN_SERVICE.test(q)) throw new Error('SPARQL SERVICE (federation) is not allowed');
+  if (CUSTODY_GRAPH_REF.test(q)) throw new Error('the custody membership graph is not directly queryable');
   const capped = /\bselect\b/i.test(q) && !/\blimit\b/i.test(q) ? `${q}\nLIMIT ${RESULT_CAP}` : q;
   const res = await fetch(env.GRAPHDB_QUERY_URL, {
     method: 'POST',
