@@ -1,5 +1,13 @@
 # @agenticprimitives-demo/discovery-indexer
 
+## 0.0.1-alpha.2
+
+### Patch Changes
+
+- @agenticprimitives/types@1.0.0-alpha.14
+- @agenticprimitives/ontology@1.0.0-alpha.14
+- @agenticprimitives/registry-kit@0.0.0-alpha.2
+
 ## 0.0.1-alpha.1
 
 ### Patch Changes
