@@ -99,6 +99,13 @@ export async function checkCustody(env: Env, smartAgents: string[], credential: 
 
 const esc = (s: string) => s.replace(/["\\]/g, '\\$&');
 
+// NEW-DISC-3: an IRI interpolated into `<...>` in a SPARQL query must be validated, not just trusted for
+// starting with 'http'. The SPARQL IRIREF production forbids <>"{}|^`\ and 0x00-0x20 (controls + space)
+// inside the brackets — a `term` containing any of those breaks out of the IRI and injects query syntax.
+// Require a scheme + reject every IRIREF-illegal char (fail-closed: caller sees null, not an injected query).
+// eslint-disable-next-line no-control-regex
+const isSafeIri = (iri: string): boolean => /^[a-z][a-z0-9+.-]*:\/\//i.test(iri) && !/[<>"{}|^`\\\u0000-\u0020]/.test(iri);
+
 export interface AgentResult {
   agent: string;
   name: string | null;
@@ -157,12 +164,16 @@ export async function searchAgents(env: Env, q: string, limit = 25): Promise<Age
  *  range. Accepts a full IRI or a bare local name (resolved by matching the IRI end or rdfs:label). */
 export async function describeTerm(env: Env, term: string): Promise<{ iri: string; props: { p: string; o: string }[] } | null> {
   const byIri = term.startsWith('http');
+  // NEW-DISC-3: an IRI term is interpolated into `<...>` — validate it (SPARQL injection guard) before use.
+  if (byIri && !isSafeIri(term)) return null;
   const sel = byIri
     ? `BIND(<${term}> AS ?t)`
     : `?t ?anyp ?anyo . FILTER( STRENDS(LCASE(STR(?t)), LCASE("#${esc(term)}")) || EXISTS { ?t <http://www.w3.org/2000/01/rdf-schema#label> "${esc(term)}" } )`;
   const idRows = await sparqlSelect(env, `SELECT DISTINCT ?t WHERE { ${sel} } LIMIT 1`);
   if (!idRows.length) return null;
   const iri = idRows[0]!.t!.value;
+  // The resolved IRI is fed into a second query — validate it too (defence in depth).
+  if (!isSafeIri(iri)) return null;
   const props = await sparqlSelect(env, `SELECT ?p ?o WHERE { <${iri}> ?p ?o }`);
   return { iri, props: props.map((r) => ({ p: r.p!.value, o: r.o!.value })) };
 }

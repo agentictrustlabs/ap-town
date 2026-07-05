@@ -120,7 +120,19 @@ export interface SparqlAuth {
   password?: string;
 }
 
-const lit = (v: string) => `"${v.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
+// NEW-IDX-1: escape control characters too, not just backslash + double-quote. A crawled PUBLIC A2A card /
+// profile field is attacker-supplied; a raw newline / tab / control char produced a malformed SPARQL
+// string literal that failed the WHOLE INSERT batch (availability — one self-published card griefs the
+// indexer). Named escapes for the common whitespace controls; \uXXXX for the rest of the C0 range.
+export const lit = (v: string) =>
+  `"${v
+    .replace(/\\/g, '\\\\')
+    .replace(/"/g, '\\"')
+    .replace(/\n/g, '\\n')
+    .replace(/\r/g, '\\r')
+    .replace(/\t/g, '\\t')
+    // eslint-disable-next-line no-control-regex
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, '0')}`)}"`;
 
 /** GraphDB / SPARQL 1.1 Update store (agentkg.io). Enabled when GRAPHDB_URL is set. Idempotent: each
  *  agent's subject is DELETEd then re-INSERTed so re-runs converge (no duplicate triples). */
