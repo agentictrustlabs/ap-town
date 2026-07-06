@@ -1,5 +1,16 @@
 # @agenticprimitives-demo/discovery
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [71c68e3]
+  - @agenticprimitives/contracts@1.0.0-alpha.16
+  - @agenticprimitives/agent-profile@1.0.0-alpha.16
+  - @agenticprimitives/registry-kit@0.0.0-alpha.4
+  - @agenticprimitives/types@1.0.0-alpha.16
+  - @agenticprimitives/ontology@1.0.0-alpha.16
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes
