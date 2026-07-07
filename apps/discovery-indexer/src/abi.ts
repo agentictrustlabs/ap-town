@@ -104,6 +104,7 @@ export const REGISTRY_EVENTS_ABI = [
 export const CUSTODY_EVENTS_ABI = [
   { type: 'event', name: 'CustodianAdded', inputs: [{ name: 'owner', type: 'address', indexed: true }] },
   { type: 'event', name: 'CustodianRemoved', inputs: [{ name: 'owner', type: 'address', indexed: true }] },
-  { type: 'event', name: 'PasskeyAdded', inputs: [{ name: 'credentialIdDigest', type: 'bytes32', indexed: true }, { name: 'x', type: 'uint256', indexed: false }, { name: 'y', type: 'uint256', indexed: false }, { name: 'rpIdHash', type: 'bytes32', indexed: false }] },
+  // Spec 302 W1 — slimmed event (post-redeploy chains emit digest-only PasskeyAdded).
+  { type: 'event', name: 'PasskeyAdded', inputs: [{ name: 'credentialIdDigest', type: 'bytes32', indexed: true }] },
   { type: 'event', name: 'PasskeyRemoved', inputs: [{ name: 'credentialIdDigest', type: 'bytes32', indexed: true }] },
 ] as const satisfies Abi;
