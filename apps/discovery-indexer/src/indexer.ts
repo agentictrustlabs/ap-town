@@ -8,7 +8,7 @@
 // grouped by subject) so per-agent projection stays read-only views.
 
 import { createPublicClient, http, keccak256, toBytes, encodePacked, type Address, type Hex, type PublicClient } from 'viem';
-import { NAME_REGISTRY_ABI, RESOLVER_ABI, REGISTRY_ABI, ATTESTATION_ABI, CUSTODY_EVENTS_ABI, NAMING_EVENTS_ABI, REGISTRY_EVENTS_ABI, NAME_ATTR_RESOLVER_ABI } from './abi.js';
+import { NAME_REGISTRY_ABI, RESOLVER_ABI, REGISTRY_ABI, ATTESTATION_ABI, CUSTODY_EVENTS_ABI, NAMING_EVENTS_ABI, REGISTRY_EVENTS_ABI, NAME_ATTR_RESOLVER_ABI, NAME_ATTRIBUTE_EVENTS_ABI, PROFILE_EVENTS_ABI } from './abi.js';
 import type { AboxStore, AgentNode } from './store.js';
 import { AGENT_KIND_PRED, agentKindClass } from './ontology.js';
 import { PROJECTORS, type ProjectCtx, type AttestationHit } from './projectors.js';
@@ -222,7 +222,25 @@ export class DiscoveryIndexer {
         }
       });
     }
-    // 3) Custody (recovery / new deploy) — topic-only; the emitter address IS the SA.
+    // 3) Naming-record edits (spec 314) — AttributeSet/Unset on the name resolver. `subject` is the
+    //    name NODE; resolve node → SA via the universal resolver (one readContract per distinct node).
+    const editedNodes = new Set<Hex>();
+    for (const ev of NAME_ATTRIBUTE_EVENTS_ABI) {
+      await windows(async (s, e) => {
+        const logs = await retry(() => this.logsClient.getLogs({ address: this.cfg.nameResolver, event: ev, fromBlock: s, toBlock: e })).catch(() => []);
+        for (const l of logs) { const n = (l.args as { subject?: Hex }).subject; if (n) editedNodes.add(n); }
+      });
+    }
+    for (const node of editedNodes) {
+      const sa = (await this.client.readContract({ address: this.cfg.resolver, abi: RESOLVER_ABI, functionName: 'resolveName', args: [node] }).catch(() => null)) as Address | null;
+      if (sa && sa !== ZERO_ADDR) sas.add(sa.toLowerCase());
+    }
+    // 4) Profile-property edits (spec 314) — PropertySet carries the SA directly.
+    await windows(async (s, e) => {
+      const logs = await retry(() => this.logsClient.getLogs({ address: this.cfg.profileResolver, event: PROFILE_EVENTS_ABI[0], fromBlock: s, toBlock: e })).catch(() => []);
+      for (const l of logs) { const a = (l.args as { agent?: Address }).agent; if (a) sas.add(a.toLowerCase()); }
+    });
+    // 5) Custody (recovery / new deploy) — topic-only; the emitter address IS the SA.
     for (const ev of CUSTODY_EVENTS_ABI) {
       await windows(async (s, e) => {
         const logs = await retry(() => this.logsClient.getLogs({ event: ev, fromBlock: s, toBlock: e })).catch(() => []);

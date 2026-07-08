@@ -88,6 +88,18 @@ export const NAMING_EVENTS_ABI = [
   { type: 'event', name: 'PrimaryNameSet', inputs: [{ name: 'agent', type: 'address', indexed: true }, { name: 'node', type: 'bytes32', indexed: true }] },
 ] as const satisfies Abi;
 
+/** AttributeStorage events on the AgentNameAttributeResolver (spec 314) — the "naming record edited"
+ *  signal. `subject` is the name NODE (namehash); the watcher maps node → SA via resolveName. */
+export const NAME_ATTRIBUTE_EVENTS_ABI = [
+  { type: 'event', name: 'AttributeSet', inputs: [{ name: 'subject', type: 'bytes32', indexed: true }, { name: 'predicate', type: 'bytes32', indexed: true }, { name: 'datatype', type: 'uint8', indexed: false }, { name: 'version', type: 'uint64', indexed: false }] },
+  { type: 'event', name: 'AttributeUnset', inputs: [{ name: 'subject', type: 'bytes32', indexed: true }, { name: 'predicate', type: 'bytes32', indexed: true }, { name: 'version', type: 'uint64', indexed: false }] },
+] as const satisfies Abi;
+
+/** AgentProfileResolver property events (spec 314) — the "profile property edited" signal; carries the SA. */
+export const PROFILE_EVENTS_ABI = [
+  { type: 'event', name: 'PropertySet', inputs: [{ name: 'agent', type: 'address', indexed: true }, { name: 'predicate', type: 'bytes32', indexed: true }] },
+] as const satisfies Abi;
+
 /** AgentRegistryBase lifecycle events — the "registration changed" signal. Registered carries subjectAgent
  *  directly; renew/suspend/revoke carry (registryId, entryId) only → resolve subjectAgent via getEntry. */
 export const REGISTRY_EVENTS_ABI = [
