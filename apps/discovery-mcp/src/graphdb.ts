@@ -160,6 +160,41 @@ export async function searchAgents(env: Env, q: string, limit = 25): Promise<Age
   });
 }
 
+export interface NameListing {
+  name: string;
+  smartAgent: string;
+  /** Unix seconds the name was registered on-chain (AgentNameRegistry.registeredAt); null if not yet
+   *  reindexed with the naming-metadata projection. */
+  registeredAt: number | null;
+  /** Unix seconds the registration expires; null = no expiry recorded. */
+  expiresAt: number | null;
+  /** Agent-kind subclass local name ('PersonAgent' | 'OrganizationAgent' | 'ServiceAgent') or null. */
+  kind: string | null;
+  displayName: string | null;
+}
+
+/** Every named agent in the KB, most-recently-registered first (apnam:registeredAt is projected off
+ *  AgentNameRegistry storage — on-chain-derivable, ADR-0040). Names indexed before the metadata
+ *  projection landed sort last (unbound registeredAt) until the next reindex. */
+export async function listNames(env: Env, limit = 100): Promise<NameListing[]> {
+  const rows = await sparqlSelect(env, `
+    SELECT ?sa ?name ?reg ?exp ?kind ?dn WHERE {
+      ?a a ap:Agent ; ap:smartAgent ?sa ; apnam:name ?name .
+      OPTIONAL { ?a apnam:registeredAt ?reg }
+      OPTIONAL { ?a apnam:expiry ?exp }
+      OPTIONAL { ?a approf:displayName ?dn }
+      OPTIONAL { ?a a ?kind . FILTER(?kind IN (ap:PersonAgent, ap:OrganizationAgent, ap:ServiceAgent)) }
+    } ORDER BY DESC(?reg) ?name LIMIT ${Math.min(Math.max(limit, 1), 500)}`);
+  return rows.map((r) => ({
+    name: r.name!.value,
+    smartAgent: r.sa?.value ?? '',
+    registeredAt: r.reg?.value ? Number(r.reg.value) : null,
+    expiresAt: r.exp?.value ? Number(r.exp.value) : null,
+    kind: r.kind?.value ? (r.kind.value.split('#').pop() ?? null) : null,
+    displayName: r.dn?.value ?? null,
+  }));
+}
+
 /** Describe an ontology term FROM THE GRAPH (the loaded T-box/C-box): label, comment, type, domain,
  *  range. Accepts a full IRI or a bare local name (resolved by matching the IRI end or rdfs:label). */
 export async function describeTerm(env: Env, term: string): Promise<{ iri: string; props: { p: string; o: string }[] } | null> {

@@ -44,6 +44,9 @@ export const PREDICATE = {
   smartAgent: `${NS.ap}smartAgent`,
   name: `${NS.apnam}name`,
   node: `${NS.apnam}node`,
+  // Name-record metadata (AgentNameRegistry storage views — on-chain-derivable, ADR-0040).
+  nameRegisteredAt: `${NS.apnam}registeredAt`, // unix seconds the node was registered
+  nameExpiry: `${NS.apnam}expiry`,             // unix seconds the registration expires (0 = none)
   displayName: `${NS.approf}displayName`,
   description: `${NS.approf}description`,
   authOrigin: `${NS.approf}authOrigin`,

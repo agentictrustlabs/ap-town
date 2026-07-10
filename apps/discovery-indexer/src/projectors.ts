@@ -5,7 +5,7 @@
 // by the SA. Adding a source = drop a FacetProjector here; the pipeline, store, and UI are unchanged.
 
 import { keccak256, toBytes, type Address, type Hex, type PublicClient } from 'viem';
-import { RESOLVER_ABI, REGISTRY_ABI, REGISTRY_STATUS, PROFILE_RESOLVER_ABI, NAME_ATTR_RESOLVER_ABI, RELATIONSHIP_ABI, EDGE_STATUS } from './abi.js';
+import { RESOLVER_ABI, NAME_REGISTRY_ABI, REGISTRY_ABI, REGISTRY_STATUS, PROFILE_RESOLVER_ABI, NAME_ATTR_RESOLVER_ABI, RELATIONSHIP_ABI, EDGE_STATUS } from './abi.js';
 import { PREDICATE, SHAPE, OFFERING_CLASS, offeringIri } from './ontology.js';
 import type { ProjectedChildNode, ProjectedFacet } from './store.js';
 
@@ -20,6 +20,8 @@ export interface ProjectCtx {
   sa: Address;
   name: string | null;
   node: Hex;
+  /** AgentNameRegistry — name-record storage views (registeredAt / expiry). */
+  nameRegistry: Address;
   resolver: Address;
   /** AgentNameResolver attribute store (spec 280) — node-keyed a2aEndpoint/mcpEndpoint read via getString. */
   nameResolver: Address;
@@ -44,11 +46,18 @@ const pred = (key: string) => keccak256(toBytes(`atl:${key}`));
 const sha = (b: Hex) => `sha256:${b.slice(2)}`;
 const urn = (s: string) => keccak256(toBytes(s));
 
-/** Naming facet — canonical name + node (always present; it's how we found the agent). */
+/** Naming facet — canonical name + node (always present; it's how we found the agent), plus the
+ *  name-record metadata off AgentNameRegistry storage (registeredAt / expiry — ADR-0040: plain
+ *  on-chain views, so the KB can answer "names by registration time" without a log scan). */
 const naming: FacetProjector = {
   kind: 'naming',
-  async project({ name, node }) {
-    return { kind: 'naming', present: true, shapeIri: SHAPE.CanonicalAgentId, conforms: !!name, data: { [PREDICATE.name]: name, [PREDICATE.node]: node } };
+  async project({ client, nameRegistry, name, node }) {
+    const data: Record<string, unknown> = { [PREDICATE.name]: name, [PREDICATE.node]: node };
+    const registeredAt = (await client.readContract({ address: nameRegistry, abi: NAME_REGISTRY_ABI, functionName: 'registeredAt', args: [node] }).catch(() => 0n)) as bigint;
+    if (registeredAt > 0n) data[PREDICATE.nameRegisteredAt] = Number(registeredAt);
+    const expiry = (await client.readContract({ address: nameRegistry, abi: NAME_REGISTRY_ABI, functionName: 'expiry', args: [node] }).catch(() => 0n)) as bigint;
+    if (expiry > 0n) data[PREDICATE.nameExpiry] = Number(expiry);
+    return { kind: 'naming', present: true, shapeIri: SHAPE.CanonicalAgentId, conforms: !!name, data };
   },
 };
 

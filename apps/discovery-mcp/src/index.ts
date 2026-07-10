@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { searchAgents, getAgent, getOfferings, describeTerm, listShapes, checkCustody, runKbQuery, type Env } from './graphdb.js';
+import { searchAgents, getAgent, getOfferings, listNames, describeTerm, listShapes, checkCustody, runKbQuery, type Env } from './graphdb.js';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
@@ -27,6 +27,13 @@ app.get('/search', async (c) => {
   const q = c.req.query('q') ?? '';
   const limit = Number(c.req.query('limit') ?? 25);
   try { return c.json({ ok: true, query: q, results: await searchAgents(c.env, q, limit) }); }
+  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
+});
+
+// Every named agent, most-recently-registered first (apnam:registeredAt off AgentNameRegistry storage).
+app.get('/names', async (c) => {
+  const limit = Number(c.req.query('limit') ?? 100);
+  try { return c.json({ ok: true, names: await listNames(c.env, limit) }); }
   catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
 });
 
@@ -79,6 +86,11 @@ const TOOLS = [
     inputSchema: { type: 'object', properties: { q: { type: 'string', description: 'free-text query' }, limit: { type: 'number' } } },
   },
   {
+    name: 'list_names',
+    description: 'List every named agent in the discovery knowledge graph, most-recently-registered first. Each: name, smartAgent, registeredAt/expiresAt (unix seconds, from on-chain AgentNameRegistry storage), agent kind, displayName.',
+    inputSchema: { type: 'object', properties: { limit: { type: 'number', description: 'max results (default 100, cap 500)' } } },
+  },
+  {
     name: 'get_agent',
     description: 'Get the full A-box node (all on-chain facets) for one agent by name (e.g. "lbsb.impact") or Smart Agent address (0x…).',
     inputSchema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] },
@@ -119,6 +131,8 @@ app.post('/mcp', async (c) => {
         const { name, arguments: args = {} } = req.params ?? {};
         const out = name === 'search_agents'
           ? { ok: true, results: await searchAgents(c.env, String(args.q ?? ''), Number(args.limit ?? 25)) }
+          : name === 'list_names'
+            ? { ok: true, names: await listNames(c.env, Number(args.limit ?? 100)) }
           : name === 'get_agent'
             ? (await getAgent(c.env, String(args.key ?? ''))) ?? { ok: false, error: 'not found' }
           : name === 'get_offerings'
@@ -141,6 +155,6 @@ app.post('/mcp', async (c) => {
   }
 });
 
-app.get('/', (c) => c.json({ service: 'demo-discovery-mcp', tools: TOOLS.map((t) => t.name), rest: ['/search?q=', '/agent?key=', '/offerings?key=', 'POST /custody {subjectAgents,credential}'], mcp: 'POST /mcp' }));
+app.get('/', (c) => c.json({ service: 'demo-discovery-mcp', tools: TOOLS.map((t) => t.name), rest: ['/search?q=', '/names?limit=', '/agent?key=', '/offerings?key=', 'POST /custody {subjectAgents,credential}'], mcp: 'POST /mcp' }));
 
 export default app;

@@ -11,6 +11,8 @@ export const NAME_REGISTRY_ABI = [
   { type: 'function', name: 'childCount', stateMutability: 'view', inputs: [{ name: 'parentNode', type: 'bytes32' }], outputs: [{ type: 'uint256' }] },
   { type: 'function', name: 'childLabelhashes', stateMutability: 'view', inputs: [{ name: 'parentNode', type: 'bytes32' }], outputs: [{ type: 'bytes32[]' }] },
   { type: 'function', name: 'childNode', stateMutability: 'view', inputs: [{ name: 'parentNode', type: 'bytes32' }, { name: 'lh', type: 'bytes32' }], outputs: [{ type: 'bytes32' }] },
+  { type: 'function', name: 'registeredAt', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ type: 'uint64' }] },
+  { type: 'function', name: 'expiry', stateMutability: 'view', inputs: [{ name: 'node', type: 'bytes32' }], outputs: [{ type: 'uint64' }] },
 ] as const satisfies Abi;
 
 /** AgentNameUniversalResolver — node → SA, SA → canonical name, + profile attribute reads. */

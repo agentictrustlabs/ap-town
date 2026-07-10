@@ -167,7 +167,7 @@ export class DiscoveryIndexer {
   }
 
   private async projectAgent(sa: Address, name: string | null, node: Hex, block: number, attestations: Map<string, AttestationHit[]>): Promise<AgentNode> {
-    const ctx: ProjectCtx = { client: this.client, chainId: this.cfg.chainId, sa, name, node, resolver: this.cfg.resolver, nameResolver: this.cfg.nameResolver, registry: this.cfg.registry, profileResolver: this.cfg.profileResolver, relationship: this.cfg.relationship, discoveryRegistryId: this.cfg.discoveryRegistryId, attestations };
+    const ctx: ProjectCtx = { client: this.client, chainId: this.cfg.chainId, sa, name, node, nameRegistry: this.cfg.nameRegistry, resolver: this.cfg.resolver, nameResolver: this.cfg.nameResolver, registry: this.cfg.registry, profileResolver: this.cfg.profileResolver, relationship: this.cfg.relationship, discoveryRegistryId: this.cfg.discoveryRegistryId, attestations };
     const facets = await Promise.all(PROJECTORS.map((p) => p.project(ctx).catch((e) => ({ kind: p.kind, present: false, shapeIri: null, conforms: false, data: {}, pending: `error: ${String((e as Error)?.message ?? e)}` }))));
     // Agent-kind subclass from on-chain agentKind (node-keyed on the AgentNameResolver). Null = not declared
     // on-chain → typed only ap:Agent (never inferred from the name; ADR-0040).
