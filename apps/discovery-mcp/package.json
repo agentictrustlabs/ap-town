@@ -9,6 +9,12 @@
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
-  "dependencies": { "hono": "^4.6.0" },
-  "devDependencies": { "@cloudflare/workers-types": "^4.20240909.0", "typescript": "^5.5.0", "wrangler": "^3.78.0" }
+  "dependencies": {
+    "hono": "^4.12.29"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240909.0",
+    "typescript": "^5.5.0",
+    "wrangler": "^3.78.0"
+  }
 }

@@ -15,7 +15,7 @@
     "@agenticprimitives/types": "workspace:*",
     "@agenticprimitives/registry-kit": "workspace:*",
     "@agenticprimitives/ontology": "workspace:*",
-    "hono": "^4.6.0",
+    "hono": "^4.12.29",
     "viem": "^2.52.2"
   },
   "devDependencies": {
