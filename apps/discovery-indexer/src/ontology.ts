@@ -53,6 +53,10 @@ export const PREDICATE = {
   skills: `${NS.approf}skills`,
   a2aEndpoint: `${NS.approf}a2aEndpoint`, // spec 280 — the agent's A2A host (its live skills card)
   mcpEndpoint: `${NS.approf}mcpEndpoint`,
+  appContext: `${NS.apdisc}appContext`,
+  orgRole: `${NS.apdisc}orgRole`,
+  serviceUrl: `${NS.apdisc}serviceUrl`,
+  siteUrl: `${NS.apdisc}siteUrl`,
   claimsRoot: `${NS.apreg}claimsRoot`,
   blockNumber: `${NS.apreg}blockNumber`,
   lifecycleStatus: `${NS.apreg}lifecycleStatus`,

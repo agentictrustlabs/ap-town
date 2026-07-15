@@ -117,6 +117,10 @@ export interface AgentResult {
   displayName?: string | null;     // approf:displayName
   description?: string | null;     // approf:description
   skills?: string | null;          // approf:skills — publicly-asserted skill labels (spec 282)
+  appContext?: string | null;      // apdisc:appContext
+  orgRole?: string | null;         // apdisc:orgRole
+  serviceUrl?: string | null;      // apdisc:serviceUrl
+  siteUrl?: string | null;         // apdisc:siteUrl
 }
 
 /** Free-text search over the A-box, enriched with the matchable facets the intent/mandate matcher needs
@@ -127,12 +131,16 @@ export async function searchAgents(env: Env, q: string, limit = 25): Promise<Age
     ? `FILTER( CONTAINS(LCASE(STR(?name)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?dn)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?desc)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?skills)), LCASE("${esc(q)}")) )`
     : '';
   const rows = await sparqlSelect(env, `
-    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?status ?skills WHERE {
+    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?status ?skills ?ctx ?role ?svc ?site WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa .
       OPTIONAL { ?a apnam:name ?name }
       OPTIONAL { ?a approf:displayName ?dn }
       OPTIONAL { ?a approf:description ?desc }
       OPTIONAL { ?a approf:skills ?skills }
+      OPTIONAL { ?a apdisc:appContext ?ctx }
+      OPTIONAL { ?a apdisc:orgRole ?role }
+      OPTIONAL { ?a apdisc:serviceUrl ?svc }
+      OPTIONAL { ?a apdisc:siteUrl ?site }
       OPTIONAL { ?a apreg:lifecycleStatus ?status }
       OPTIONAL { ?a <http://www.w3.org/ns/shacl#conforms> ?conforms }
       ${filter}
@@ -146,6 +154,7 @@ export async function searchAgents(env: Env, q: string, limit = 25): Promise<Age
     if (r.name?.value) facets.push('naming');
     if (r.status?.value) facets.push('registry');
     if (r.dn?.value || r.desc?.value || r.skills?.value) facets.push('profile');
+    if (r.ctx?.value || r.role?.value || r.svc?.value || r.site?.value) facets.push('discovery');
     return {
       agent: r.a!.value,
       smartAgent: r.sa?.value ?? '',
@@ -155,6 +164,10 @@ export async function searchAgents(env: Env, q: string, limit = 25): Promise<Age
       displayName: r.dn?.value ?? null,
       description: r.desc?.value ?? null,
       skills: r.skills?.value ?? null,
+      appContext: r.ctx?.value ?? null,
+      orgRole: r.role?.value ?? null,
+      serviceUrl: r.svc?.value ?? null,
+      siteUrl: r.site?.value ?? null,
       facets,
     };
   });
@@ -171,6 +184,11 @@ export interface NameListing {
   /** Agent-kind subclass local name ('PersonAgent' | 'OrganizationAgent' | 'ServiceAgent') or null. */
   kind: string | null;
   displayName: string | null;
+  description: string | null;
+  appContext: string | null;
+  orgRole: string | null;
+  serviceUrl: string | null;
+  siteUrl: string | null;
 }
 
 /** Every named agent in the KB, most-recently-registered first (apnam:registeredAt is projected off
@@ -178,11 +196,16 @@ export interface NameListing {
  *  projection landed sort last (unbound registeredAt) until the next reindex. */
 export async function listNames(env: Env, limit = 100): Promise<NameListing[]> {
   const rows = await sparqlSelect(env, `
-    SELECT ?sa ?name ?reg ?exp ?kind ?dn WHERE {
+    SELECT ?sa ?name ?reg ?exp ?kind ?dn ?desc ?ctx ?role ?svc ?site WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa ; apnam:name ?name .
       OPTIONAL { ?a apnam:registeredAt ?reg }
       OPTIONAL { ?a apnam:expiry ?exp }
       OPTIONAL { ?a approf:displayName ?dn }
+      OPTIONAL { ?a approf:description ?desc }
+      OPTIONAL { ?a apdisc:appContext ?ctx }
+      OPTIONAL { ?a apdisc:orgRole ?role }
+      OPTIONAL { ?a apdisc:serviceUrl ?svc }
+      OPTIONAL { ?a apdisc:siteUrl ?site }
       OPTIONAL { ?a a ?kind . FILTER(?kind IN (ap:PersonAgent, ap:OrganizationAgent, ap:ServiceAgent)) }
     } ORDER BY DESC(?reg) ?name LIMIT ${Math.min(Math.max(limit, 1), 500)}`);
   return rows.map((r) => ({
@@ -192,6 +215,42 @@ export async function listNames(env: Env, limit = 100): Promise<NameListing[]> {
     expiresAt: r.exp?.value ? Number(r.exp.value) : null,
     kind: r.kind?.value ? (r.kind.value.split('#').pop() ?? null) : null,
     displayName: r.dn?.value ?? null,
+    description: r.desc?.value ?? null,
+    appContext: r.ctx?.value ?? null,
+    orgRole: r.role?.value ?? null,
+    serviceUrl: r.svc?.value ?? null,
+    siteUrl: r.site?.value ?? null,
+  }));
+}
+
+export async function listAgentsByContext(env: Env, appContext: string, orgRole = '', limit = 100): Promise<NameListing[]> {
+  const roleFilter = orgRole ? `?a apdisc:orgRole "${esc(orgRole)}" .` : '';
+  const rows = await sparqlSelect(env, `
+    SELECT ?sa ?name ?reg ?exp ?kind ?dn ?desc ?ctx ?role ?svc ?site WHERE {
+      ?a a ap:Agent ; ap:smartAgent ?sa ; apnam:name ?name ; apdisc:appContext "${esc(appContext)}" .
+      ${roleFilter}
+      OPTIONAL { ?a apnam:registeredAt ?reg }
+      OPTIONAL { ?a apnam:expiry ?exp }
+      OPTIONAL { ?a approf:displayName ?dn }
+      OPTIONAL { ?a approf:description ?desc }
+      OPTIONAL { ?a apdisc:appContext ?ctx }
+      OPTIONAL { ?a apdisc:orgRole ?role }
+      OPTIONAL { ?a apdisc:serviceUrl ?svc }
+      OPTIONAL { ?a apdisc:siteUrl ?site }
+      OPTIONAL { ?a a ?kind . FILTER(?kind IN (ap:PersonAgent, ap:OrganizationAgent, ap:ServiceAgent)) }
+    } ORDER BY ?name LIMIT ${Math.min(Math.max(limit, 1), 500)}`);
+  return rows.map((r) => ({
+    name: r.name!.value,
+    smartAgent: r.sa?.value ?? '',
+    registeredAt: r.reg?.value ? Number(r.reg.value) : null,
+    expiresAt: r.exp?.value ? Number(r.exp.value) : null,
+    kind: r.kind?.value ? (r.kind.value.split('#').pop() ?? null) : null,
+    displayName: r.dn?.value ?? null,
+    description: r.desc?.value ?? null,
+    appContext: r.ctx?.value ?? null,
+    orgRole: r.role?.value ?? null,
+    serviceUrl: r.svc?.value ?? null,
+    siteUrl: r.site?.value ?? null,
   }));
 }
 

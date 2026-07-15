@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { searchAgents, getAgent, getOfferings, listNames, describeTerm, listShapes, checkCustody, runKbQuery, type Env } from './graphdb.js';
+import { searchAgents, getAgent, getOfferings, listNames, listAgentsByContext, describeTerm, listShapes, checkCustody, runKbQuery, type Env } from './graphdb.js';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
@@ -34,6 +34,16 @@ app.get('/search', async (c) => {
 app.get('/names', async (c) => {
   const limit = Number(c.req.query('limit') ?? 100);
   try { return c.json({ ok: true, names: await listNames(c.env, limit) }); }
+  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
+});
+
+// Public app-specific discovery, e.g. /agents?appContext=uupg&orgRole=alliance.
+app.get('/agents', async (c) => {
+  const appContext = c.req.query('appContext') ?? '';
+  const orgRole = c.req.query('orgRole') ?? '';
+  const limit = Number(c.req.query('limit') ?? 100);
+  if (!appContext) return c.json({ ok: false, error: 'appContext required' }, 400);
+  try { return c.json({ ok: true, agents: await listAgentsByContext(c.env, appContext, orgRole, limit) }); }
   catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
 });
 
@@ -87,8 +97,13 @@ const TOOLS = [
   },
   {
     name: 'list_names',
-    description: 'List every named agent in the discovery knowledge graph, most-recently-registered first. Each: name, smartAgent, registeredAt/expiresAt (unix seconds, from on-chain AgentNameRegistry storage), agent kind, displayName.',
+    description: 'List every named agent in the discovery knowledge graph, most-recently-registered first. Each: name, smartAgent, registeredAt/expiresAt, agent kind, displayName, and public discovery metadata.',
     inputSchema: { type: 'object', properties: { limit: { type: 'number', description: 'max results (default 100, cap 500)' } } },
+  },
+  {
+    name: 'list_agents_by_context',
+    description: 'List public named agents by appContext and optional orgRole, e.g. UUPG alliances or organizations.',
+    inputSchema: { type: 'object', properties: { appContext: { type: 'string' }, orgRole: { type: 'string' }, limit: { type: 'number' } }, required: ['appContext'] },
   },
   {
     name: 'get_agent',
@@ -133,6 +148,8 @@ app.post('/mcp', async (c) => {
           ? { ok: true, results: await searchAgents(c.env, String(args.q ?? ''), Number(args.limit ?? 25)) }
           : name === 'list_names'
             ? { ok: true, names: await listNames(c.env, Number(args.limit ?? 100)) }
+          : name === 'list_agents_by_context'
+            ? { ok: true, agents: await listAgentsByContext(c.env, String(args.appContext ?? ''), String(args.orgRole ?? ''), Number(args.limit ?? 100)) }
           : name === 'get_agent'
             ? (await getAgent(c.env, String(args.key ?? ''))) ?? { ok: false, error: 'not found' }
           : name === 'get_offerings'
@@ -155,6 +172,6 @@ app.post('/mcp', async (c) => {
   }
 });
 
-app.get('/', (c) => c.json({ service: 'demo-discovery-mcp', tools: TOOLS.map((t) => t.name), rest: ['/search?q=', '/names?limit=', '/agent?key=', '/offerings?key=', 'POST /custody {subjectAgents,credential}'], mcp: 'POST /mcp' }));
+app.get('/', (c) => c.json({ service: 'demo-discovery-mcp', tools: TOOLS.map((t) => t.name), rest: ['/search?q=', '/names?limit=', '/agents?appContext=&orgRole=', '/agent?key=', '/offerings?key=', 'POST /custody {subjectAgents,credential}'], mcp: 'POST /mcp' }));
 
 export default app;

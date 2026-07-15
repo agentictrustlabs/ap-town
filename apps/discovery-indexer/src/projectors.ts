@@ -74,6 +74,11 @@ const PROFILE_KEYS: Array<[string, string]> = [
 const NAME_ATTR_KEYS: Array<[string, string]> = [
   ['a2aEndpoint', PREDICATE.a2aEndpoint], // the agent's A2A host (its live skills card + offering crawl source)
   ['mcpEndpoint', PREDICATE.mcpEndpoint],
+  ['appContext', PREDICATE.appContext],
+  ['orgRole', PREDICATE.orgRole],
+  ['serviceUrl', PREDICATE.serviceUrl],
+  ['siteUrl', PREDICATE.siteUrl],
+  ['description', PREDICATE.description],
 ];
 /** Profile facet — profile properties (AgentProfileResolver, SA-keyed) + the spec-280 endpoint records
  *  (AgentNameResolver, node-keyed). */
