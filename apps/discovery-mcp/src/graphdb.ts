@@ -141,6 +141,10 @@ export interface AgentResult {
   activeRelationships?: number;    // ap:activeEdgeCount
   attestations?: number;           // ap:attestationCount
   validAttestations?: number;      // ap:validAttestationCount
+  /** Claimed-capability tier — DISTINCT non-self issuers of valid endorsements (self + volume already
+   *  collapsed at projection). The honest corroboration count the trust matcher reads; per-CAPABILITY
+   *  endorsement detail (for the declared-AND-endorsed fit boost) is a drill-down via getTrustFabric. */
+  independentEndorsers?: number;   // ap:independentEndorserCount
   /** Agent-kind subclass local name ('PersonAgent' | 'OrganizationAgent' | 'ServiceAgent') or null.
    *  Projected from the on-chain agentKind (ADR-0046 trichotomy); needed so the matcher's `requireKind`
    *  mandate (G7) can filter instead of merely recording a satisfied string. */
@@ -238,7 +242,7 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
   // every consumer gets identical parsing instead of reimplementing it. The triples remain in the graph
   // for SPARQL consumers that want to query BY capability rather than read an agent row.
   const rows = await sparqlSelect(env, `
-    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?ndesc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?edges ?atts ?vatts ?kind WHERE {
+    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?ndesc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?edges ?atts ?vatts ?iendorse ?kind WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa .
       ${extraClause}
       OPTIONAL { ?a apnam:name ?name }
@@ -259,6 +263,7 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
       OPTIONAL { ?a ap:activeEdgeCount ?edges }
       OPTIONAL { ?a ap:attestationCount ?atts }
       OPTIONAL { ?a ap:validAttestationCount ?vatts }
+      OPTIONAL { ?a ap:independentEndorserCount ?iendorse }
       OPTIONAL { ?a a ?kind . FILTER(?kind IN (ap:PersonAgent, ap:OrganizationAgent, ap:ServiceAgent)) }
       OPTIONAL { ?a <http://www.w3.org/ns/shacl#conforms> ?conforms }
       ${filter}
@@ -305,6 +310,7 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
       activeRelationships: edges,
       attestations: atts,
       validAttestations: num(r.vatts),
+      independentEndorsers: num(r.iendorse),
       kind: r.kind?.value ? (r.kind.value.split('#').pop() ?? null) : null,
       facets,
     };
@@ -331,6 +337,11 @@ export interface AttestationResult {
   credentialType: string;
   issuer: string;
   valid: boolean;
+  /** Claimed-capability tier: for a capability endorsement, the endorsed capability's skillId
+   *  (`= keccak256(capabilityId)`, the SkillDefinitionRegistry anchor). Empty for a bare association. */
+  schemaId: string;
+  /** On-chain epochBucket (attest time / EPOCH_SECONDS) — 0 when unknown. Lets a consumer decay staleness. */
+  issuedAt: number;
 }
 
 const agentSelector = (key: string) => key.startsWith('0x')
@@ -365,18 +376,22 @@ export async function getTrustFabric(env: Env, key: string): Promise<{ relations
     };
   });
   const attRows = await sparqlSelect(env, `
-    SELECT ?uid ?ct ?iss ?valid WHERE {
+    SELECT ?uid ?ct ?iss ?valid ?schema ?issued WHERE {
       ?a a ap:Agent . ${sel}
       ?a ap:hasAttestation ?at .
       ?at apatt:uid ?uid ; apatt:credentialType ?ct .
       OPTIONAL { ?at ap:attestationIssuer ?iss }
       OPTIONAL { ?at ap:attestationValid ?valid }
+      OPTIONAL { ?at ap:attestationSchemaId ?schema }
+      OPTIONAL { ?at ap:attestationIssuedAt ?issued }
     } ORDER BY ?uid`);
   const attestations = attRows.map((r) => ({
     uid: r.uid!.value,
     credentialType: r.ct!.value,
     issuer: r.iss?.value ?? '',
     valid: r.valid?.value === 'true',
+    schemaId: r.schema?.value ?? '',
+    issuedAt: r.issued?.value ? Number(r.issued.value) : 0,
   }));
   return { relationships, attestations };
 }

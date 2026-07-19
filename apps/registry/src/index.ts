@@ -8,6 +8,36 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { keccak_256 } from '@noble/hashes/sha3.js';
+import { utf8ToBytes } from '@noble/hashes/utils.js';
+
+// ── The claimed-capability tier (capability-architecture.md §2 `aps:claimsCapability`) ──────────────────
+// An endorsement rides the ATTESTATION rail (relayable, issuer signs only) with:
+//   subject = endorsed SA · issuer = endorser SA · schemaId = keccak256(capabilityId) = the SkillDefinition
+//   skillId · credentialType = CAPABILITY_ENDORSEMENT · credentialHash = commitment to the private vault VC.
+// The matcher reads only the PUBLIC commitment; the statement/proficiency stays a private VC. keccak here
+// lets the matcher match its declared capability id STRINGS against endorsement skillIds without a lookup.
+const keccakHex = (s: string): string => {
+  const d = keccak_256(utf8ToBytes(s));
+  let h = '0x';
+  for (const b of d) h += b.toString(16).padStart(2, '0');
+  return h;
+};
+/** capabilityId (`adv:X`) → on-chain skillId. Same convention as SkillDefinitionRegistry, the advisory
+ *  catalog's `skillIdOf`, and capability-claims `computeSkillId` — one identity all four agree on. */
+const skillIdOf = (capabilityId: string): string => keccakHex(capabilityId);
+/** attestations `CREDENTIAL_TYPE.CapabilityEndorsement` — the discriminator that marks an attestation as a
+ *  capability endorsement (vs a bare association/validation). Kept in lockstep with the SDK constant. */
+const CAPABILITY_ENDORSEMENT_TYPE = keccakHex('CapabilityEndorsementCredential');
+/** AttestationRegistry.EPOCH_SECONDS — the issued-at bucket size, to convert `issuedAt` back to seconds. */
+const EPOCH_SECONDS = 3600;
+/** Staleness decay horizon: an endorsement decays linearly to 0 over 2× this (~1yr). Revocation is the hard
+ *  lever (an invalid endorsement counts 0 outright); decay handles the soft "old and never renewed" case. */
+const ENDORSEMENT_HALFLIFE_S = 180 * 86400;
+/** Relationship types that make an endorser NON-INDEPENDENT of the subject (one governs/employs/acts-for the
+ *  other). The only on-chain, generic signal of same-org there is; where absent, the endorsement weight is
+ *  capped instead (see fitScore) — undetected collusion must never be able to dominate. */
+const GOVERNANCE_TYPES = new Set(['HAS_GOVERNANCE_OVER', 'HAS_MEMBER', 'OPERATES_ON_BEHALF_OF']);
 
 interface Env {
   MCP_URL?: string;
@@ -19,6 +49,9 @@ interface Env {
 
 /** A crawled per-skill offering (spec 286), as surfaced by the MCP get_offerings tool. */
 interface OfferingLite { skillId: string; effect?: string | null; family?: string | null; status?: string | null }
+/** One capability endorsement of a subject (from GET /trust): who endorsed, for which capability (skillId),
+ *  whether still valid (non-revoked), and when (epochBucket). */
+interface EndorsementLite { issuer: string; skillId: string; valid: boolean; issuedAt: number }
 interface AgentResult {
   agent: string; name: string | null; smartAgent: string; facets: string[]; shaclConforms: boolean;
   registryStatus?: string | null; displayName?: string | null; skills?: string | null;
@@ -40,6 +73,15 @@ interface AgentResult {
   languages?: string | null; regions?: string | null; focusAreas?: string | null;
   /** G1 — the trust fabric, now actually projected into the graph. */
   activeRelationships?: number; attestations?: number; validAttestations?: number;
+  /** Claimed-capability tier — DISTINCT non-self issuers of valid endorsements (self + volume already
+   *  collapsed at projection). Absolute corroboration; feeds trustScore. */
+  independentEndorsers?: number;
+  /** Per-capability endorsement detail (from GET /trust), attached only for capability-driven queries.
+   *  Each is one endorsement of THIS subject; the abuse rules are applied over them per capability. */
+  endorsements?: EndorsementLite[];
+  /** Counterparties on the subject's ACTIVE governance/membership edges — an endorser in this set is
+   *  non-independent (same-org) and is discounted. Sourced from the same /trust read. */
+  governanceCounterparties?: string[];
   /** 'PersonAgent' | 'OrganizationAgent' | 'ServiceAgent' | null — the projected on-chain agentKind. */
   kind?: string | null;
   /** Crawled offerings (spec 286), attached on demand when skill-level matching is requested. */
@@ -113,6 +155,61 @@ async function enrichOfferings(env: Env, agents: AgentResult[]): Promise<void> {
       a.offerings = r.offerings.map((o: OfferingLite) => ({ skillId: o.skillId, effect: o.effect ?? null, family: o.family ?? null, status: o.status ?? null }));
     }
   }));
+}
+
+// Claimed-capability tier — attach each candidate's endorsements + governance edges (MCP GET /trust) so the
+// matcher can rank "declared AND independently endorsed for capability X" above a bare declaration. Fetched
+// ONLY for capability-driven queries (the only time it can matter), bounded + logged like enrichOfferings
+// (no silent truncation, ADR-0013). A per-agent failure leaves `endorsements` undefined → the candidate
+// keeps exactly its bare declaration, never a phantom boost.
+const ENDORSEMENT_FETCH_CAP = 40;
+async function enrichEndorsements(env: Env, agents: AgentResult[]): Promise<void> {
+  const slice = agents.slice(0, ENDORSEMENT_FETCH_CAP);
+  if (agents.length > ENDORSEMENT_FETCH_CAP) {
+    console.warn(`[discovery-a2a] endorsement enrichment capped at ${ENDORSEMENT_FETCH_CAP}/${agents.length} candidates — narrow the query for full per-capability endorsement ranking`);
+  }
+  await Promise.all(slice.map(async (a) => {
+    const r = await mcpGet(env, `/trust?key=${encodeURIComponent(a.smartAgent || a.name || '')}`).catch(() => null);
+    if (!r?.ok) return;
+    const atts: any[] = Array.isArray(r.attestations) ? r.attestations : [];
+    a.endorsements = atts
+      .filter((x) => String(x.credentialType ?? '').toLowerCase() === CAPABILITY_ENDORSEMENT_TYPE && x.schemaId)
+      .map((x) => ({ issuer: String(x.issuer ?? '').toLowerCase(), skillId: String(x.schemaId).toLowerCase(), valid: x.valid === true, issuedAt: Number(x.issuedAt ?? 0) }));
+    const rels: any[] = Array.isArray(r.relationships) ? r.relationships : [];
+    a.governanceCounterparties = [...new Set(rels
+      .filter((e) => e.status === 'active' && GOVERNANCE_TYPES.has(String(e.relationshipType)))
+      .map((e) => String(e.counterparty ?? '').toLowerCase()))];
+  }));
+}
+
+/**
+ * The claimed-capability tier applied to ONE capability, with every abuse rule the docs named:
+ *   - self-endorsement (issuer == subject)  → dropped                                         [enforced]
+ *   - volume gaming (N from one issuer)      → deduped by issuer (max weight kept)             [enforced]
+ *   - staleness                              → revoked ⇒ 0; else linearly decayed by age       [enforced]
+ *   - same-org collusion                     → issuer on a public governance/membership edge to the subject
+ *       is heavily discounted                                                          [enforced-when-detectable]
+ * Same-org is only detectable where a PUBLIC governance/membership edge exists (person↔org edges are private
+ * by default, ADR-0025), so where it is not, the caller CAPS the total endorsement contribution instead —
+ * undetected collusion can never dominate. Returns the summed INDEPENDENT weight (distinct decayed,
+ * discounted voices) for `capabilityId` — 0 when nobody independent, on-topic and current has endorsed it.
+ */
+function independentEndorsementWeight(a: AgentResult, capabilityId: string, nowS: number): number {
+  const want = skillIdOf(capabilityId);
+  const self = (a.smartAgent || '').toLowerCase();
+  const gov = new Set(a.governanceCounterparties ?? []);
+  const byIssuer = new Map<string, number>();
+  for (const e of a.endorsements ?? []) {
+    if (!e.valid || e.skillId !== want || e.issuer === self) continue; // revoked / off-topic / self
+    let w = 1;
+    if (gov.has(e.issuer)) w *= 0.15;                                   // same-org (public edge) discount
+    if (e.issuedAt > 0) {                                               // staleness decay
+      const ageS = Math.max(0, nowS - e.issuedAt * EPOCH_SECONDS);
+      w *= Math.max(0, 1 - ageS / (2 * ENDORSEMENT_HALFLIFE_S));
+    }
+    byIssuer.set(e.issuer, Math.max(byIssuer.get(e.issuer) ?? 0, w));   // volume dedupe by issuer
+  }
+  return [...byIssuer.values()].reduce((sum, w) => sum + w, 0);
 }
 
 app.get('/health', (c) => c.json({ ok: true, service: 'demo-discovery-a2a' }));
@@ -237,6 +334,7 @@ function fitScore(a: AgentResult, intent: Intent, cites: string[]): FitBreakdown
   const need = (intent.need ?? '').trim().toLowerCase();
   const declared = (a.capabilityIds ?? []).map((x) => x.toLowerCase());
   const needed = (intent.capabilityIds ?? []).map((x) => x.toLowerCase());
+  const endorseNowS = Math.floor(Date.now() / 1000);
   let s = 0;
 
   // ── capabilityMatch — exact, and the dominant term ──
@@ -256,6 +354,24 @@ function fitScore(a: AgentResult, intent: Intent, cites: string[]): FitBreakdown
     s += 0.15;
     for (const id of specHits) cites.push(`declared ${id}, specializes a requested capability`);
   }
+
+  // ── claimed-capability tier — declared AND independently endorsed beats a bare declaration ──
+  // Applies ONLY to a capability the candidate itself declared exactly (`exact`): you cannot be boosted for
+  // a capability you never claimed, which kills "peers endorse me for things I don't do". `independent-
+  // EndorsementWeight` has already dropped self-endorsements, deduped volume by issuer, decayed staleness
+  // and discounted same-org. The boost is capped HARD (≤0.10 total, ≤0.05 per capability): endorsement
+  // corroborates a declared capability's fit — it can never manufacture fit for an undeclared one, nor
+  // outweigh the declaration itself. A gameable boost is worse than none — the explicit bar. The cap is
+  // also what contains undetectable same-org collusion: even fully colluded, endorsement moves rank by ≤0.10.
+  let endorseBoost = 0;
+  for (const id of exact) {
+    const w = independentEndorsementWeight(a, id, endorseNowS);
+    if (w > 0) {
+      endorseBoost += Math.min(0.05, 0.05 * w);
+      cites.push(`declared ${id} AND independently endorsed (${w.toFixed(2)} independent voice(s))`);
+    }
+  }
+  s += Math.min(0.10, endorseBoost);
 
   // ── region / language / focus — facets, all soft (see §4.3 and `mandatePass`) ──
   const regions = codeSet(a.regions);
@@ -342,9 +458,15 @@ function trustScore(a: AgentResult, cites: string[]): number {
   // Bilateral, on-chain-confirmed relationship edges (both parties consented; ACTIVE only).
   const edges = a.activeRelationships ?? 0;
   if (edges > 0) { s += Math.min(0.15, 0.05 * edges); cites.push(`${edges} active relationship edge(s) in the public trust fabric`); }
-  // Third-party attestations where this agent is the SUBJECT. Only VALID (non-revoked) ones count.
-  const atts = a.validAttestations ?? 0;
-  if (atts > 0) { s += Math.min(0.15, 0.05 * atts); cites.push(`${atts} valid attestation(s) from third parties`); }
+  // Claimed-capability tier — third-party endorsement corroboration. Uses DISTINCT NON-SELF issuers
+  // (`independentEndorsers`), not raw attestation volume: self-endorsement counts for nothing and N
+  // endorsements from one issuer count once — both already collapsed at projection (capability-architecture
+  // §2, facet-registries anti-pattern 5). Capped below registration and saturating fast: an endorsement is
+  // cheap to create, so it corroborates, never authorises (ADR-0040), and same-org collusion the graph
+  // cannot see is contained by this cap. This replaces the pre-endorsement `validAttestations` term, which
+  // counted self-endorsements and volume — exactly the gameable signal the claimed tier exists to fix.
+  const endorsers = a.independentEndorsers ?? 0;
+  if (endorsers > 0) { s += Math.min(0.10, 0.05 * endorsers); cites.push(`${endorsers} independent endorser(s) (self-endorsement & volume excluded)`); }
   return Math.min(s, 1);
 }
 
@@ -390,6 +512,12 @@ function matchCandidate(a: AgentResult, intent: Intent, satisfiedMandates: strin
     // Structured discovery facets + trust fabric, surfaced so a caller can see WHY a candidate ranked.
     kind: a.kind ?? null, languages: a.languages ?? null, regions: a.regions ?? null, focusAreas: a.focusAreas ?? null,
     activeRelationships: a.activeRelationships ?? 0, attestations: a.attestations ?? 0, validAttestations: a.validAttestations ?? 0,
+    // Claimed-capability tier — the honest independent-endorser count, plus the capability ids this
+    // candidate was BOTH declared AND independently endorsed for (the ones the fit boost fired on).
+    independentEndorsers: a.independentEndorsers ?? 0,
+    endorsedCapabilityIds: (a.capabilityIds ?? [])
+      .filter((id) => (intent.capabilityIds ?? []).map((x) => x.toLowerCase()).includes(id.toLowerCase())
+        && independentEndorsementWeight(a, id, Math.floor(Date.now() / 1000)) > 0),
   };
 }
 
@@ -420,6 +548,11 @@ app.post('/discover', async (c) => {
   // labels. Bounded + logged (no silent truncation, ADR-0013); skip entirely when no skill signal is given.
   const needsOfferings = !!(mandates?.requireSkillId || mandates?.requireSkill || intent.skills?.length);
   if (needsOfferings) await enrichOfferings(c.env, candidates);
+
+  // Claimed-capability tier — attach per-capability endorsements when the query is capability-driven, so
+  // "declared AND independently endorsed for X" can outrank a bare declaration. Bounded + logged.
+  const needsEndorsements = !!(intent.capabilityIds?.length || mandates?.requireCapabilityId);
+  if (needsEndorsements) await enrichEndorsements(c.env, candidates);
 
   let dropped = 0;
   const ranked = candidates

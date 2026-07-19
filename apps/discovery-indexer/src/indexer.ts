@@ -84,7 +84,10 @@ export class DiscoveryIndexer {
     this.logsClient = createPublicClient({ transport: http(cfg.logsRpcUrl || cfg.rpcUrl) });
   }
 
-  /** One bounded, chunked Attested-log sweep → subject(lowercased) → attestations (+ validity). */
+  /** One bounded, chunked Attested-log sweep → subject(lowercased) → attestations (+ validity, schemaId,
+   *  issued-at). The Attested EVENT lacks schemaId, so the full row is read per uid (getAttestation),
+   *  which also yields validity (`revocationEpochBucket == 0`) and the endorsed capability's `schemaId`
+   *  — the claimed-capability tier's shared identity. */
   private async prefetchAttestations(latest: bigint): Promise<Map<string, AttestationHit[]>> {
     const map = new Map<string, AttestationHit[]>();
     const from = latest > BigInt(this.cfg.attestLookback) ? latest - BigInt(this.cfg.attestLookback) : 0n;
@@ -101,13 +104,19 @@ export class DiscoveryIndexer {
         }
       } catch { /* RPC range/limit — skip the chunk, keep going (best-effort recent window) */ }
     }
-    const validity = new Map<string, boolean>();
+    // One getAttestation per uid → validity + schemaId (endorsed capability) + issued-at (epochBucket).
+    const row = new Map<string, { valid: boolean; schemaId: Hex; issuedAt: number }>();
     await pool([...uids], this.cfg.concurrency, async (uid) => {
-      validity.set(uid, (await this.client.readContract({ address: this.cfg.attestationRegistry, abi: ATTESTATION_ABI, functionName: 'isValid', args: [uid as Hex] }).catch(() => false)) as boolean);
+      const a = (await this.client.readContract({ address: this.cfg.attestationRegistry, abi: ATTESTATION_ABI, functionName: 'getAttestation', args: [uid as Hex] }).catch(() => null)) as { schemaId: Hex; epochBucket: bigint; revocationEpochBucket: bigint } | null;
+      if (a) row.set(uid, { valid: a.revocationEpochBucket === 0n, schemaId: a.schemaId, issuedAt: Number(a.epochBucket) });
     });
     for (const r of raw) {
       const key = r.subject.toLowerCase();
-      (map.get(key) ?? map.set(key, []).get(key)!).push({ uid: r.uid, credentialType: r.credentialType, issuer: r.issuer, valid: validity.get(r.uid) ?? false });
+      const rd = row.get(r.uid);
+      (map.get(key) ?? map.set(key, []).get(key)!).push({
+        uid: r.uid, credentialType: r.credentialType, issuer: r.issuer,
+        valid: rd?.valid ?? false, schemaId: rd?.schemaId, issuedAt: rd?.issuedAt,
+      });
     }
     return map;
   }

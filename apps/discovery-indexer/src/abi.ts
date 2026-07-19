@@ -87,6 +87,21 @@ export const ATTESTATION_ABI = [
     inputs: [{ name: 'subject', type: 'address', indexed: true }, { name: 'issuer', type: 'address', indexed: true }, { name: 'credentialType', type: 'bytes32', indexed: true }, { name: 'uid', type: 'bytes32', indexed: false }],
   },
   { type: 'function', name: 'isValid', stateMutability: 'view', inputs: [{ name: 'uid', type: 'bytes32' }], outputs: [{ type: 'bool' }] },
+  // The Attested EVENT carries only subject/issuer/credentialType/uid — NOT schemaId. A capability
+  // endorsement's endorsed-capability id lives in `Attestation.schemaId`, and its issued-at in
+  // `epochBucket`, so the sweep reads the full row per uid (it already reads one view per uid for
+  // validity). `revocationEpochBucket == 0` IS the validity check, so this one read replaces isValid too.
+  {
+    type: 'function', name: 'getAttestation', stateMutability: 'view', inputs: [{ name: 'uid', type: 'bytes32' }],
+    outputs: [{
+      type: 'tuple', components: [
+        { name: 'uid', type: 'bytes32' }, { name: 'schemaId', type: 'bytes32' }, { name: 'credentialType', type: 'bytes32' },
+        { name: 'credentialHash', type: 'bytes32' }, { name: 'refUID', type: 'bytes32' }, { name: 'bilateralConsentRef', type: 'bytes32' },
+        { name: 'offchainCredentialStatusList', type: 'bytes32' }, { name: 'epochBucket', type: 'uint64' }, { name: 'revocationEpochBucket', type: 'uint64' },
+        { name: 'subject', type: 'address' }, { name: 'party2', type: 'address' }, { name: 'issuer', type: 'address' },
+      ],
+    }],
+  },
 ] as const satisfies Abi;
 
 /** AgentNameRegistry — the "this SA now has a name" signal for the event-driven watcher. `agent` is the SA

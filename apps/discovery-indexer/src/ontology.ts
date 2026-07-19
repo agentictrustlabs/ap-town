@@ -132,6 +132,20 @@ export const PREDICATE = {
   attestationValid: `${NS.ap}attestationValid`,
   attestationCount: `${NS.ap}attestationCount`,
   validAttestationCount: `${NS.ap}validAttestationCount`,
+  // Claimed-capability tier (capability-architecture.md §2 `aps:claimsCapability`). A capability ENDORSEMENT
+  // carries the endorsed capability's `skillId` (= keccak256(capabilityId), the same id SkillDefinitionRegistry
+  // anchors) in the on-chain `Attestation.schemaId` field, so an endorsement is discoverable AS an endorsement
+  // of a SPECIFIC capability — the shared identity the whole tier turns on. `issuedAt` is the on-chain
+  // `epochBucket` (attest time / EPOCH_SECONDS), emitted so the matcher can decay a stale endorsement.
+  // tbox/attestation.ttl models uid/credentialType/credentialHash/refUID/bilateralConsentRef but NOT
+  // `schemaId`/`epochBucket` — so, exactly as the G1 code did for issuer/validity, these are kept as
+  // ap:-local terms rather than silently minting undeclared apatt: ones, and are flagged for T-box promotion.
+  attestationSchemaId: `${NS.ap}attestationSchemaId`,
+  attestationIssuedAt: `${NS.ap}attestationIssuedAt`,
+  // AGENT-level: distinct NON-SELF issuers of valid endorsements — the anti-self / anti-volume count the
+  // trust matcher reads. Computed at projection so "issuer == subject" and "N from one issuer" are already
+  // collapsed before any consumer sees it (a gameable count must never reach the graph).
+  independentEndorserCount: `${NS.ap}independentEndorserCount`,
   // spec 286 — Offering node terms (crawled from the public A2A card; host-asserted + provenance).
   hasOffering: `${NS.apdisc}hasOffering`,       // agent → offering
   ofAgent: `${NS.apdisc}ofAgent`,               // offering → agent

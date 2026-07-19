@@ -14,8 +14,11 @@ import type { ProjectedChildNode, ProjectedFacet } from './store.js';
 
 void RESOLVER_ABI;
 
-/** A pre-scanned attestation (from the one Attested-log sweep), grouped by subject. */
-export interface AttestationHit { uid: Hex; credentialType: Hex; issuer: Address; valid: boolean }
+/** A pre-scanned attestation (from the one Attested-log sweep), grouped by subject. `schemaId` carries the
+ *  endorsed capability's skillId for a capability endorsement (`= keccak256(capabilityId)`); `issuedAt` is
+ *  the on-chain epochBucket (attest time / EPOCH_SECONDS). Both are undefined only when the per-uid row
+ *  read failed. */
+export interface AttestationHit { uid: Hex; credentialType: Hex; issuer: Address; valid: boolean; schemaId?: Hex; issuedAt?: number }
 
 export interface ProjectCtx {
   client: PublicClient;
@@ -267,24 +270,38 @@ const attestation: FacetProjector = {
   kind: 'attestation',
   async project({ attestations, attestationsScanned, sa, chainId }): Promise<ProjectedFacet> {
     const hits = attestations.get(sa.toLowerCase()) ?? [];
+    const subject = sa.toLowerCase();
+    // Anti-self + anti-volume, enforced HERE so a gameable number never reaches the graph
+    // (facet-registries anti-pattern 5 / capability-architecture §2): a self-endorsement (issuer == subject)
+    // counts for nothing, and N valid endorsements from one issuer collapse to ONE independent signal. The
+    // aggregate the trust matcher reads is DISTINCT non-self issuers, not raw attestation volume.
+    const valid = hits.filter((h) => h.valid);
+    const independentIssuers = new Set(valid.filter((h) => h.issuer.toLowerCase() !== subject).map((h) => h.issuer.toLowerCase()));
     const data = {
       [PREDICATE.attestationCount]: hits.length,
-      [PREDICATE.validAttestationCount]: hits.filter((h) => h.valid).length,
+      [PREDICATE.validAttestationCount]: valid.length,
+      [PREDICATE.independentEndorserCount]: independentIssuers.size,
     };
     if (!attestationsScanned) {
       return { kind: 'attestation', present: false, shapeIri: null, conforms: true, data: {}, pending: 'attestation log sweep not run for this projection — existing attestations preserved' };
     }
-    const children: ProjectedChildNode[] = hits.map((h) => ({
-      iri: attestationIri(chainId, h.uid),
-      type: ATTESTATION_CLASS,
-      linkPredicate: PREDICATE.hasAttestation,
-      data: {
+    // Per-attestation child nodes carry the RAW facts (issuer, valid, and for an endorsement the endorsed
+    // capability's schemaId + issued-at). Per-capability independence and staleness decay are applied by the
+    // matcher over these facts — the graph states what is true; policy lives in one place downstream.
+    const children: ProjectedChildNode[] = hits.map((h) => {
+      const cdata: Record<string, string | number> = {
         [PREDICATE.attestationUid]: h.uid,
         [PREDICATE.credentialType]: h.credentialType,
         [PREDICATE.attestationIssuer]: h.issuer.toLowerCase(),
         [PREDICATE.attestationValid]: String(h.valid),
-      },
-    }));
+      };
+      // A capability endorsement pins the endorsed capability by skillId (its schemaId is non-zero); a bare
+      // association leaves schemaId zero. Emit it only when present so a non-endorsement carries no phantom
+      // capability triple.
+      if (h.schemaId && h.schemaId !== ZERO32) cdata[PREDICATE.attestationSchemaId] = h.schemaId.toLowerCase();
+      if (typeof h.issuedAt === 'number' && h.issuedAt > 0) cdata[PREDICATE.attestationIssuedAt] = h.issuedAt;
+      return { iri: attestationIri(chainId, h.uid), type: ATTESTATION_CLASS, linkPredicate: PREDICATE.hasAttestation, data: cdata };
+    });
     return { kind: 'attestation', present: hits.length > 0, shapeIri: null, conforms: true, data, children, childLink: PREDICATE.hasAttestation };
   },
 };
