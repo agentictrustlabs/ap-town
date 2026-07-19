@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { searchAgents, getAgent, getOfferings, listNames, listAgentsByContext, describeTerm, listShapes, checkCustody, runKbQuery, type Env } from './graphdb.js';
+import { searchAgents, searchAgentsPage, lookupAgents, getAgent, getOfferings, getTrustFabric, listNames, listAgentsByContext, describeTerm, listShapes, checkCustody, runKbQuery, SEARCH_MAX_LIMIT, type Env } from './graphdb.js';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
@@ -23,11 +23,34 @@ app.post('/kb/query', async (c) => {
 });
 
 // ── REST tool seam (what the A2A agent calls) ──
+// `/search` is DISCOVERY over an unknown field. It is paged, and the page now REPORTS itself: `truncated`
+// says more agents matched than were returned, and `maxLimit` states the ceiling. Previously the ceiling
+// was a silent 200 — `limit=500` and `limit=1000` both returned 200 rows with nothing saying so, so a
+// caller enriching a fixed candidate set from one bulk read silently dropped every agent outside the
+// window and could not tell "not in the window" from "no facets published". For that use case, use
+// `/lookup`, which is exact.
 app.get('/search', async (c) => {
   const q = c.req.query('q') ?? '';
   const limit = Number(c.req.query('limit') ?? 25);
-  try { return c.json({ ok: true, query: q, results: await searchAgents(c.env, q, limit) }); }
-  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
+  try {
+    const page = await searchAgentsPage(c.env, q, limit);
+    return c.json({ ok: true, query: q, maxLimit: SEARCH_MAX_LIMIT, ...page });
+  } catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
+});
+
+// EXACT bounded read of a known candidate set — the ENRICHMENT path. The caller passes the Smart Agents it
+// already holds; the filter runs server-side, so the answer is complete by construction and its cost scales
+// with the candidate count rather than with the size of the knowledge base. Never truncated: a missing SA
+// means "not in the KB", and a transport failure is a non-200, so a caller can always tell the two apart.
+// POST (not GET) because a roster of SAs overflows a query string.
+app.post('/lookup', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { agents?: unknown };
+  const agents = Array.isArray(body.agents) ? body.agents.filter((x): x is string => typeof x === 'string') : [];
+  if (!agents.length) return c.json({ ok: false, error: 'agents[] required' }, 400);
+  try {
+    const results = await lookupAgents(c.env, agents);
+    return c.json({ ok: true, requested: agents.length, returned: results.length, truncated: false, results });
+  } catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
 });
 
 // Every named agent, most-recently-registered first (apnam:registeredAt off AgentNameRegistry storage).
@@ -63,6 +86,16 @@ app.get('/offerings', async (c) => {
   catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
 });
 
+// G1 — the trust fabric of one agent: its AgentRelationship edges and its AttestationRegistry rows. Both
+// were projected into a shape the SPARQL store silently dropped, so this data did not exist in the graph
+// until the projector/store fix; every query below returned zero rows for every agent on the substrate.
+app.get('/trust', async (c) => {
+  const key = c.req.query('key') ?? '';
+  if (!key) return c.json({ ok: false, error: 'key (name or 0x SA) required' }, 400);
+  try { return c.json({ ok: true, key, ...(await getTrustFabric(c.env, key)) }); }
+  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
+});
+
 // Custody check (ADR-0040): which of subjectAgents[] does the viewer's credential (EOA / passkey digest)
 // custody? Exact-match over the opaque membership graph — yes/no per agent, no enumeration. credential is
 // the on-chain identifier the viewer presents for THEMSELVES; we never store the request.
@@ -92,7 +125,7 @@ app.get('/ontology/shapes', async (c) => {
 const TOOLS = [
   {
     name: 'search_agents',
-    description: 'Search the discovery knowledge graph for agents by free text (name / profile). Returns each agent with its on-chain facet coverage + SHACL conformance.',
+    description: 'Search the discovery knowledge graph for agents by free text (name / profile / skills / focus areas). Returns each agent with its structured discovery facets (languages, regions, focusAreas), its trust fabric counts (active relationship edges, valid attestations), on-chain facet coverage and SHACL conformance. PAGED: the response carries `truncated` and `maxLimit` — if you already know which agents you want, call lookup_agents instead, which is exact and never truncated.',
     inputSchema: { type: 'object', properties: { q: { type: 'string', description: 'free-text query' }, limit: { type: 'number' } } },
   },
   {
@@ -113,6 +146,16 @@ const TOOLS = [
   {
     name: 'get_offerings',
     description: 'Get the crawled per-skill Offerings (spec 286) one agent advertises — from its public A2A card, host-asserted with provenance (source endpoint / observedAt / card digest). Each offering: skillId, effect, exposure, family, status, required capabilities. Use to rank which agent best services an intent/mandate. Key = name or 0x SA.',
+    inputSchema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] },
+  },
+  {
+    name: 'lookup_agents',
+    description: 'EXACT bounded read of the discovery facets for a KNOWN set of Smart Agent addresses. Use this — not search_agents — whenever you already hold the candidate list (routing, consult seating, roster enrichment): it filters server-side by your SA list, is never truncated, and does not scale with the size of the knowledge base. An agent missing from the result is genuinely absent from the KB.',
+    inputSchema: { type: 'object', properties: { agents: { type: 'array', items: { type: 'string' }, description: '0x Smart Agent addresses' } }, required: ['agents'] },
+  },
+  {
+    name: 'get_trust_fabric',
+    description: "Get one agent's PUBLIC trust fabric from the knowledge graph: its bilateral AgentRelationship edges (type, counterparty, direction, lifecycle status) and its EAS-aligned attestations (uid, credentialType, issuer, validity). This is who vouches for, governs, partners with or operates on behalf of whom — the evidence behind a trust score, distinct from the agent's own self-asserted profile. Key = name or 0x SA.",
     inputSchema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] },
   },
   {
@@ -145,7 +188,7 @@ app.post('/mcp', async (c) => {
       case 'tools/call': {
         const { name, arguments: args = {} } = req.params ?? {};
         const out = name === 'search_agents'
-          ? { ok: true, results: await searchAgents(c.env, String(args.q ?? ''), Number(args.limit ?? 25)) }
+          ? { ok: true, maxLimit: SEARCH_MAX_LIMIT, ...(await searchAgentsPage(c.env, String(args.q ?? ''), Number(args.limit ?? 25))) }
           : name === 'list_names'
             ? { ok: true, names: await listNames(c.env, Number(args.limit ?? 100)) }
           : name === 'list_agents_by_context'
@@ -154,6 +197,10 @@ app.post('/mcp', async (c) => {
             ? (await getAgent(c.env, String(args.key ?? ''))) ?? { ok: false, error: 'not found' }
           : name === 'get_offerings'
             ? { ok: true, offerings: await getOfferings(c.env, String(args.key ?? '')) }
+          : name === 'lookup_agents'
+            ? { ok: true, results: await lookupAgents(c.env, Array.isArray(args.agents) ? args.agents.map(String) : []) }
+          : name === 'get_trust_fabric'
+            ? { ok: true, ...(await getTrustFabric(c.env, String(args.key ?? ''))) }
           : name === 'describe_term'
             ? (await describeTerm(c.env, String(args.term ?? ''))) ?? { ok: false, error: 'term not found' }
           : name === 'list_shapes'
@@ -172,6 +219,6 @@ app.post('/mcp', async (c) => {
   }
 });
 
-app.get('/', (c) => c.json({ service: 'demo-discovery-mcp', tools: TOOLS.map((t) => t.name), rest: ['/search?q=', '/names?limit=', '/agents?appContext=&orgRole=', '/agent?key=', '/offerings?key=', 'POST /custody {subjectAgents,credential}'], mcp: 'POST /mcp' }));
+app.get('/', (c) => c.json({ service: 'demo-discovery-mcp', tools: TOOLS.map((t) => t.name), rest: ['/search?q=', '/names?limit=', '/agents?appContext=&orgRole=', '/agent?key=', '/offerings?key=', '/trust?key=', 'POST /lookup {agents:[0x…]}', 'POST /custody {subjectAgents,credential}'], mcp: 'POST /mcp' }));
 
 export default app;
