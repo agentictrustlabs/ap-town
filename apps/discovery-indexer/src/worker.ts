@@ -34,6 +34,9 @@ interface Env {
   INDEXER_STATE?: KV;
   /** Max blocks to scan per cron tick (catch-up bound). */
   WATCH_MAX_BLOCKS?: string;
+  /** Bounded Attested-log sweep for the targeted /project path (G1). 0 disables the sweep. */
+  ATTEST_LOOKBACK?: string;
+  ATTEST_CHUNK?: string;
 }
 
 const AGENTS_MAX = 20;
@@ -66,15 +69,26 @@ function cfg(env: Env): IndexerConfig {
     rpcUrl: env.RPC_URL ?? 'https://sepolia.base.org',
     logsRpcUrl: env.LOGS_RPC_URL ?? 'https://sepolia.base.org',
     chainId: Number(env.CHAIN_ID ?? 84532),
-    nameRegistry: (env.NAME_REGISTRY ?? '0x2632E06d0df65568200778389e13118e02EbfBB3') as Address,
-    resolver: (env.RESOLVER ?? '0x5fE5076c9FF0c4A48F3F2e3e2F83F926696FD357') as Address,
-    nameResolver: (env.NAME_RESOLVER ?? '0x3bed1594E1aB813C55d288edaBeA8c4aa9B651eF') as Address,
-    registry: (env.REGISTRY ?? '0x43e9f271c0e0bc8505a1f99c4f0cb6d63165efb3') as Address,
-    profileResolver: (env.PROFILE_RESOLVER ?? '0x6A6669E4fCf19e0A002e7dA236F0C120e215B0A2') as Address,
-    relationship: (env.RELATIONSHIP ?? '0x1010D6aC73458fa8A72a2DEDc138224E84CF4157') as Address,
-    attestationRegistry: (env.ATTESTATION_REGISTRY ?? '0x3286E8a9DA830820f32d427c719728d9aBCD13DD') as Address,
+    // Defaults track packages/contracts/deployments-base-sepolia.json. They were left on a PREVIOUS
+    // deployment; the wrangler vars overrode most of them, but NAME_RESOLVER had no var at all, so the
+    // node-keyed attribute reads silently hit a near-empty contract.
+    nameRegistry: (env.NAME_REGISTRY ?? '0x6629Cca40B008C0984a1Ca266Ca10A344420cac3') as Address,
+    resolver: (env.RESOLVER ?? '0xB890060dE1B3Fd2C78e1f0859da3883743eAD452') as Address,
+    nameResolver: (env.NAME_RESOLVER ?? '0xA15B0703716DC8634B74F97723618f74Af3AaA73') as Address,
+    registry: (env.REGISTRY ?? '0xB18534CA9c679968132ca2a43E454f5fA341030D') as Address,
+    profileResolver: (env.PROFILE_RESOLVER ?? '0xfcd37F8dca26ead889922b22C169c21370bd352a') as Address,
+    relationship: (env.RELATIONSHIP ?? '0x0AF2455e3f76594E81d9042aD5FE22A5A35dc57f') as Address,
+    attestationRegistry: (env.ATTESTATION_REGISTRY ?? '0xD57f2e52395b9C99fAE8Abf823578faFe038f5B7') as Address,
     discoveryRegistryId: env.DISCOVERY_REGISTRY_ID ?? 'urn:ap:registry:impact-agents',
-    tlds: [], maxDepth: 0, concurrency: 2, attestLookback: 0, attestChunk: 9, custodyWindow: 9,
+    tlds: [], maxDepth: 0, concurrency: 2,
+    // G1 — the targeted /project path now runs the same bounded Attested-log sweep as the batch indexer, so
+    // an agent's attestations reach the KB within seconds of being written instead of waiting for the next
+    // full `pnpm index`. The sweep uses LOGS_RPC_URL (public Base, 2000-block eth_getLogs range), so the
+    // default 50k-block lookback is ~25 requests. Set ATTEST_LOOKBACK=0 to disable it — the projector then
+    // reports UNKNOWN and the store PRESERVES the batch-indexed attestations rather than wiping them.
+    attestLookback: Number(env.ATTEST_LOOKBACK ?? 50000),
+    attestChunk: Number(env.ATTEST_CHUNK ?? 1999),
+    custodyWindow: 9,
   };
 }
 

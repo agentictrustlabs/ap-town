@@ -71,7 +71,12 @@ export const RELATIONSHIP_ABI = [
     }],
   },
 ] as const satisfies Abi;
-export const EDGE_STATUS = ['proposed', 'confirmed', 'active', 'revoked'] as const;
+// AgentRelationship.EdgeStatus is FIVE-valued with a zero sentinel: NONE=0, PROPOSED=1, CONFIRMED=2,
+// ACTIVE=3, REVOKED=4. This array omitted NONE, so every status decoded one step too far — an ACTIVE edge
+// (3) read as 'revoked'. The bug was unobservable until the G1 fix, because no edge triple had ever
+// reached the graph for anything to read it wrong. Mirrors the contract enum exactly; REGISTRY_STATUS
+// above likewise mirrors AgentRegistryBase.EntryStatus, which DOES start at None.
+export const EDGE_STATUS = ['none', 'proposed', 'confirmed', 'active', 'revoked'] as const;
 
 /** AttestationRegistry — EAS-aligned (spec 242). Per-subject attestations are found via the Attested
  *  event (subject indexed); validity via isValid(uid). Subsumes skill / geo / agreement CLAIMS (each a

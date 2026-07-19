@@ -32,8 +32,14 @@ export interface ProjectedFacet {
   conforms: boolean;
   /** Ontology-IRI-keyed facet data (the triples). */
   data: Record<string, unknown>;
-  /** First-class child nodes this facet projects (own subjects, linked from the agent). Optional. */
+  /** First-class child nodes this facet projects (own subjects, linked from the agent). Optional.
+   *  DEFINED (even empty) = the read SUCCEEDED → the store refreshes/clears this agent's children under
+   *  `childLink`. UNDEFINED = the read is UNKNOWN → the store preserves what is already indexed (ADR-0013:
+   *  a failed read is not "zero"). */
   children?: ProjectedChildNode[];
+  /** The agent → child link predicate this facet OWNS. Required alongside `children` so an empty array can
+   *  still clear stale children (with no child to read the predicate off). */
+  childLink?: string;
   /** If not yet implemented: the on-chain source this projector will read. */
   pending?: string;
 }
@@ -66,10 +72,17 @@ const FACET_PRED: Record<string, string> = {
   naming: `${NS.ap}hasNamingRecord`,
   profile: `${NS.ap}hasProfile`,
   registry: `${NS.ap}hasRegistryEntry`,
-  relationship: `${NS.ap}hasRelationship`,
-  attestation: `${NS.ap}hasAttestation`,
+  relationship: PREDICATE.hasRelationship,
+  attestation: PREDICATE.hasAttestation,
   offerings: `${NS.ap}hasOfferings`,
 };
+
+/** Every agent → child-node link predicate the projectors can emit (spec 286 offerings + the G1 trust
+ *  fabric). These drive BOTH the idempotent child cleanup and the "don't orphan children on an agent
+ *  re-projection" filter, so a new child-bearing facet is one entry here — not a second special case. */
+const CHILD_LINK_PREDICATES = [PREDICATE.hasOffering, PREDICATE.hasRelationship, PREDICATE.hasAttestation] as const;
+
+const SH_CONFORMS = 'http://www.w3.org/ns/shacl#conforms';
 
 function nodeToJsonLd(n: AgentNode) {
   const present = n.facets.filter((f) => f.present);
@@ -162,7 +175,7 @@ export class SparqlGraphStore implements AboxStore {
       // FAILED (children undefined → facet present:false) keeps its existing children (a failed read is
       // "unknown", not "zero" — ADR-0013). The discovery indexer Worker cannot fetch a same-account host
       // (Cloudflare loopback), so its crawl always fails and MUST preserve the CLI-populated offerings.
-      const freshChildSubjects: string[] = [];
+      const freshChildSubjects = new Map<string, Set<string>>(); // linkPredicate → subjects refreshed
       const triples = this.pending.flatMap((n) => {
         const s = `<${agentIri(n.chainId, n.smartAgent)}>`;
         subjects.push(s);
@@ -171,16 +184,36 @@ export class SparqlGraphStore implements AboxStore {
         if (n.name) t.push(`${s} <${PREDICATE.name}> ${lit(n.name)} .`);
         t.push(`${s} <${PREDICATE.node}> ${lit(n.node)} .`);
         t.push(`${s} <${PREDICATE.blockNumber}> ${n.provenance.block} .`);
+        // G7 — `sh:conforms` existed ONLY in the dev JSON-LD store, so the discovery matcher's
+        // `requireShaclConforms` mandate filtered on a value the MCP defaulted to `true` for every agent:
+        // it always passed. Emit the same aggregate the JSON-LD store computes (every PRESENT facet
+        // conforms) so the mandate actually discriminates. A mandate that silently passes is worse than
+        // an absent one.
+        t.push(`${s} <${SH_CONFORMS}> ${n.facets.filter((f) => f.present).every((f) => f.conforms)} .`);
         for (const f of n.facets.filter((x) => x.present)) {
+          // G1 ROOT CAUSE: this gate used to be `typeof v === 'string' || typeof v === 'number'`, so the
+          // relationship/attestation facets — whose values were ARRAYS — emitted nothing at all. Arrays are
+          // now multivalued: one triple per element, exactly as the child-node writer below already did.
+          // (The `startsWith('http')` half of the gate is correct — it means "the key is an IRI, not a
+          // CURIE" — and the projectors now emit full IRIs, which is the other half of the fix.)
           for (const [k, v] of Object.entries(f.data)) {
-            if (k.startsWith('http') && (typeof v === 'string' || typeof v === 'number')) {
-              t.push(`${s} <${k}> ${typeof v === 'number' ? v : lit(v)} .`);
+            if (!k.startsWith('http')) continue;
+            for (const item of Array.isArray(v) ? v : [v]) {
+              if (typeof item === 'number') t.push(`${s} <${k}> ${item} .`);
+              else if (typeof item === 'string') t.push(`${s} <${k}> ${lit(item)} .`);
             }
           }
-          // First-class child nodes (spec 286 Offerings): own subject, typed, linked from the agent. A defined
-          // `children` array (even empty) marks a SUCCESSFUL crawl → this agent's children get refreshed below.
+          // First-class child nodes: own subject, typed, linked from the agent — spec 286 Offerings and the
+          // G1 trust fabric (aptrust:TrustGraphEdge / apatt:Attestation). A defined `children` array (even
+          // empty) marks a SUCCESSFUL read → this agent's children under THAT link predicate get refreshed
+          // below; `undefined` means "unknown" and preserves whatever is already indexed (ADR-0013).
           if (Array.isArray(f.children)) {
-            freshChildSubjects.push(s);
+            for (const c of f.children) {
+              (freshChildSubjects.get(c.linkPredicate) ?? freshChildSubjects.set(c.linkPredicate, new Set()).get(c.linkPredicate)!).add(s);
+            }
+            // An empty children array still marks its facet's link predicate fresh, so removed children drop
+            // out. The projector declares which predicate it owns via `childLink`.
+            if (f.childLink) (freshChildSubjects.get(f.childLink) ?? freshChildSubjects.set(f.childLink, new Set()).get(f.childLink)!).add(s);
             for (const c of f.children) {
               const ci = `<${c.iri}>`;
               t.push(`${s} <${c.linkPredicate}> ${ci} .`, `${ci} a <${c.type}> .`, `${ci} <${PREDICATE.ofAgent}> ${s} .`);
@@ -195,17 +228,22 @@ export class SparqlGraphStore implements AboxStore {
         }
         return t;
       });
-      const OFFERING_LINK = `<${PREDICATE.hasOffering}>`; // the only child-link predicate today
-      const fresh = [...new Set(freshChildSubjects)];
-      // (a) For agents with a fresh successful crawl: clear their OLD offering child nodes (reachable via the
-      //     link, while it still exists) + the links themselves; both are re-inserted below.
-      if (fresh.length) {
-        stmts.push(`DELETE { ?c ?p ?o } WHERE { VALUES ?a { ${fresh.join(' ')} } ?a ${OFFERING_LINK} ?c . ?c ?p ?o }`);
-        stmts.push(`DELETE { ?a ${OFFERING_LINK} ?c } WHERE { VALUES ?a { ${fresh.join(' ')} } ?a ${OFFERING_LINK} ?c }`);
+      // (a) Per child-link predicate, for the agents whose read of THAT facet succeeded: clear their OLD
+      //     child nodes (reachable via the link, while it still exists) + the links; both re-inserted below.
+      //     A relationship edge is shared by both endpoints, so the child node is only truly orphaned when
+      //     no agent still links it — `?c ?p ?o` cleanup here is scoped to the re-projected agents' links,
+      //     and the counterpart re-link is re-INSERTed by that agent's own projection.
+      for (const link of CHILD_LINK_PREDICATES) {
+        const fresh = [...(freshChildSubjects.get(link) ?? [])];
+        if (!fresh.length) continue;
+        const lp = `<${link}>`;
+        stmts.push(`DELETE { ?c ?p ?o } WHERE { VALUES ?a { ${fresh.join(' ')} } ?a ${lp} ?c . ?c ?p ?o }`);
+        stmts.push(`DELETE { ?a ${lp} ?c } WHERE { VALUES ?a { ${fresh.join(' ')} } ?a ${lp} ?c }`);
       }
-      // (b) Idempotent reset of each agent's OWN triples — but PRESERVE the offering links so a failed/absent
-      //     crawl never orphans previously-indexed offerings (fresh agents already cleared theirs in (a)).
-      stmts.push(`DELETE { ?s ?p ?o } WHERE { VALUES ?s { ${subjects.join(' ')} } ?s ?p ?o FILTER(?p != ${OFFERING_LINK}) }`);
+      // (b) Idempotent reset of each agent's OWN triples — but PRESERVE every child link so a failed/absent
+      //     read never orphans previously-indexed children (fresh ones were already cleared in (a)).
+      const keepLinks = CHILD_LINK_PREDICATES.map((p) => `?p != <${p}>`).join(' && ');
+      stmts.push(`DELETE { ?s ?p ?o } WHERE { VALUES ?s { ${subjects.join(' ')} } ?s ?p ?o FILTER(${keepLinks}) }`);
       stmts.push(`INSERT DATA {\n${triples.join('\n')}\n}`);
     }
     if (this.custody !== null) {

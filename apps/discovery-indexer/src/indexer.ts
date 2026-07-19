@@ -166,8 +166,8 @@ export class DiscoveryIndexer {
     return pool([...lhs], this.cfg.concurrency, (lh) => this.client.readContract({ address: this.cfg.nameRegistry, abi: NAME_REGISTRY_ABI, functionName: 'childNode', args: [parentNode, lh] }) as Promise<Hex>);
   }
 
-  private async projectAgent(sa: Address, name: string | null, node: Hex, block: number, attestations: Map<string, AttestationHit[]>): Promise<AgentNode> {
-    const ctx: ProjectCtx = { client: this.client, chainId: this.cfg.chainId, sa, name, node, nameRegistry: this.cfg.nameRegistry, resolver: this.cfg.resolver, nameResolver: this.cfg.nameResolver, registry: this.cfg.registry, profileResolver: this.cfg.profileResolver, relationship: this.cfg.relationship, discoveryRegistryId: this.cfg.discoveryRegistryId, attestations };
+  private async projectAgent(sa: Address, name: string | null, node: Hex, block: number, attestations: Map<string, AttestationHit[]>, attestationsScanned: boolean): Promise<AgentNode> {
+    const ctx: ProjectCtx = { client: this.client, chainId: this.cfg.chainId, sa, name, node, nameRegistry: this.cfg.nameRegistry, resolver: this.cfg.resolver, nameResolver: this.cfg.nameResolver, registry: this.cfg.registry, profileResolver: this.cfg.profileResolver, relationship: this.cfg.relationship, discoveryRegistryId: this.cfg.discoveryRegistryId, attestations, attestationsScanned };
     const facets = await Promise.all(PROJECTORS.map((p) => p.project(ctx).catch((e) => ({ kind: p.kind, present: false, shapeIri: null, conforms: false, data: {}, pending: `error: ${String((e as Error)?.message ?? e)}` }))));
     // Agent-kind subclass from on-chain agentKind (node-keyed on the AgentNameResolver). Null = not declared
     // on-chain → typed only ap:Agent (never inferred from the name; ADR-0040).
@@ -181,7 +181,7 @@ export class DiscoveryIndexer {
       const sa = (await this.client.readContract({ address: this.cfg.resolver, abi: RESOLVER_ABI, functionName: 'resolveName', args: [node] }).catch(() => ZERO_ADDR)) as Address;
       if (sa && sa !== ZERO_ADDR && !acc.has(sa.toLowerCase())) {
         const name = ((await this.client.readContract({ address: this.cfg.resolver, abi: RESOLVER_ABI, functionName: 'reverseResolveString', args: [sa] }).catch(() => '')) as string) || null;
-        acc.set(sa.toLowerCase(), await this.projectAgent(sa, name, node, block, attestations));
+        acc.set(sa.toLowerCase(), await this.projectAgent(sa, name, node, block, attestations, true));
       }
       if (depth < this.cfg.maxDepth) await this.collect(node, depth + 1, block, attestations, acc);
     });
@@ -257,11 +257,18 @@ export class DiscoveryIndexer {
   async projectAgents(sas: Address[]): Promise<{ projected: string[]; custodyTokens: number }> {
     const latest = await this.client.getBlockNumber();
     const block = Number(latest);
+    // G1 — the targeted path used to hand the attestation projector `new Map()` unconditionally, so
+    // /project could never surface an attestation. Run the same bounded Attested-log sweep the batch run
+    // uses when a lookback is configured; when it is 0 (sweep disabled) pass `scanned:false` so the
+    // projector reports UNKNOWN and the store preserves whatever the batch run already indexed, instead
+    // of deleting it on every targeted re-projection (ADR-0013).
+    const scanned = this.cfg.attestLookback > 0;
+    const attestations = scanned ? await this.prefetchAttestations(latest) : new Map<string, AttestationHit[]>();
     const nodes: AgentNode[] = [];
     for (const sa of sas) {
       const name = ((await this.client.readContract({ address: this.cfg.resolver, abi: RESOLVER_ABI, functionName: 'reverseResolveString', args: [sa] }).catch(() => '')) as string) || null;
       if (!name) continue; // not a named agent → not in the public discovery KB
-      nodes.push(await this.projectAgent(sa, name, namehash(name), block, new Map()));
+      nodes.push(await this.projectAgent(sa, name, namehash(name), block, attestations, scanned));
     }
     if (!nodes.length) return { projected: [], custodyTokens: 0 };
     const tokens = await this.scanCustody(latest, nodes.map((n) => n.smartAgent as Address));

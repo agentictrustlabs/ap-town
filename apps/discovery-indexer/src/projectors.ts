@@ -6,7 +6,10 @@
 
 import { keccak256, toBytes, type Address, type Hex, type PublicClient } from 'viem';
 import { RESOLVER_ABI, NAME_REGISTRY_ABI, REGISTRY_ABI, REGISTRY_STATUS, PROFILE_RESOLVER_ABI, NAME_ATTR_RESOLVER_ABI, RELATIONSHIP_ABI, EDGE_STATUS } from './abi.js';
-import { PREDICATE, SHAPE, OFFERING_CLASS, offeringIri } from './ontology.js';
+import {
+  PREDICATE, SHAPE, OFFERING_CLASS, offeringIri,
+  RELATIONSHIP_EDGE_CLASS, ATTESTATION_CLASS, relationshipEdgeIri, attestationIri, relationshipTypeLabel,
+} from './ontology.js';
 import type { ProjectedChildNode, ProjectedFacet } from './store.js';
 
 void RESOLVER_ABI;
@@ -31,6 +34,9 @@ export interface ProjectCtx {
   discoveryRegistryId: string;
   /** subject(lowercased) → attestations, pre-scanned once by the indexer. */
   attestations: Map<string, AttestationHit[]>;
+  /** Whether the Attested-log sweep actually RAN for this projection. An empty `attestations` map with
+   *  `attestationsScanned: false` means "unknown", not "none" (ADR-0013) — see the attestation projector. */
+  attestationsScanned: boolean;
 }
 
 export interface FacetProjector {
@@ -62,11 +68,26 @@ const naming: FacetProjector = {
 };
 
 // Profile properties keyed by SA on the AgentProfileResolver (getStringProperty).
+//
+// G6 — `authOrigin` is NOT here. `packages/agent-profile/src/constants.ts` defines
+// AUTH_ORIGIN = keccak256("authOrigin") with NO `atl:` prefix (spec 217), while `pred()` below prefixes
+// everything, so this projector read keccak256("atl:authOrigin") — a key nothing has ever written. Spec 229
+// states authOrigin is deliberately NOT written on-chain, so the predicate is also unregistered in
+// OntologyTermRegistry and the write path reverts PredicateNotActive(). BOTH sides are therefore empty on
+// chain: there is no data under either key to preserve, and the facet-registries doc's two options are
+// "drop it from PROFILE_KEYS, or align the constant and register the term — but pick one". Dropping the
+// read is the side with no on-chain data and no governance cost, so that is what is done here. The SDK
+// constant is left untouched (it is spec-217 correct and not owned by this app).
 const PROFILE_KEYS: Array<[string, string]> = [
-  ['authOrigin', PREDICATE.authOrigin],
   ['displayName', PREDICATE.displayName],
   ['description', PREDICATE.description],
   ['skills', PREDICATE.skills], // spec 282 — publicly-asserted skill labels (atl:skills)
+  // G2/G3/G4 — owner-asserted discovery-ranking facets on the atl:skills rail. Registered on-chain by
+  // packages/contracts/script/AddDiscoveryPredicates.s.sol; unregistered predicates revert on write, so
+  // these three are read paths for data that CAN now be written (the G5 rule, applied forward).
+  ['languages', PREDICATE.languages],   // BCP-47, comma-separated, lowercase
+  ['regions', PREDICATE.regions],       // ISO 3166 / GeoFeatureRegistry codes, comma-separated, uppercase
+  ['focusAreas', PREDICATE.focusAreas], // subject-domain labels, comma-separated
 ];
 // Endpoint records keyed by NODE on the AgentNameResolver attribute store (getString) — spec 280. These
 // live on a DIFFERENT resolver than the profile properties (the connect ceremony writes them via
@@ -120,34 +141,103 @@ const registry: FacetProjector = {
   },
 };
 
-/** Relationship facet — trust-fabric edges where the SA is subject or object (per-SA views, no log scan). */
+/** Relationship facet — trust-fabric edges where the SA is subject or object (per-SA views, no log scan).
+ *
+ *  G1: this used to emit `{ 'ap:edges': [ … ], 'ap:edgeCount': n }` — a CURIE key with an array value —
+ *  which failed the SPARQL store's IRI-key + scalar-value gate on BOTH counts, so the entire trust fabric
+ *  was silently dropped and only ever appeared in the dev JSON-LD store. Edges are now first-class CHILD
+ *  NODES (the same `ProjectedChildNode` mechanism the offerings facet uses): each edge is its own subject,
+ *  typed `aptrust:TrustGraphEdge` (an EXISTING term from tbox/trust.ttl), carrying the counterparty,
+ *  relationship type, direction and status as separate triples — so a SPARQL consumer can filter on
+ *  "?a ap:hasRelationship [ ap:relationshipType 'RECOMMENDS' ; ap:edgeStatus 'active' ]" rather than
+ *  parsing a stringified blob. The agent itself additionally carries flat, denormalized scalars
+ *  (edgeCount / activeEdgeCount) and one `ap:relatedAgent` triple per counterparty, for cheap ranking. */
 const relationship: FacetProjector = {
   kind: 'relationship',
-  async project({ client, relationship: rel, sa }) {
+  async project({ client, relationship: rel, sa, chainId }): Promise<ProjectedFacet> {
     const edgeStatus = (s: number) => EDGE_STATUS[s] ?? 'unknown';
-    const collect = async (fn: 'getEdgesBySubject' | 'getEdgesByObject', dir: string) => {
-      const ids = (await client.readContract({ address: rel, abi: RELATIONSHIP_ABI, functionName: fn, args: [sa] }).catch(() => [] as readonly Hex[])) as readonly Hex[];
+    // NO .catch here (ADR-0013): an RPC failure must surface as UNKNOWN (the indexer wraps project() and
+    // returns present:false with no `children`, so the store PRESERVES existing edges) — never as "this
+    // agent has zero relationships", which would wipe the real trust fabric on a transient read error.
+    const collect = async (fn: 'getEdgesBySubject' | 'getEdgesByObject', dir: 'subject' | 'object') => {
+      const ids = (await client.readContract({ address: rel, abi: RELATIONSHIP_ABI, functionName: fn, args: [sa] })) as readonly Hex[];
       return Promise.all([...ids].map(async (id) => {
-        const e = (await client.readContract({ address: rel, abi: RELATIONSHIP_ABI, functionName: 'getEdge', args: [id] })) as { subject: Address; object_: Address; relationshipType: Hex; status: number };
-        return { [PREDICATE.edgeDirection]: dir, [PREDICATE.relationshipType]: e.relationshipType, [PREDICATE.relObject]: dir === 'subject' ? e.object_ : e.subject, [PREDICATE.edgeStatus]: edgeStatus(e.status) };
+        const e = (await client.readContract({ address: rel, abi: RELATIONSHIP_ABI, functionName: 'getEdge', args: [id] })) as { edgeId: Hex; subject: Address; object_: Address; relationshipType: Hex; status: number };
+        return {
+          id, dir, subject: e.subject.toLowerCase(), object: e.object_.toLowerCase(),
+          counterparty: (dir === 'subject' ? e.object_ : e.subject).toLowerCase(),
+          type: e.relationshipType, status: edgeStatus(e.status),
+        };
       }));
     };
     const edges = [...(await collect('getEdgesBySubject', 'subject')), ...(await collect('getEdgesByObject', 'object'))];
-    return { kind: 'relationship', present: edges.length > 0, shapeIri: SHAPE.RegistryEntry, conforms: true, data: { 'ap:edges': edges, 'ap:edgeCount': edges.length } };
+    // The edge node's IRI comes from the deterministic ON-CHAIN edgeId, so both endpoints converge on one
+    // subject — its triples are therefore stated ABSOLUTELY (subject/object), never relative to the side
+    // being projected. The endpoint-relative view (counterparty + direction) lives on the agent.
+    const children: ProjectedChildNode[] = edges.map((e) => {
+      const data: Record<string, string | number | string[]> = {
+        [PREDICATE.edgeId]: e.id,
+        [PREDICATE.relationshipTypeId]: e.type,
+        [PREDICATE.edgeSubject]: e.subject,
+        [PREDICATE.edgeObject]: e.object,
+        [PREDICATE.edgeStatus]: e.status,
+      };
+      // Only the six governor-registered well-known types get a human label; an unknown type projects its
+      // raw bytes32 id alone rather than a guess (ADR-0013).
+      const label = relationshipTypeLabel(e.type);
+      if (label) data[PREDICATE.relationshipType] = label;
+      return { iri: relationshipEdgeIri(chainId, e.id), type: RELATIONSHIP_EDGE_CLASS, linkPredicate: PREDICATE.hasRelationship, data };
+    });
+    const active = edges.filter((e) => e.status === 'active');
+    return {
+      kind: 'relationship', present: edges.length > 0, shapeIri: null, conforms: true,
+      data: {
+        [PREDICATE.edgeCount]: edges.length,
+        [PREDICATE.activeEdgeCount]: active.length,
+        // Multivalued — the store now emits one triple per element (the other half of the G1 fix).
+        // ACTIVE edges only: a PROPOSED or REVOKED edge is not a trust relationship.
+        [PREDICATE.relObject]: [...new Set(active.map((e) => e.counterparty))],
+        [PREDICATE.edgeDirection]: [...new Set(active.map((e) => e.dir))],
+      },
+      children, childLink: PREDICATE.hasRelationship,
+    };
   },
 };
 
 /** Attestation facet — EAS-aligned attestations where the SA is subject (incl. skill/geo/agreement claims
- *  as credentialType). Read from the indexer's single pre-scanned Attested-log sweep. */
+ *  as credentialType). Read from the indexer's single pre-scanned Attested-log sweep.
+ *
+ *  G1: same defect as the relationship facet (CURIE keys + array values → silently dropped). Each
+ *  attestation is now its own `apatt:Attestation` node (an EXISTING tbox/attestation.ttl class) carrying
+ *  `apatt:uid` / `apatt:credentialType` — also existing T-box terms.
+ *
+ *  `attestationsScanned` is the ADR-0013 guard: the targeted `/project` path used to hand the projector an
+ *  EMPTY map, which is "not scanned", not "no attestations". Emitting `children: []` for that would have
+ *  DELETED every real attestation from the graph on every re-projection. When the sweep did not run we
+ *  return NO `children` key at all, and the store preserves what is indexed. */
 const attestation: FacetProjector = {
   kind: 'attestation',
-  async project({ attestations, sa }) {
+  async project({ attestations, attestationsScanned, sa, chainId }): Promise<ProjectedFacet> {
     const hits = attestations.get(sa.toLowerCase()) ?? [];
     const data = {
-      'ap:attestationCount': hits.length,
-      'ap:attestations': hits.map((h) => ({ [PREDICATE.attestationUid]: h.uid, [PREDICATE.credentialType]: h.credentialType, [PREDICATE.attestationIssuer]: h.issuer, [PREDICATE.attestationValid]: h.valid })),
+      [PREDICATE.attestationCount]: hits.length,
+      [PREDICATE.validAttestationCount]: hits.filter((h) => h.valid).length,
     };
-    return { kind: 'attestation', present: hits.length > 0, shapeIri: null, conforms: true, data };
+    if (!attestationsScanned) {
+      return { kind: 'attestation', present: false, shapeIri: null, conforms: true, data: {}, pending: 'attestation log sweep not run for this projection — existing attestations preserved' };
+    }
+    const children: ProjectedChildNode[] = hits.map((h) => ({
+      iri: attestationIri(chainId, h.uid),
+      type: ATTESTATION_CLASS,
+      linkPredicate: PREDICATE.hasAttestation,
+      data: {
+        [PREDICATE.attestationUid]: h.uid,
+        [PREDICATE.credentialType]: h.credentialType,
+        [PREDICATE.attestationIssuer]: h.issuer.toLowerCase(),
+        [PREDICATE.attestationValid]: String(h.valid),
+      },
+    }));
+    return { kind: 'attestation', present: hits.length > 0, shapeIri: null, conforms: true, data, children, childLink: PREDICATE.hasAttestation };
   },
 };
 
@@ -221,7 +311,11 @@ const offerings: FacetProjector = {
         return { iri: offeringIri(chainId, sa, o.skillId!), type: OFFERING_CLASS, linkPredicate: PREDICATE.hasOffering, data };
       });
       // Successful crawl → present:true (even with zero offerings, so the store refreshes/clears stale ones).
-      return { kind: 'offerings', present: true, shapeIri: SHAPE.Offering, conforms: true, data: { [PREDICATE.sourceEndpoint]: a2a, [PREDICATE.observedAt]: observedAt }, children };
+      // `childLink` declares the predicate this facet OWNS, so a successful crawl that returns ZERO
+      // offerings still clears the agent's stale ones (with no child in the array, the store has nothing
+      // else to read the predicate off). Preserves the pre-existing behaviour now that the store tracks
+      // freshness per link predicate rather than assuming hasOffering is the only one.
+      return { kind: 'offerings', present: true, shapeIri: SHAPE.Offering, conforms: true, data: { [PREDICATE.sourceEndpoint]: a2a, [PREDICATE.observedAt]: observedAt }, children, childLink: PREDICATE.hasOffering };
     } catch (e) {
       return unknown(`crawl ${url} → ${String((e as Error)?.message ?? e)}`);
     }
