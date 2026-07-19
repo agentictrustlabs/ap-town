@@ -56,7 +56,18 @@ export const PREDICATE = {
   nameRegisteredAt: `${NS.apnam}registeredAt`, // unix seconds the node was registered
   nameExpiry: `${NS.apnam}expiry`,             // unix seconds the registration expires (0 = none)
   displayName: `${NS.approf}displayName`,
+  // G8 — the SA-KEYED (tier 3) self-description read off AgentProfileResolver. Keyed by the agent, so it
+  // survives a rename and exists for nameless agents (ADR-0010/0020). tbox/profile.ttl declares it and
+  // says in as many words: "NOT the node-keyed name-record description (apnam:description)".
   description: `${NS.approf}description`,
+  // G8 — the NODE-KEYED (tier 2) name-record description read off AgentNameAttributeResolver. SAME on-chain
+  // predicate key (keccak256("atl:description"), one OntologyTermRegistry term, already registered by
+  // Deploy.s.sol) but a DIFFERENT SUBJECT and a different author: the NAME's owner writes it, it describes
+  // the registration, and it TRANSFERS WITH THE NAME. Emitting it under `approf:description` — which the
+  // MCP and the a2a matcher both read as "the agent's own bio" — made tier 2 clobber tier 3 by loop order
+  // (agent-metadata-tiers.md: same field name ≠ same field). Its own IRI, so both survive and consumers
+  // choose. Declared in tbox/identity.ttl; NO governor tx is involved (the on-chain term is unchanged).
+  nameDescription: `${NS.apnam}description`,
   authOrigin: `${NS.approf}authOrigin`,
   skills: `${NS.approf}skills`,
   a2aEndpoint: `${NS.approf}a2aEndpoint`, // spec 280 — the agent's A2A host (its live skills card)
@@ -126,6 +137,12 @@ export const PREDICATE = {
   ofAgent: `${NS.apdisc}ofAgent`,               // offering → agent
   skillId: `${NS.apdisc}skillId`,
   offeringName: `${NS.apdisc}offeringName`,
+  // G8, third writer — the crawled card's per-skill blurb. It is NOT the agent-node collision (an Offering
+  // is its own subject, so nothing was overwritten), but it was emitted under `approf:description`, whose
+  // declared `rdfs:domain` is `approf:AgentProfile` — so every Offering asserted itself to be an agent
+  // profile, and an "agent self-description" query that dropped the subject filter would have swept up
+  // host-asserted skill blurbs. Its own apdisc: term, alongside `offeringName`, which it mirrors exactly.
+  offeringDescription: `${NS.apdisc}offeringDescription`,
   offeringVersion: `${NS.apdisc}offeringVersion`,
   effect: `${NS.apdisc}effect`,
   exposure: `${NS.apdisc}exposure`,

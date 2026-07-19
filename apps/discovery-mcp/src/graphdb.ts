@@ -117,7 +117,14 @@ export interface AgentResult {
   /** Enriched matchable facets (spec 281; present when in the A-box, else null/empty). */
   registryStatus?: string | null; // apreg:lifecycleStatus ('active' | 'suspended' | 'revoked' | null)
   displayName?: string | null;     // approf:displayName
+  /** The agent's OWN self-description — SA-keyed on AgentProfileResolver, survives a rename, exists for
+   *  nameless agents. This is the one to show as "about this agent" and the one the matcher ranks on. */
   description?: string | null;     // approf:description
+  /** facet-registries G8 — the NAME RECORD's description: node-keyed, written by the NAME's owner, and it
+   *  transfers with the name. A DIFFERENT fact from `description`, which is why it now has a different
+   *  IRI. Until the fix both were projected under `approf:description` and this one, being read second,
+   *  silently replaced the agent's own. Surfaced separately rather than dropped: consumers choose. */
+  nameDescription?: string | null; // apnam:description
   skills?: string | null;          // approf:skills — publicly-asserted skill labels (spec 282)
   /** Spec 331 — the canonical capability ids parsed out of `skills`. `keccak256` of each is a
    *  `SkillDefinitionRegistry` skillId. Always an array; `[]` means "declared nothing structured". */
@@ -231,12 +238,15 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
   // every consumer gets identical parsing instead of reimplementing it. The triples remain in the graph
   // for SPARQL consumers that want to query BY capability rather than read an agent row.
   const rows = await sparqlSelect(env, `
-    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?edges ?atts ?vatts ?kind WHERE {
+    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?ndesc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?edges ?atts ?vatts ?kind WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa .
       ${extraClause}
       OPTIONAL { ?a apnam:name ?name }
       OPTIONAL { ?a approf:displayName ?dn }
       OPTIONAL { ?a approf:description ?desc }
+      # G8 — the node-keyed name-record description, its own IRI now. Bound alongside (never instead of)
+      # the SA-keyed one, so the tier that used to be clobbered is visible rather than merely un-lost.
+      OPTIONAL { ?a apnam:description ?ndesc }
       OPTIONAL { ?a approf:skills ?skills }
       OPTIONAL { ?a approf:languages ?langs }
       OPTIONAL { ?a approf:regions ?regions }
@@ -264,7 +274,9 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
     if (r.name?.value) facets.push('naming');
     if (r.status?.value) facets.push('registry');
     if (r.dn?.value || r.desc?.value || r.skills?.value || r.langs?.value || r.regions?.value || r.focus?.value) facets.push('profile');
-    if (r.ctx?.value || r.role?.value || r.svc?.value || r.site?.value) facets.push('discovery');
+    // `ndesc` is deliberately a DISCOVERY (name-record) signal, not a profile one: counting it as
+    // 'profile' would re-assert exactly the tier confusion G8 is about.
+    if (r.ctx?.value || r.role?.value || r.svc?.value || r.site?.value || r.ndesc?.value) facets.push('discovery');
     // G1 — these two facets could never appear before: the projectors emitted CURIE keys with array values,
     // which the SPARQL store dropped, so `facets` maxed out at 4 and trustScore was registration-only.
     if (edges > 0) facets.push('relationship');
@@ -277,6 +289,7 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
       registryStatus: r.status?.value ?? null,
       displayName: r.dn?.value ?? null,
       description: r.desc?.value ?? null,
+      nameDescription: r.ndesc?.value ?? null,
       skills: r.skills?.value ?? null,
       // The CURIE-shaped tokens inside `skills`, parsed once here so every consumer agrees on what a
       // declared capability id is. Empty (not null) when the agent published only free-text labels —
@@ -379,7 +392,11 @@ export interface NameListing {
   /** Agent-kind subclass local name ('PersonAgent' | 'OrganizationAgent' | 'ServiceAgent') or null. */
   kind: string | null;
   displayName: string | null;
+  /** approf:description — the agent's own, SA-keyed. */
   description: string | null;
+  /** apnam:description — the NAME RECORD's, node-keyed (facet-registries G8). Different fact, different
+   *  author, transfers with the name. Most UUPG org/alliance agents carry only this one. */
+  nameDescription: string | null;
   appContext: string | null;
   orgRole: string | null;
   serviceUrl: string | null;
@@ -391,12 +408,13 @@ export interface NameListing {
  *  projection landed sort last (unbound registeredAt) until the next reindex. */
 export async function listNames(env: Env, limit = 100): Promise<NameListing[]> {
   const rows = await sparqlSelect(env, `
-    SELECT ?sa ?name ?reg ?exp ?kind ?dn ?desc ?ctx ?role ?svc ?site WHERE {
+    SELECT ?sa ?name ?reg ?exp ?kind ?dn ?desc ?ndesc ?ctx ?role ?svc ?site WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa ; apnam:name ?name .
       OPTIONAL { ?a apnam:registeredAt ?reg }
       OPTIONAL { ?a apnam:expiry ?exp }
       OPTIONAL { ?a approf:displayName ?dn }
       OPTIONAL { ?a approf:description ?desc }
+      OPTIONAL { ?a apnam:description ?ndesc }   # G8 — name-record description, distinct from the above
       OPTIONAL { ?a apdisc:appContext ?ctx }
       OPTIONAL { ?a apdisc:orgRole ?role }
       OPTIONAL { ?a apdisc:serviceUrl ?svc }
@@ -411,6 +429,7 @@ export async function listNames(env: Env, limit = 100): Promise<NameListing[]> {
     kind: r.kind?.value ? (r.kind.value.split('#').pop() ?? null) : null,
     displayName: r.dn?.value ?? null,
     description: r.desc?.value ?? null,
+    nameDescription: r.ndesc?.value ?? null,
     appContext: r.ctx?.value ?? null,
     orgRole: r.role?.value ?? null,
     serviceUrl: r.svc?.value ?? null,
@@ -421,13 +440,14 @@ export async function listNames(env: Env, limit = 100): Promise<NameListing[]> {
 export async function listAgentsByContext(env: Env, appContext: string, orgRole = '', limit = 100): Promise<NameListing[]> {
   const roleFilter = orgRole ? `?a apdisc:orgRole "${esc(orgRole)}" .` : '';
   const rows = await sparqlSelect(env, `
-    SELECT ?sa ?name ?reg ?exp ?kind ?dn ?desc ?ctx ?role ?svc ?site WHERE {
+    SELECT ?sa ?name ?reg ?exp ?kind ?dn ?desc ?ndesc ?ctx ?role ?svc ?site WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa ; apnam:name ?name ; apdisc:appContext "${esc(appContext)}" .
       ${roleFilter}
       OPTIONAL { ?a apnam:registeredAt ?reg }
       OPTIONAL { ?a apnam:expiry ?exp }
       OPTIONAL { ?a approf:displayName ?dn }
       OPTIONAL { ?a approf:description ?desc }
+      OPTIONAL { ?a apnam:description ?ndesc }   # G8 — name-record description, distinct from the above
       OPTIONAL { ?a apdisc:appContext ?ctx }
       OPTIONAL { ?a apdisc:orgRole ?role }
       OPTIONAL { ?a apdisc:serviceUrl ?svc }
@@ -442,6 +462,7 @@ export async function listAgentsByContext(env: Env, appContext: string, orgRole 
     kind: r.kind?.value ? (r.kind.value.split('#').pop() ?? null) : null,
     displayName: r.dn?.value ?? null,
     description: r.desc?.value ?? null,
+    nameDescription: r.ndesc?.value ?? null,
     appContext: r.ctx?.value ?? null,
     orgRole: r.role?.value ?? null,
     serviceUrl: r.svc?.value ?? null,
@@ -479,6 +500,9 @@ export async function listShapes(env: Env): Promise<{ shape: string; label: stri
 export interface OfferingResult {
   skillId: string;
   name: string | null;
+  /** apdisc:offeringDescription — the card's per-skill blurb. Was projected as `approf:description`
+   *  (facet-registries G8, third writer) and read by nothing; now its own term, and selected. */
+  description: string | null;
   effect: string | null;
   exposure: string | null;
   family: string | null;
@@ -497,11 +521,12 @@ export async function getOfferings(env: Env, key: string): Promise<OfferingResul
     ? `?a ap:smartAgent ?sa . FILTER(LCASE(STR(?sa)) = LCASE("${esc(key)}"))`
     : `?a apnam:name "${esc(key)}" .`;
   const rows = await sparqlSelect(env, `
-    SELECT ?o ?skill ?name ?effect ?exposure ?family ?status ?schema ?cap ?src ?obs ?dig WHERE {
+    SELECT ?o ?skill ?name ?desc ?effect ?exposure ?family ?status ?schema ?cap ?src ?obs ?dig WHERE {
       ?a a ap:Agent . ${sel}
       ?a apdisc:hasOffering ?o .
       ?o apdisc:skillId ?skill .
       OPTIONAL { ?o apdisc:offeringName ?name }
+      OPTIONAL { ?o apdisc:offeringDescription ?desc }
       OPTIONAL { ?o apdisc:effect ?effect }
       OPTIONAL { ?o apdisc:exposure ?exposure }
       OPTIONAL { ?o apdisc:family ?family }
@@ -521,6 +546,7 @@ export async function getOfferings(env: Env, key: string): Promise<OfferingResul
       cur = {
         skillId: r.skill?.value ?? '',
         name: r.name?.value ?? null,
+        description: r.desc?.value ?? null,
         effect: r.effect?.value ?? null,
         exposure: r.exposure?.value ?? null,
         family: r.family?.value ?? null,

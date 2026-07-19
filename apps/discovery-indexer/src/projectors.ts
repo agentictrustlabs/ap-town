@@ -80,6 +80,9 @@ const naming: FacetProjector = {
 // constant is left untouched (it is spec-217 correct and not owned by this app).
 const PROFILE_KEYS: Array<[string, string]> = [
   ['displayName', PREDICATE.displayName],
+  // G8 — the SA-keyed tier: the agent's OWN self-description, written by the agent (`onlyAgent`
+  // setStringProperty), surviving a rename and existing for nameless agents. The name-record description
+  // is a different fact and now lands under `apnam:description` (see NAME_ATTR_KEYS below).
   ['description', PREDICATE.description],
   ['skills', PREDICATE.skills], // spec 282 — publicly-asserted skill labels (atl:skills)
   // G2/G3/G4 — owner-asserted discovery-ranking facets on the atl:skills rail. Registered on-chain by
@@ -99,10 +102,34 @@ const NAME_ATTR_KEYS: Array<[string, string]> = [
   ['orgRole', PREDICATE.orgRole],
   ['serviceUrl', PREDICATE.serviceUrl],
   ['siteUrl', PREDICATE.siteUrl],
-  ['description', PREDICATE.description],
+  // G8 — the node-keyed name-record description. This used to map to PREDICATE.description, the SAME IRI
+  // the SA-keyed profile description above uses, into the SAME `data` object. Since this loop runs SECOND,
+  // a name-record description silently DESTROYED the agent's own profile description; the reverse could
+  // never happen, so the "winner" was decided by nothing but source order in this file. They are not the
+  // same fact: tier 3 is written by the AGENT about itself and survives a rename; tier 2 is written by the
+  // NAME's owner about the registration and transfers with the name. Distinct IRI (`apnam:description`) —
+  // both are now projected, nothing is lost, and consumers pick the tier they mean.
+  ['description', PREDICATE.nameDescription],
 ];
+
+// G8 GUARD — the collision above was invisible because two independent key lists merged into one flat
+// `data` object with no check. Any future entry that reuses an IRI across (or within) the two tiers now
+// fails LOUDLY at module load instead of silently deciding the winner by loop order. This is the
+// structural half of the fix: renaming one key stops today's bug, this stops the next one.
+{
+  const seen = new Map<string, string>();
+  for (const [tier, keys] of [['PROFILE_KEYS', PROFILE_KEYS], ['NAME_ATTR_KEYS', NAME_ATTR_KEYS]] as const) {
+    for (const [key, iri] of keys) {
+      const prior = seen.get(iri);
+      if (prior) throw new Error(`projector IRI collision: ${tier}.${key} → ${iri} is already written by ${prior}. Two tiers merging into one \`data\` object under one IRI means the later loop silently clobbers the earlier (facet-registries G8). Give the second one its own predicate.`);
+      seen.set(iri, `${tier}.${key}`);
+    }
+  }
+}
+
 /** Profile facet — profile properties (AgentProfileResolver, SA-keyed) + the spec-280 endpoint records
- *  (AgentNameResolver, node-keyed). */
+ *  (AgentNameResolver, node-keyed). Both tiers merge into ONE `data` object, so their IRIs must be
+ *  disjoint — enforced by the guard above (G8). */
 const profile: FacetProjector = {
   kind: 'profile',
   async project({ client, profileResolver, nameResolver, sa, node }) {
@@ -322,7 +349,12 @@ const offerings: FacetProjector = {
         };
         if (o.version) data[PREDICATE.offeringVersion] = o.version;
         if (o.name) data[PREDICATE.offeringName] = o.name;
-        if (o.description) data[PREDICATE.description] = o.description;
+        // G8, third writer — an OFFERING's blurb, not an agent's. Distinct subject, so nothing was ever
+        // clobbered here; but `approf:description` is domain-restricted to `approf:AgentProfile`, so this
+        // typed every crawled Offering as an agent profile. `apdisc:offeringDescription` mirrors
+        // `apdisc:offeringName` directly above it. Nothing read the old triple (the MCP's getOfferings
+        // never selected it), so no consumer regresses.
+        if (o.description) data[PREDICATE.offeringDescription] = o.description;
         if (o.effect) data[PREDICATE.effect] = o.effect;
         if (o.exposure) data[PREDICATE.exposure] = o.exposure;
         if (o.family) data[PREDICATE.offeringFamily] = o.family;

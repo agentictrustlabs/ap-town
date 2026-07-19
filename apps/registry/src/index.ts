@@ -21,7 +21,18 @@ interface Env {
 interface OfferingLite { skillId: string; effect?: string | null; family?: string | null; status?: string | null }
 interface AgentResult {
   agent: string; name: string | null; smartAgent: string; facets: string[]; shaclConforms: boolean;
-  registryStatus?: string | null; displayName?: string | null; description?: string | null; skills?: string | null;
+  registryStatus?: string | null; displayName?: string | null; skills?: string | null;
+  /** `approf:description` — the agent's OWN, SA-keyed self-description. Every use below (the requireSkill
+   *  haystack, the `geo` fallback, the lexical haystack) means THIS tier and only this tier.
+   *
+   *  facet-registries G8: the node-keyed NAME-RECORD description used to be projected under this same IRI
+   *  and, being read second, replaced this one — so the matcher could silently be ranking a registration
+   *  blurb ("UUPG organization agent discoverable by public Agent Naming metadata") as an advisor's bio.
+   *  It now arrives separately as `nameDescription` and is deliberately NOT surfaced or ranked here: it is
+   *  written by the NAME's owner about the registration, so it is neither a capability assertion (wrong
+   *  input for requireSkill) nor a coverage claim (wrong input for the geo fallback). Left to the MCP,
+   *  which returns it for consumers that want it. */
+  description?: string | null;
   /** Spec 331 — canonical capability ids parsed out of `skills` by the MCP. `[]` = declared nothing
    *  structured, which is a real answer and must never be read as "unknown, assume it matches". */
   capabilityIds?: string[];
