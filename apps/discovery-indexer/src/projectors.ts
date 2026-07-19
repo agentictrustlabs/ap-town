@@ -115,6 +115,27 @@ const profile: FacetProjector = {
       const v = (await client.readContract({ address: nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getString', args: [node, pred(key)] }).catch(() => '')) as string;
       if (v) data[iri] = v;
     }
+    // Spec 331 W2 — project the CAPABILITY IDS out of atl:skills as their own triples.
+    //
+    // LENIENT by design: any CURIE-shaped token becomes a declaration, WITHOUT checking that a
+    // definition for it exists in SkillDefinitionRegistry. That is spec 331 §9 open question 6,
+    // answered here, and the reason is that strictness would buy nothing and cost correctness:
+    //
+    //   - It buys nothing, because the QUERY side is already strict. A matcher only ever looks for
+    //     ids it resolved out of the catalog, so an id no catalog contains can never be matched —
+    //     projecting it is inert, exactly like the unreferenced definition W0 tolerates.
+    //   - It costs correctness, because the check is a network read. A transient RPC failure would
+    //     be indistinguishable from "this agent does not declare that capability", and would
+    //     silently un-declare a capability at rank time. That is the ADR-0013 silent-degradation
+    //     failure, introduced into the one path this spec exists to make trustworthy.
+    //
+    // It also decouples the waves: an advisor's declaration projects correctly whether or not the
+    // steward has published the definition yet.
+    const skills = data[PREDICATE.skills];
+    if (typeof skills === 'string') {
+      const ids = skills.split(',').map((s) => s.trim()).filter((s) => /^[a-z][a-z0-9]*:[a-z0-9][a-z0-9-]*$/i.test(s));
+      if (ids.length) data[PREDICATE.declaresCapabilityId] = [...new Set(ids)];
+    }
     const present = Object.keys(data).length > 0;
     return { kind: 'profile', present, shapeIri: SHAPE.AgentProfile, conforms: present, data };
   },

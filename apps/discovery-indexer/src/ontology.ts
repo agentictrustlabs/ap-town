@@ -72,6 +72,12 @@ export const PREDICATE = {
   languages: `${NS.approf}languages`,
   regions: `${NS.approf}regions`,
   focusAreas: `${NS.approf}focusAreas`,
+  // Spec 331 W2 — the PARSED capability identities inside atl:skills, one triple per id, so a
+  // consumer matches on a structured identity instead of re-parsing a comma-separated string.
+  // Registered on chain alongside the capability relations (governor tx 0xc7b84690…). Read-side
+  // only: nothing writes this to AgentProfileResolver, and nothing should — the agent's own
+  // declaration is `atl:skills`, and this is a projection of it.
+  declaresCapabilityId: `${NS.approf}declaresCapabilityId`,
   claimsRoot: `${NS.apreg}claimsRoot`,
   blockNumber: `${NS.apreg}blockNumber`,
   lifecycleStatus: `${NS.apreg}lifecycleStatus`,

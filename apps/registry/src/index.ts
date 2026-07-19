@@ -22,6 +22,9 @@ interface OfferingLite { skillId: string; effect?: string | null; family?: strin
 interface AgentResult {
   agent: string; name: string | null; smartAgent: string; facets: string[]; shaclConforms: boolean;
   registryStatus?: string | null; displayName?: string | null; description?: string | null; skills?: string | null;
+  /** Spec 331 — canonical capability ids parsed out of `skills` by the MCP. `[]` = declared nothing
+   *  structured, which is a real answer and must never be read as "unknown, assume it matches". */
+  capabilityIds?: string[];
   /** G2/G3/G4 — owner-asserted, comma-separated discovery-ranking facets (approf:languages/regions/focusAreas). */
   languages?: string | null; regions?: string | null; focusAreas?: string | null;
   /** G1 — the trust fabric, now actually projected into the graph. */
@@ -37,11 +40,25 @@ interface AgentResult {
 // `languages`/`regions` are code sets: rankable as intent, enforceable as mandates. `focusAreas` is intent-
 // ONLY by design (facet-registries G4) — a focus area is an emphasis, not a boundary, so there is
 // deliberately no `requireFocusArea` mandate.
-interface Intent { need?: string; skills?: string[]; geo?: string; languages?: string[]; regions?: string[]; focusAreas?: string[] }
+interface Intent {
+  need?: string; skills?: string[]; geo?: string; languages?: string[]; regions?: string[]; focusAreas?: string[];
+  /** Spec 331 — canonical capability ids the question resolved to. THE dominant fit signal.
+   *  Resolution happens org-side, once per question, against the catalog the caller owns. */
+  capabilityIds?: string[];
+  /** Descendants of `capabilityIds` in the catalog DAG, pre-expanded by the caller. A candidate
+   *  declaring one of these did not declare what was asked for — it declared something NARROWER,
+   *  which is a weaker but real match. Expanded caller-side because the substrate does not (and must
+   *  not) hold a downstream domain catalog. */
+  specializationIds?: string[];
+}
 interface Mandates {
   requireRegistered?: boolean; requireShaclConforms?: boolean; requireKind?: string;
   requireSkill?: string; requireSkillId?: string; geo?: string;
   requireLanguage?: string; requireRegion?: string;
+  /** Spec 331 — the one facet filter that is safe by construction: an id was declared or it was not,
+   *  with no free text in between. Candidates who declared NOTHING structured are exempt, not
+   *  eliminated (the same fail-open-to-fewer-signals rule the other facet mandates use). */
+  requireCapabilityId?: string;
   /** Trust-fabric mandates (G1) — meaningless before the relationship/attestation facets reached the graph. */
   requireAttestation?: boolean; requireRelationship?: boolean;
 }
@@ -142,6 +159,16 @@ function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | null {
     if (!ok) return null;
     satisfied.push(`geo:${m.geo}`);
   }
+  // Spec 331 §4.3 — hard, and safe: exact set membership over declared ids, with the exemption that
+  // makes a filter honest. A candidate who declared no capability ids at all is UNKNOWN, not out of
+  // scope, and passes; eliminating an unknown is the `mandates.geo` failure this design exists to
+  // remove. Region and language stay SOFT by default and are only ever filters when a caller asks.
+  if (m.requireCapabilityId) {
+    const want = m.requireCapabilityId.toLowerCase();
+    const declared = (a.capabilityIds ?? []).map((x) => x.toLowerCase());
+    if (declared.length && !declared.includes(want)) return null;
+    satisfied.push(`capability:${m.requireCapabilityId}`);
+  }
   if (m.requireRegion) { const want = m.requireRegion.toLowerCase(); if (!codeSet(a.regions).includes(want)) return null; satisfied.push(`region:${m.requireRegion}`); }
   if (m.requireLanguage) { const want = m.requireLanguage.toLowerCase(); if (!langMatches(codeSet(a.languages), want)) return null; satisfied.push(`language:${m.requireLanguage}`); }
   if (m.requireAttestation) { if (!(a.validAttestations ?? 0)) return null; satisfied.push('attested'); }
@@ -159,47 +186,128 @@ function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | null {
   return satisfied;
 }
 
-/** Soft INTENT fit (0..1): lexical relevance of the need against name + profile text + skills. */
-function fitScore(a: AgentResult, intent: Intent, cites: string[]): number {
+/** What a candidate matched on, beyond the score — used for evidence and for the tie-break. */
+interface FitBreakdown {
+  score: number;
+  /** How many of the needed capability ids this candidate declared exactly. */
+  capabilityHits: number;
+  /** How many needed region codes it covers. Only ever a BOOST — see `mandatePass`. */
+  regionHits: number;
+  /** True when nothing structured resolved and the score rests on lexical matching alone. */
+  lexicalOnly: boolean;
+}
+
+/**
+ * Soft INTENT fit (0..1) — spec 331 §4.2.
+ *
+ *   0.55 capabilityMatch   exact set intersection on declared capability ids
+ * + 0.15 specializationMatch  a declared id specializes a needed one
+ * + 0.10 regionMatch       exact code-set membership
+ * + 0.10 languageMatch     BCP-47 subtag prefix
+ * + 0.10 focusMatch        capped token containment
+ * + 0.15 lexicalFallback   ONLY when no capability id was requested
+ *
+ * The shape of this function is the whole point of the migration. Before it, ranking was substring
+ * containment over a joined text blob, which is why "Spain" scored against the token
+ * `jurisdiction-spain` and every routing question passed for a reason that would not survive a
+ * rewording. Capability ids are EXACT: an id was declared or it was not.
+ *
+ * ── The catalog is NOT loaded here, deliberately ──
+ * `specializationIds` is supplied by the CALLER, already expanded. Resolving a question to
+ * capability ids and walking the catalog DAG is an org-side act performed once per question
+ * (§4.1) — and the advisory catalog is a downstream domain artifact this substrate must not
+ * depend on. So the substrate scores structure it is handed; it never owns the vocabulary.
+ *
+ * ── Absence is never a penalty ──
+ * A candidate that published no regions contributes 0 to `regionMatch` — the same as one whose
+ * regions did not match. Not matching costs the boost; it never costs the seat.
+ */
+function fitScore(a: AgentResult, intent: Intent, cites: string[]): FitBreakdown {
   const need = (intent.need ?? '').trim().toLowerCase();
-  const hay = [a.name, a.displayName, a.description, a.skills].filter(Boolean).join(' ').toLowerCase();
+  const declared = (a.capabilityIds ?? []).map((x) => x.toLowerCase());
+  const needed = (intent.capabilityIds ?? []).map((x) => x.toLowerCase());
   let s = 0;
-  if (!need) { s = 0.15; }
-  else {
-    if (a.name?.toLowerCase().includes(need)) { s += 0.6; cites.push(`name matches “${intent.need}”`); }
-    if (a.displayName?.toLowerCase().includes(need) || a.description?.toLowerCase().includes(need)) { s += 0.4; cites.push('profile text matches the need'); }
-    const toks = need.split(/\s+/).filter((t) => t.length > 2);
-    const tokHits = toks.filter((t) => hay.includes(t)).length;
-    if (toks.length) { s += 0.4 * (tokHits / toks.length); if (tokHits) cites.push(`${tokHits}/${toks.length} need term(s) matched`); }
+
+  // ── capabilityMatch — exact, and the dominant term ──
+  const exact = needed.filter((id) => declared.includes(id));
+  if (needed.length && exact.length) {
+    s += 0.55 * (exact.length / needed.length);
+    for (const id of exact) cites.push(`declared ${id} (exact)`);
   }
-  for (const sk of intent.skills ?? []) { if (hay.includes(sk.toLowerCase())) { s += 0.2; cites.push(`skill “${sk}” present`); } }
-  // G2/G3/G4 — the structured discovery facets. Each is a SOFT boost: an agent that has not published the
-  // facet is not penalised (it is unknown, not absent), and `focusAreas` is capped hardest because a focus
-  // area is an emphasis, never a boundary (facet-registries G4 — it must never become a filter).
+
+  // ── specializationMatch — a declared id is a NARROWER form of something asked for ──
+  // Walks the DAG downward only: declaring the parent never implies the child. `specializationIds`
+  // are the descendants the caller expanded, so a request for "manager selection" surfaces the
+  // private-fund specialist without the specialist's parent claim being invented here.
+  const specIds = (intent.specializationIds ?? []).map((x) => x.toLowerCase());
+  const specHits = declared.filter((id) => specIds.includes(id) && !exact.includes(id));
+  if (specHits.length) {
+    s += 0.15;
+    for (const id of specHits) cites.push(`declared ${id}, specializes a requested capability`);
+  }
+
+  // ── region / language / focus — facets, all soft (see §4.3 and `mandatePass`) ──
+  const regions = codeSet(a.regions);
+  const wantRegions = [...(intent.regions ?? []), ...(intent.geo ? [intent.geo] : [])].map((r) => r.toLowerCase());
+  const matchedRegions = [...new Set(wantRegions.filter((r) => regions.includes(r)))];
+  if (wantRegions.length && matchedRegions.length) {
+    s += 0.10 * Math.min(1, matchedRegions.length / wantRegions.length);
+    cites.push(`covers ${matchedRegions.map((r) => r.toUpperCase()).join(', ')} (requested)`);
+  }
+
   const langs = codeSet(a.languages);
   const matchedLangs = (intent.languages ?? []).map((l) => l.toLowerCase()).filter((l) => langMatches(langs, l));
-  if (matchedLangs.length) { s += Math.min(0.2, 0.1 * matchedLangs.length); cites.push(`speaks ${matchedLangs.join(', ')}`); }
-  const regions = codeSet(a.regions);
-  const matchedRegions = (intent.regions ?? []).map((r) => r.toLowerCase()).filter((r) => regions.includes(r));
-  if (matchedRegions.length) { s += Math.min(0.2, 0.1 * matchedRegions.length); cites.push(`covers ${matchedRegions.map((r) => r.toUpperCase()).join(', ')}`); }
-  // G3 — `intent.geo` was a DECLARED-BUT-DEAD field: no scoring function read it. It now soft-boosts
-  // against the published region codes (the hard-filter version lives in `mandates.requireRegion`).
-  if (intent.geo && regions.includes(intent.geo.toLowerCase())) { s += 0.1; cites.push(`covers ${intent.geo.toUpperCase()}`); }
+  if ((intent.languages ?? []).length && matchedLangs.length) {
+    s += 0.10 * Math.min(1, matchedLangs.length / (intent.languages ?? []).length);
+    cites.push(`speaks ${matchedLangs.join(', ')} (requested)`);
+  }
+
+  // The one lexical rule kept, and safe precisely because a focus area can never filter.
   const focus = codeSet(a.focusAreas);
-  const matchedFocus = (intent.focusAreas ?? []).map((f) => f.toLowerCase()).filter((f) => focus.some((x) => x.includes(f) || f.includes(x)));
-  if (matchedFocus.length) { s += Math.min(0.15, 0.075 * matchedFocus.length); cites.push(`focus area(s): ${matchedFocus.join(', ')}`); }
-  // The free-text need also gets credit for hitting a published focus area (a subject-domain match is
-  // weaker evidence than a declared capability, so it is worth less than the skills boost above).
-  if (need && focus.some((f) => need.includes(f) || f.includes(need))) { s += 0.1; cites.push('focus area matches the need'); }
-  // spec 286 — boost on the crawled per-skill Offerings (a precise, callable advertisement, stronger than a
-  // coarse label match): an offered skillId matching the need tokens or an intent skill.
+  const matchedFocus = (intent.focusAreas ?? []).map((f) => f.toLowerCase())
+    .filter((f) => focus.some((x) => x.includes(f) || f.includes(x)));
+  if (matchedFocus.length) {
+    s += Math.min(0.10, 0.05 * matchedFocus.length);
+    cites.push(`focus: ${matchedFocus.join(', ')}`);
+  }
+
+  // ── lexicalFallback — hack #3 demoted and made VISIBLE, not deleted ──
+  // Gated on the caller having requested NO capability id. A question the catalog cannot parse still
+  // routes; it just says so in its evidence, so a result that passes for the old reason is
+  // inspectable instead of indistinguishable from a structured one (ADR-0013).
+  const lexicalOnly = needed.length === 0;
+  if (lexicalOnly) {
+    const hay = [a.name, a.displayName, a.description, a.skills].filter(Boolean).join(' ').toLowerCase();
+    let lex = 0;
+    if (!need) lex = 0.15;
+    else {
+      const toks = need.split(/\s+/).filter((t) => t.length > 2);
+      const tokHits = toks.filter((t) => hay.includes(t)).length;
+      if (toks.length) lex = tokHits / toks.length;
+      if (a.name?.toLowerCase().includes(need)) lex = 1;
+    }
+    for (const sk of intent.skills ?? []) if (hay.includes(sk.toLowerCase())) lex = Math.min(1, lex + 0.2);
+    if (lex > 0) {
+      s += 0.15 * lex;
+      cites.push('— no capability id resolved from the question; lexical fallback only');
+    }
+  }
+
+  // spec 286 — crawled per-skill Offerings: a precise, callable advertisement. Kept, but it can no
+  // longer outweigh a declared capability the way it did when everything was lexical.
   const offered = (a.offerings ?? []).map((o) => o.skillId.toLowerCase());
   if (offered.length) {
-    const wantToks = [...(intent.skills ?? []).map((s2) => s2.toLowerCase()), ...((need ? need.split(/\s+/) : []).filter((t) => t.length > 2))];
+    const wantToks = [...needed, ...(intent.skills ?? []).map((s2) => s2.toLowerCase())];
     const matched = [...new Set(offered.filter((id) => wantToks.some((t) => id.includes(t))))];
-    if (matched.length) { s += Math.min(0.3, 0.15 * matched.length); cites.push(`offers ${matched.length} matching skill(s): ${matched.slice(0, 3).join(', ')}`); }
+    if (matched.length) { s += Math.min(0.10, 0.05 * matched.length); cites.push(`offers ${matched.length} matching skill(s): ${matched.slice(0, 3).join(', ')}`); }
   }
-  return Math.min(s, 1);
+
+  return {
+    score: Math.min(s, 1),
+    capabilityHits: exact.length + specHits.length,
+    regionHits: matchedRegions.length,
+    lexicalOnly,
+  };
 }
 
 /** Absolute public-trust signal (0..1) — registry standing, SHACL conformance, facet richness, and (G1) the
@@ -232,7 +340,8 @@ function trustScore(a: AgentResult, cites: string[]): number {
 /** Score + surface one mandate-passing candidate as an ontology-typed apdisc:MatchCandidate. */
 function matchCandidate(a: AgentResult, intent: Intent, satisfiedMandates: string[]) {
   const cites: string[] = [];
-  const fit = fitScore(a, intent, cites);
+  const f = fitScore(a, intent, cites);
+  const fit = f.score;
   const trust = trustScore(a, cites);
   const score = Math.round(Math.min(W_FIT * fit + W_TRUST * trust, 1) * 100) / 100;
   return {
@@ -249,7 +358,14 @@ function matchCandidate(a: AgentResult, intent: Intent, satisfiedMandates: strin
       'sh:conforms': a.shaclConforms,
       citedFacets: a.facets,
       agentNode: a.agent,
-      basis: { fitScore: Math.round(fit * 100) / 100, trustScore: Math.round(trust * 100) / 100, weights: { fit: W_FIT, trust: W_TRUST } },
+      basis: {
+        fitScore: Math.round(fit * 100) / 100, trustScore: Math.round(trust * 100) / 100,
+        weights: { fit: W_FIT, trust: W_TRUST },
+        // Named so a caller can assert WHICH term carried a result, not just that it won. A result
+        // whose only term is the lexical fallback is a routing question the catalog cannot parse —
+        // it is reported, never hidden.
+        capabilityHits: f.capabilityHits, regionHits: f.regionHits, lexicalOnly: f.lexicalOnly,
+      },
     },
     [`${APDISC}matchScore`]: score,
     [`${APDISC}matchScoreBasis`]: Math.round(score * 10000), // smart-agent SHACL-precision convention (0..10000)
@@ -257,6 +373,8 @@ function matchCandidate(a: AgentResult, intent: Intent, satisfiedMandates: strin
     // flattened convenience fields (UI):
     name: a.name, smartAgent: a.smartAgent, facets: a.facets, shaclConforms: a.shaclConforms,
     registered: isRegistered(a), score, why: cites,
+    capabilityIds: a.capabilityIds ?? [],
+    capabilityHits: f.capabilityHits, regionHits: f.regionHits, lexicalOnly: f.lexicalOnly,
     offerings: a.offerings ?? [],
     // Structured discovery facets + trust fabric, surfaced so a caller can see WHY a candidate ranked.
     kind: a.kind ?? null, languages: a.languages ?? null, regions: a.regions ?? null, focusAreas: a.focusAreas ?? null,
@@ -296,7 +414,22 @@ app.post('/discover', async (c) => {
   const ranked = candidates
     .map((a) => { const sat = mandatePass(a, mandates); if (sat === null) { dropped++; return null; } return matchCandidate(a, intent, sat); })
     .filter((x): x is ReturnType<typeof matchCandidate> => x !== null)
-    .sort((x, y) => (y.score as number) - (x.score as number));
+    // DETERMINISTIC ordering. The score is rounded to 2dp for display and genuine ties happen (the
+    // pre-migration baseline had two: Ferrer/Tanabe at 0.23 and Lindqvist/Tanabe at 0.29, both
+    // resolved by nothing better than array order). Ties now break on STRUCTURE, in the order the
+    // signals deserve:
+    //   1. more capability-id hits   — the exact, declared identity
+    //   2. more region hits          — the requested coverage, as a TIE-BREAK and never as a filter
+    //   3. a structured result beats a lexical-fallback one at the same score
+    //   4. name, so the result is stable across runs rather than dependent on graph iteration order
+    // Region appears here rather than as a hard filter on purpose: a tie-break can only reorder
+    // candidates, it can never eliminate one. `mandates.geo` eliminated, and that is the failure
+    // this whole design exists to remove.
+    .sort((x, y) => (y.score as number) - (x.score as number)
+      || y.capabilityHits - x.capabilityHits
+      || y.regionHits - x.regionHits
+      || Number(x.lexicalOnly) - Number(y.lexicalOnly)
+      || (x.name ?? '').localeCompare(y.name ?? ''));
 
   return c.json({
     ok: true,

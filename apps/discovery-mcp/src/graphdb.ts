@@ -119,6 +119,9 @@ export interface AgentResult {
   displayName?: string | null;     // approf:displayName
   description?: string | null;     // approf:description
   skills?: string | null;          // approf:skills — publicly-asserted skill labels (spec 282)
+  /** Spec 331 — the canonical capability ids parsed out of `skills`. `keccak256` of each is a
+   *  `SkillDefinitionRegistry` skillId. Always an array; `[]` means "declared nothing structured". */
+  capabilityIds?: string[];
   appContext?: string | null;      // apdisc:appContext
   orgRole?: string | null;         // apdisc:orgRole
   serviceUrl?: string | null;      // apdisc:serviceUrl
@@ -197,6 +200,16 @@ export async function lookupAgents(env: Env, smartAgents: string[]): Promise<Age
   return out;
 }
 
+/** Capability ids declared inside an `atl:skills` value — the CURIE-shaped tokens, deduped, order
+ *  preserved. This is EXACT TOKENIZATION on a comma boundary, not substring matching: a token either
+ *  is a well-formed CURIE or it is dropped, and no token ever partially matches another. */
+export function parseCapabilityIds(skills?: string | null): string[] {
+  if (!skills) return [];
+  const ids = skills.split(',').map((s) => s.trim())
+    .filter((s) => /^[a-z][a-z0-9]*:[a-z0-9][a-z0-9-]*$/i.test(s));
+  return [...new Set(ids)];
+}
+
 /** The one agent-row query both `searchAgentsPage` and `lookupAgents` use, so the two paths can never
  *  drift in which facets they expose. `extraClause` is trusted, caller-built SPARQL (never user text). */
 async function runAgentQuery(env: Env, q: string, extraClause: string, limit: number): Promise<AgentResult[]> {
@@ -209,6 +222,14 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
   // Every bound var here is SINGLE-VALUED per agent, so this stays one row per agent with no GROUP BY and
   // no DISTINCT (the per-agent `SELECT DISTINCT ?p` fan-out previously blew GraphDB's group-by heap guard).
   // Multivalued trust-fabric detail (the individual edges) is a drill-down: `getRelationships`.
+  //
+  // Spec 331 W2 — `approf:declaresCapabilityId` is deliberately NOT bound here even though the indexer
+  // now emits it. It is MULTIVALUED (one triple per declared id), so binding it would fan this query out
+  // to one row per agent per capability and need exactly the GROUP BY the heap guard rules out. It costs
+  // nothing to leave out: `approf:skills` is the string those triples are parsed FROM, so the row already
+  // carries the same information single-valued, and `capabilityIds` below tokenizes it server-side so
+  // every consumer gets identical parsing instead of reimplementing it. The triples remain in the graph
+  // for SPARQL consumers that want to query BY capability rather than read an agent row.
   const rows = await sparqlSelect(env, `
     SELECT ?a ?sa ?name ?conforms ?dn ?desc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?edges ?atts ?vatts ?kind WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa .
@@ -257,6 +278,10 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
       displayName: r.dn?.value ?? null,
       description: r.desc?.value ?? null,
       skills: r.skills?.value ?? null,
+      // The CURIE-shaped tokens inside `skills`, parsed once here so every consumer agrees on what a
+      // declared capability id is. Empty (not null) when the agent published only free-text labels —
+      // "declared nothing structured" is a real answer and must not read as "unknown".
+      capabilityIds: parseCapabilityIds(r.skills?.value),
       languages: r.langs?.value ?? null,
       regions: r.regions?.value ?? null,
       focusAreas: r.focus?.value ?? null,
