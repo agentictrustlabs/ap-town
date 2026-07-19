@@ -20,19 +20,22 @@ if (existsSync('.env')) {
   }
 }
 
-// Base Sepolia deployment (agenticprimitives deployments-base-sepolia.json). Override via env.
+// Base Sepolia deployment — these MUST track packages/contracts/deployments-base-sepolia.json. They had
+// drifted to a PREVIOUS deployment (nameRegistry 0x2632…, resolver 0x5fE5…, nameResolver 0x3bed…,
+// registry 0x43e9…, profileResolver 0x6A66…, relationship 0x1010…, attestationRegistry 0x3286…), so a
+// batch run without a fully-populated .env indexed dead contracts. Override via env.
 const cfg: IndexerConfig = {
   rpcUrl: process.env.RPC_URL ?? 'https://sepolia.base.org',
   // Log scans get their own RPC (public Base allows a 2000-block eth_getLogs range vs Alchemy free-tier 10).
   logsRpcUrl: process.env.LOGS_RPC_URL ?? 'https://sepolia.base.org',
   chainId: Number(process.env.CHAIN_ID ?? 84532),
-  nameRegistry: (process.env.NAME_REGISTRY ?? '0x2632E06d0df65568200778389e13118e02EbfBB3') as Address,
-  resolver: (process.env.RESOLVER ?? '0x5fE5076c9FF0c4A48F3F2e3e2F83F926696FD357') as Address,
-  nameResolver: (process.env.NAME_RESOLVER ?? '0x3bed1594E1aB813C55d288edaBeA8c4aa9B651eF') as Address,
-  registry: (process.env.REGISTRY ?? '0x43e9f271c0e0bc8505a1f99c4f0cb6d63165efb3') as Address,
-  profileResolver: (process.env.PROFILE_RESOLVER ?? '0x6A6669E4fCf19e0A002e7dA236F0C120e215B0A2') as Address,
-  relationship: (process.env.RELATIONSHIP ?? '0x1010D6aC73458fa8A72a2DEDc138224E84CF4157') as Address,
-  attestationRegistry: (process.env.ATTESTATION_REGISTRY ?? '0x3286E8a9DA830820f32d427c719728d9aBCD13DD') as Address,
+  nameRegistry: (process.env.NAME_REGISTRY ?? '0x6629Cca40B008C0984a1Ca266Ca10A344420cac3') as Address,
+  resolver: (process.env.RESOLVER ?? '0xB890060dE1B3Fd2C78e1f0859da3883743eAD452') as Address,
+  nameResolver: (process.env.NAME_RESOLVER ?? '0xA15B0703716DC8634B74F97723618f74Af3AaA73') as Address,
+  registry: (process.env.REGISTRY ?? '0xB18534CA9c679968132ca2a43E454f5fA341030D') as Address,
+  profileResolver: (process.env.PROFILE_RESOLVER ?? '0xfcd37F8dca26ead889922b22C169c21370bd352a') as Address,
+  relationship: (process.env.RELATIONSHIP ?? '0x0AF2455e3f76594E81d9042aD5FE22A5A35dc57f') as Address,
+  attestationRegistry: (process.env.ATTESTATION_REGISTRY ?? '0xD57f2e52395b9C99fAE8Abf823578faFe038f5B7') as Address,
   tlds: (process.env.TLDS ?? 'impact,agent').split(',').map((s) => s.trim()).filter(Boolean),
   discoveryRegistryId: process.env.DISCOVERY_REGISTRY_ID ?? 'urn:ap:registry:impact-agents',
   maxDepth: Number(process.env.MAX_DEPTH ?? 3),

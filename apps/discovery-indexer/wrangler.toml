@@ -11,6 +11,12 @@ GRAPHDB_URL = "https://graphdb.agentkg.io/repositories/smart-agents/statements"
 CHAIN_ID = "84532"
 NAME_REGISTRY = "0x6629Cca40B008C0984a1Ca266Ca10A344420cac3"
 RESOLVER = "0xB890060dE1B3Fd2C78e1f0859da3883743eAD452"
+# AgentNameAttributeResolver (spec 280) — the NODE-keyed attribute store where a2aEndpoint / mcpEndpoint /
+# appContext / orgRole / serviceUrl / siteUrl actually live. This var was MISSING, so the Worker fell back to
+# the stale code default (0x3bed…, 3 subjects) instead of the deployed store (0xA15B…, 142 subjects) and every
+# node-keyed record read empty — which is why no apdisc:appContext / approf:a2aEndpoint triple exists in the
+# KB. Distinct from RESOLVER (the universal resolver used for resolveName/reverseResolveString).
+NAME_RESOLVER = "0xA15B0703716DC8634B74F97723618f74Af3AaA73"
 REGISTRY = "0xB18534CA9c679968132ca2a43E454f5fA341030D"
 PROFILE_RESOLVER = "0xfcd37F8dca26ead889922b22C169c21370bd352a"
 RELATIONSHIP = "0x0AF2455e3f76594E81d9042aD5FE22A5A35dc57f"
