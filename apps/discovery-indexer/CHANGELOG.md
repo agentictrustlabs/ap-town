@@ -1,5 +1,14 @@
 # @agenticprimitives-demo/discovery-indexer
 
+## 0.0.1-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [2aaa857]
+  - @agenticprimitives/ontology@1.0.0-alpha.19
+  - @agenticprimitives/types@1.0.0-alpha.19
+  - @agenticprimitives/registry-kit@0.0.0-alpha.7
+
 ## 0.0.1-alpha.6
 
 ### Patch Changes
