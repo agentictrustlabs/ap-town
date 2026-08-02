@@ -45,8 +45,15 @@ export interface A2aCardSkill { id: string; name?: string; description?: string;
 export interface A2aCard { name?: string; type?: string; view?: string; skills?: A2aCardSkill[] }
 
 /** Fetch ANY agent's live A2A card from its bound endpoint (spec 280 a2aEndpoint → /.well-known/agent-card.json).
- *  The host must allow cross-origin GET (the treasury + discovery hosts set CORS). `view='authenticated'`
- *  requests the fine-skill card (card visibility is NOT authorization — invocation re-checks). */
+ *  The host must allow cross-origin GET (the treasury + discovery hosts set CORS).
+ *
+ *  `view='authenticated'` REQUESTS the fine-skill card but does not obtain it: since spec 338 §8 /
+ *  W4-b a host grants the extended card only to a caller that proved control of its Smart Agent
+ *  (challenge + signature in `x-ap-*` headers). This browser surface carries no such proof, so it
+ *  receives the PUBLIC card — check the returned `view` field rather than assuming. Showing
+ *  family-level skills here is the correct outcome, not a regression.
+ *
+ *  Card visibility was never authorization anyway — invocation re-checks delegation + policy. */
 export async function fetchA2aCard(endpoint: string, view?: 'authenticated'): Promise<A2aCard> {
   const base = endpoint.replace(/\/+$/, '');
   const res = await fetch(`${base}/.well-known/agent-card.json${view ? '?view=authenticated' : ''}`);
