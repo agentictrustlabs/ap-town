@@ -16,7 +16,8 @@
     "@agenticprimitives/registry-kit": "workspace:*",
     "@agenticprimitives/ontology": "workspace:*",
     "hono": "^4.12.29",
-    "viem": "^2.52.2"
+    "viem": "^2.52.2",
+    "@agenticprimitives/agent-naming": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

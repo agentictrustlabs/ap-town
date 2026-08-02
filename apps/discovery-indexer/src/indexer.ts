@@ -1,3 +1,8 @@
+// namehash lives in `@agenticprimitives/agent-naming`. This file had a LOCAL copy that skipped
+// `normalizeAgentName`, so any name containing uppercase produced a DIFFERENT on-chain node than
+// the package computes — `Alice.agent` and `alice.agent` resolved to unrelated nodes, and a UI
+// using the copy would claim one the resolver can never find.
+import { namehash } from '@agenticprimitives/agent-naming';
 // The discovery indexer core.
 //
 // Population = the agent-naming service: walk `childLabelhashes` under each configured TLD parent
@@ -47,11 +52,7 @@ export interface IndexerConfig {
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000';
 const ROOT = `0x${'00'.repeat(32)}` as Hex;
 const labelhash = (l: string): Hex => keccak256(toBytes(l));
-function namehash(name: string): Hex {
-  let node: Hex = ROOT;
-  for (const l of name.split('.').reverse()) node = keccak256(encodePacked(['bytes32', 'bytes32'], [node, labelhash(l)]));
-  return node;
-}
+
 const ATTESTED_EVENT = ATTESTATION_ABI[0];
 
 async function pool<T, R>(items: T[], limit: number, fn: (t: T) => Promise<R>): Promise<R[]> {
