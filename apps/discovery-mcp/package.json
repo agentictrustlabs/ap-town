@@ -10,7 +10,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "hono": "^4.12.29"
+    "hono": "^4.12.33"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240909.0",
