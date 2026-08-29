@@ -84,6 +84,7 @@ function SearchView({ onOpen }: { onOpen: (key: string, label: string) => void }
               <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap', gap: '.5rem' }}>
                 <h3 style={{ fontSize: '1rem' }}>{r.name ?? '(unnamed)'}</h3>
                 <div className="row" style={{ gap: '.4rem' }}>
+                  {r.agentType && <Pill kind="ok">{r.serviceRole && r.serviceRole !== r.agentType ? `${r.agentType} · ${r.serviceRole}` : r.agentType}</Pill>}
                   {r.registered && <Pill kind="ok">registered</Pill>}
                   <Pill kind={r.shaclConforms ? 'ok' : 'err'}>{r.shaclConforms ? 'SHACL ✓' : 'SHACL ✗'}</Pill>
                   <Pill kind={r.score >= 0.6 ? 'ok' : r.score >= 0.3 ? 'warn' : 'neutral'}>score {r.score.toFixed(2)}</Pill>

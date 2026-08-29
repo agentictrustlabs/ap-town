@@ -26,6 +26,33 @@ export function agentKindClass(value: Hex | string | null | undefined): string |
   return AGENT_KIND_CLASS[value.toLowerCase()] ?? null;
 }
 
+/** Spec 346 §2.3 / §8.5 — the SA-KEYED DERIVED type (`atl:agentType`, bytes32 = keccak256(<DerivedAgentType>)) read
+ *  off the AgentProfileResolver, and its open-set `atl:serviceRole`. Projected as (a) `rdf:type` of the derived
+ *  class (ap:TeamAgent / ap:WorkspaceCoordinator / ap:Treasury / ap:RegistryAgent …) and (b) `ap:agentType` →
+ *  the skos concept in ap:agentTypeScheme. On-chain-derivable only (ADR-0040); never inferred from a suffix. */
+export const AGENT_TYPE_PRED: Hex = keccak256(toHex('atl:agentType'));
+export const SERVICE_ROLE_PRED: Hex = keccak256(toHex('atl:serviceRole'));
+const DERIVED: Array<[string, string, string]> = [
+  // [enum value, derived class local name, agentTypeScheme concept local name]
+  ['person', 'PersonAgent', 'PersonType'],
+  ['org', 'OrganizationAgent', 'OrgType'],
+  ['team', 'TeamAgent', 'TeamType'],
+  ['service', 'ServiceAgent', 'ServiceType'],
+  ['workspace-coordinator', 'WorkspaceCoordinator', 'WorkspaceCoordinatorType'],
+  ['treasury', 'Treasury', 'TreasuryType'],
+  ['registry', 'RegistryAgent', 'RegistryType'],
+];
+const AGENT_TYPE_CLASS: Record<string, string> = Object.fromEntries(DERIVED.map(([v, c]) => [keccak256(toHex(v)), `${NS.ap}${c}`]));
+const AGENT_TYPE_CONCEPT: Record<string, string> = Object.fromEntries(DERIVED.map(([v, , k]) => [keccak256(toHex(v)), `${NS.ap}${k}`]));
+export function agentTypeClass(value: Hex | string | null | undefined): string | null {
+  if (!value || value === ZERO_B32) return null;
+  return AGENT_TYPE_CLASS[value.toLowerCase()] ?? null;
+}
+export function agentTypeConcept(value: Hex | string | null | undefined): string | null {
+  if (!value || value === ZERO_B32) return null;
+  return AGENT_TYPE_CONCEPT[value.toLowerCase()] ?? null;
+}
+
 export const SHAPE = {
   ...ONT_SHAPE,
   // approf profile shape isn't in the package SHAPE map yet; use the canonical NS until it is.
@@ -52,6 +79,11 @@ export const PREDICATE = {
   smartAgent: `${NS.ap}smartAgent`,
   name: `${NS.apnam}name`,
   node: `${NS.apnam}node`,
+  // spec 346 §8.5 — typed naming: the suffix (a projection of the derived type, never authority) and the
+  // SA-keyed derived type + service role (the authority the suffix is validated against).
+  tld: `${NS.apnam}tld`,
+  agentType: `${NS.ap}agentType`,
+  serviceRole: `${NS.ap}serviceRole`,
   // Name-record metadata (AgentNameRegistry storage views — on-chain-derivable, ADR-0040).
   nameRegisteredAt: `${NS.apnam}registeredAt`, // unix seconds the node was registered
   nameExpiry: `${NS.apnam}expiry`,             // unix seconds the registration expires (0 = none)

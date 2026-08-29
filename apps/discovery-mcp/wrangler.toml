@@ -10,3 +10,11 @@ port = 8790
 
 [vars]
 GRAPHDB_QUERY_URL = "https://graphdb.agentkg.io/repositories/smart-agents"
+
+# FAITHNET (chain 34348) — parallel universe over the `smart-agents-faithnet` GraphDB repository.
+# `wrangler deploy --env faithnet`; secrets: GRAPHDB_USER, GRAPHDB_PASSWORD (`--env faithnet`).
+[env.faithnet]
+name = "demo-discovery-mcp-faithnet"
+
+[env.faithnet.vars]
+GRAPHDB_QUERY_URL = "https://graphdb.agentkg.io/repositories/smart-agents-faithnet"

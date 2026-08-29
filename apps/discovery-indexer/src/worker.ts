@@ -39,6 +39,16 @@ interface Env {
   ATTEST_CHUNK?: string;
 }
 
+
+/** `REGISTRY` parsing: unset → the Base Sepolia default; the EMPTY STRING → `null` (no AgentRegistryBase on this chain —
+ *  wrangler binds `VAR = ""` as "" not undefined, so an env that has no registry says so explicitly instead of
+ *  inheriting another chain's address). */
+function registryFromEnv(v: string | undefined, fallback: string): Address | null {
+  if (v === undefined) return fallback as Address;
+  const t = v.trim();
+  return t === '' ? null : (t as Address);
+}
+
 const AGENTS_MAX = 20;
 const CURSOR_KEY = 'watch:lastBlock';
 
@@ -75,7 +85,7 @@ function cfg(env: Env): IndexerConfig {
     nameRegistry: (env.NAME_REGISTRY ?? '0x6629Cca40B008C0984a1Ca266Ca10A344420cac3') as Address,
     resolver: (env.RESOLVER ?? '0xB890060dE1B3Fd2C78e1f0859da3883743eAD452') as Address,
     nameResolver: (env.NAME_RESOLVER ?? '0xA15B0703716DC8634B74F97723618f74Af3AaA73') as Address,
-    registry: (env.REGISTRY ?? '0xB18534CA9c679968132ca2a43E454f5fA341030D') as Address,
+    registry: registryFromEnv(env.REGISTRY, '0xB18534CA9c679968132ca2a43E454f5fA341030D'),
     profileResolver: (env.PROFILE_RESOLVER ?? '0xfcd37F8dca26ead889922b22C169c21370bd352a') as Address,
     relationship: (env.RELATIONSHIP ?? '0x0AF2455e3f76594E81d9042aD5FE22A5A35dc57f') as Address,
     attestationRegistry: (env.ATTESTATION_REGISTRY ?? '0xD57f2e52395b9C99fAE8Abf823578faFe038f5B7') as Address,

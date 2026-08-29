@@ -9,7 +9,10 @@
     "load-ontology": "tsx src/load-ontology.ts",
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "deploy:faithnet": "wrangler deploy --env faithnet",
+    "index:faithnet": "CHAIN_ID=34348 TLDS=impact DISCOVERY_REGISTRY_ID=urn:ap:registry:faithnet-agents NAME_REGISTRY=0x60E949D52660A9D4143ecB0fdA56c0457f20aED9 RESOLVER=0xF343054e046A4145ccae499ECB28197394eE0798 NAME_RESOLVER=0xa5855906C0De3813E74BEe201973071e0c844115 PROFILE_RESOLVER=0xB03F7C06ad3274F584AB72794406D639c02A45e1 RELATIONSHIP=0x5015bD7d422e003511246f848cDd798cb00BB968 ATTESTATION_REGISTRY=0x4c94A0355380b8F5023eDd5f8A8131B020de19FA REGISTRY= tsx src/main.ts",
+    "load-ontology:faithnet": "tsx src/load-ontology.ts"
   },
   "dependencies": {
     "@agenticprimitives/types": "workspace:*",

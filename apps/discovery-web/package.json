@@ -2,14 +2,16 @@
   "name": "@agenticprimitives-demo/discovery",
   "version": "0.0.1-alpha.10",
   "private": true,
-  "description": "Discovery reference UI (demo-discovery): a fixture-driven explorer for the AP-native registry kit (spec 279). Public agent search + per-agent EVIDENCE PATH (signed-card binding, registry entry, claims, SHACL status, cited public facts) verified live in the browser with @agenticprimitives/registry-kit + agent-profile, plus an admin-only ap:abox:pentest exposure-findings view. Demo only — fixture A-box; the production explorer + GraphDB indexer live in external repos (ADR-0037).",
+  "description": "Discovery reference UI (demo-discovery): a fixture-driven explorer for the AP-native registry kit (spec 279). Public agent search + per-agent EVIDENCE PATH (signed-card binding, registry entry, claims, SHACL status, cited public facts) verified live in the browser with @agenticprimitives/registry-kit + agent-profile, plus an admin-only ap:abox:pentest exposure-findings view. Demo only \u2014 fixture A-box; the production explorer + GraphDB indexer live in external repos (ADR-0037).",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p tsconfig.json && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "build:faithnet": "tsc -p tsconfig.json && vite build --mode faithnet",
+    "deploy:faithnet": "pnpm build:faithnet && wrangler deploy --env faithnet"
   },
   "dependencies": {
     "@agenticprimitives/types": "workspace:*",

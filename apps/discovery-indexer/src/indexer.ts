@@ -13,9 +13,9 @@ import { namehash } from '@agenticprimitives/agent-naming';
 // grouped by subject) so per-agent projection stays read-only views.
 
 import { createPublicClient, http, keccak256, toBytes, encodePacked, type Address, type Hex, type PublicClient } from 'viem';
-import { NAME_REGISTRY_ABI, RESOLVER_ABI, REGISTRY_ABI, ATTESTATION_ABI, CUSTODY_EVENTS_ABI, NAMING_EVENTS_ABI, REGISTRY_EVENTS_ABI, NAME_ATTR_RESOLVER_ABI, NAME_ATTRIBUTE_EVENTS_ABI, PROFILE_EVENTS_ABI } from './abi.js';
+import { NAME_REGISTRY_ABI, RESOLVER_ABI, REGISTRY_ABI, ATTESTATION_ABI, CUSTODY_EVENTS_ABI, NAMING_EVENTS_ABI, REGISTRY_EVENTS_ABI, NAME_ATTR_RESOLVER_ABI, NAME_ATTRIBUTE_EVENTS_ABI, PROFILE_EVENTS_ABI, PROFILE_RESOLVER_ABI } from './abi.js';
 import type { AboxStore, AgentNode } from './store.js';
-import { AGENT_KIND_PRED, agentKindClass } from './ontology.js';
+import { AGENT_KIND_PRED, AGENT_TYPE_PRED, agentKindClass, agentTypeClass } from './ontology.js';
 import { PROJECTORS, type ProjectCtx, type AttestationHit } from './projectors.js';
 import { custodyToken } from './custody.js';
 
@@ -31,7 +31,9 @@ export interface IndexerConfig {
   /** AgentNameResolver attribute store (spec 280) — node-keyed a2aEndpoint/mcpEndpoint live here, NOT on the
    *  profileResolver. Distinct from `resolver` (the universal resolver used for resolveName). */
   nameResolver: Address;
-  registry: Address;
+  /** AgentRegistryBase. `null` = not deployed on this chain → the registry facet is projected as ABSENT and the
+   *  watcher skips registry events (never a substitute address from another chain — ADR-0013). */
+  registry: Address | null;
   profileResolver: Address;
   relationship: Address;
   attestationRegistry: Address;
@@ -182,7 +184,9 @@ export class DiscoveryIndexer {
     // Agent-kind subclass from on-chain agentKind (node-keyed on the AgentNameResolver). Null = not declared
     // on-chain → typed only ap:Agent (never inferred from the name; ADR-0040).
     const agentKind = (await this.client.readContract({ address: this.cfg.nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getBytes32', args: [node, AGENT_KIND_PRED] }).catch(() => null)) as Hex | null;
-    return { chainId: this.cfg.chainId, smartAgent: sa, name, node, kindClass: agentKindClass(agentKind), facets, provenance: { source: 'agent-naming:childLabelhashes', block, indexedAt: new Date().toISOString() } };
+    // spec 346 §8.5 — the SA-keyed DERIVED class (ap:TeamAgent / ap:RegistryAgent / …) next to the root kind.
+    const agentType = (await this.client.readContract({ address: this.cfg.profileResolver, abi: PROFILE_RESOLVER_ABI, functionName: 'getBytes32Property', args: [sa, AGENT_TYPE_PRED] }).catch(() => null)) as Hex | null;
+    return { chainId: this.cfg.chainId, smartAgent: sa, name, node, kindClass: agentKindClass(agentKind), derivedClass: agentTypeClass(agentType), facets, provenance: { source: 'agent-naming:childLabelhashes', block, indexedAt: new Date().toISOString() } };
   }
 
   private async collect(parentNode: Hex, depth: number, block: number, attestations: Map<string, AttestationHit[]>, acc: Map<string, AgentNode>): Promise<void> {
@@ -219,14 +223,15 @@ export class DiscoveryIndexer {
       for (const l of logs) { const a = (l.args as { agent?: Address }).agent; if (a) sas.add(a.toLowerCase()); }
     });
     // 2) Registry lifecycle. Registered carries subjectAgent; others resolve it via getEntry.
-    for (const ev of REGISTRY_EVENTS_ABI) {
+    const registry = this.cfg.registry;
+    if (registry) for (const ev of REGISTRY_EVENTS_ABI) {
       await windows(async (s, e) => {
-        const logs = await retry(() => this.logsClient.getLogs({ address: this.cfg.registry, event: ev, fromBlock: s, toBlock: e })).catch(() => []);
+        const logs = await retry(() => this.logsClient.getLogs({ address: registry, event: ev, fromBlock: s, toBlock: e })).catch(() => []);
         for (const l of logs) {
           const a = l.args as { subjectAgent?: Address; registryId?: Hex; entryId?: Hex };
           if (a.subjectAgent) { sas.add(a.subjectAgent.toLowerCase()); continue; }
           if (a.registryId && a.entryId) {
-            const entry = (await this.client.readContract({ address: this.cfg.registry, abi: REGISTRY_ABI, functionName: 'getEntry', args: [a.registryId, a.entryId] }).catch(() => null)) as { subjectAgent: Address } | null;
+            const entry = (await this.client.readContract({ address: registry, abi: REGISTRY_ABI, functionName: 'getEntry', args: [a.registryId, a.entryId] }).catch(() => null)) as { subjectAgent: Address } | null;
             if (entry?.subjectAgent && entry.subjectAgent !== ZERO_ADDR) sas.add(entry.subjectAgent.toLowerCase());
           }
         }

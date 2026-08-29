@@ -8,6 +8,16 @@ export interface Env {
   GRAPHDB_TOKEN?: string;
 }
 
+/** `ap:agentTypeScheme` concept IRI → the DerivedAgentType slug (spec 346 §11). Unknown/absent → null. */
+const AGENT_TYPE_SLUG: Record<string, string> = {
+  PersonType: 'person', OrgType: 'org', TeamType: 'team', ServiceType: 'service',
+  WorkspaceCoordinatorType: 'workspace-coordinator', TreasuryType: 'treasury', RegistryType: 'registry',
+};
+export function derivedTypeSlug(iri: string | undefined): string | null {
+  if (!iri) return null;
+  return AGENT_TYPE_SLUG[iri.split('#').pop() ?? ''] ?? null;
+}
+
 const PREFIXES = `
 PREFIX ap: <https://agenticprimitives.dev/ns/core#>
 PREFIX apnam: <https://agenticprimitives.dev/ns/naming#>
@@ -145,6 +155,12 @@ export interface AgentResult {
    *  collapsed at projection). The honest corroboration count the trust matcher reads; per-CAPABILITY
    *  endorsement detail (for the declared-AND-endorsed fit boost) is a drill-down via getTrustFabric. */
   independentEndorsers?: number;   // ap:independentEndorserCount
+  /** spec 346 §8.5 — the DERIVED agent type slug ('person' | 'org' | 'team' | 'service' | 'workspace-coordinator' |
+   *  'treasury' | 'registry') decoded from `ap:agentType` (the SA-keyed on-chain record), or null when undeclared.
+   *  `tld` is the name's suffix (a projection, never authority); `serviceRole` the open-set role. */
+  agentType?: string | null;
+  tld?: string | null;
+  serviceRole?: string | null;
   /** Agent-kind subclass local name ('PersonAgent' | 'OrganizationAgent' | 'ServiceAgent') or null.
    *  Projected from the on-chain agentKind (ADR-0046 trichotomy); needed so the matcher's `requireKind`
    *  mandate (G7) can filter instead of merely recording a satisfied string. */
@@ -242,7 +258,7 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
   // every consumer gets identical parsing instead of reimplementing it. The triples remain in the graph
   // for SPARQL consumers that want to query BY capability rather than read an agent row.
   const rows = await sparqlSelect(env, `
-    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?ndesc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?edges ?atts ?vatts ?iendorse ?kind WHERE {
+    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?ndesc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?edges ?atts ?vatts ?iendorse ?kind ?atype ?tld ?srole WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa .
       ${extraClause}
       OPTIONAL { ?a apnam:name ?name }
@@ -265,6 +281,9 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
       OPTIONAL { ?a ap:validAttestationCount ?vatts }
       OPTIONAL { ?a ap:independentEndorserCount ?iendorse }
       OPTIONAL { ?a a ?kind . FILTER(?kind IN (ap:PersonAgent, ap:OrganizationAgent, ap:ServiceAgent)) }
+      OPTIONAL { ?a ap:agentType ?atype }
+      OPTIONAL { ?a apnam:tld ?tld }
+      OPTIONAL { ?a ap:serviceRole ?srole }
       OPTIONAL { ?a <http://www.w3.org/ns/shacl#conforms> ?conforms }
       ${filter}
     } ORDER BY ?name LIMIT ${Math.min(Math.max(limit, 1), SEARCH_MAX_LIMIT + 1)}`);
@@ -312,6 +331,9 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
       validAttestations: num(r.vatts),
       independentEndorsers: num(r.iendorse),
       kind: r.kind?.value ? (r.kind.value.split('#').pop() ?? null) : null,
+      agentType: derivedTypeSlug(r.atype?.value),
+      tld: r.tld?.value ?? null,
+      serviceRole: r.srole?.value ?? null,
       facets,
     };
   });
@@ -404,6 +426,12 @@ export interface NameListing {
   registeredAt: number | null;
   /** Unix seconds the registration expires; null = no expiry recorded. */
   expiresAt: number | null;
+  /** spec 346 §8.5 — the DERIVED agent type slug ('person' | 'org' | 'team' | 'service' | 'workspace-coordinator' |
+   *  'treasury' | 'registry') decoded from `ap:agentType` (the SA-keyed on-chain record), or null when undeclared.
+   *  `tld` is the name's suffix (a projection, never authority); `serviceRole` the open-set role. */
+  agentType?: string | null;
+  tld?: string | null;
+  serviceRole?: string | null;
   /** Agent-kind subclass local name ('PersonAgent' | 'OrganizationAgent' | 'ServiceAgent') or null. */
   kind: string | null;
   displayName: string | null;
@@ -423,7 +451,7 @@ export interface NameListing {
  *  projection landed sort last (unbound registeredAt) until the next reindex. */
 export async function listNames(env: Env, limit = 100): Promise<NameListing[]> {
   const rows = await sparqlSelect(env, `
-    SELECT ?sa ?name ?reg ?exp ?kind ?dn ?desc ?ndesc ?ctx ?role ?svc ?site WHERE {
+    SELECT ?sa ?name ?reg ?exp ?kind ?dn ?desc ?ndesc ?ctx ?role ?svc ?site ?atype ?tld ?srole WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa ; apnam:name ?name .
       OPTIONAL { ?a apnam:registeredAt ?reg }
       OPTIONAL { ?a apnam:expiry ?exp }
@@ -435,6 +463,7 @@ export async function listNames(env: Env, limit = 100): Promise<NameListing[]> {
       OPTIONAL { ?a apdisc:serviceUrl ?svc }
       OPTIONAL { ?a apdisc:siteUrl ?site }
       OPTIONAL { ?a a ?kind . FILTER(?kind IN (ap:PersonAgent, ap:OrganizationAgent, ap:ServiceAgent)) }
+      OPTIONAL { ?a ap:agentType ?atype } OPTIONAL { ?a apnam:tld ?tld } OPTIONAL { ?a ap:serviceRole ?srole }
     } ORDER BY DESC(?reg) ?name LIMIT ${Math.min(Math.max(limit, 1), 500)}`);
   return rows.map((r) => ({
     name: r.name!.value,
@@ -442,6 +471,7 @@ export async function listNames(env: Env, limit = 100): Promise<NameListing[]> {
     registeredAt: r.reg?.value ? Number(r.reg.value) : null,
     expiresAt: r.exp?.value ? Number(r.exp.value) : null,
     kind: r.kind?.value ? (r.kind.value.split('#').pop() ?? null) : null,
+    agentType: derivedTypeSlug(r.atype?.value), tld: r.tld?.value ?? null, serviceRole: r.srole?.value ?? null,
     displayName: r.dn?.value ?? null,
     description: r.desc?.value ?? null,
     nameDescription: r.ndesc?.value ?? null,
@@ -455,7 +485,7 @@ export async function listNames(env: Env, limit = 100): Promise<NameListing[]> {
 export async function listAgentsByContext(env: Env, appContext: string, orgRole = '', limit = 100): Promise<NameListing[]> {
   const roleFilter = orgRole ? `?a apdisc:orgRole "${esc(orgRole)}" .` : '';
   const rows = await sparqlSelect(env, `
-    SELECT ?sa ?name ?reg ?exp ?kind ?dn ?desc ?ndesc ?ctx ?role ?svc ?site WHERE {
+    SELECT ?sa ?name ?reg ?exp ?kind ?dn ?desc ?ndesc ?ctx ?role ?svc ?site ?atype ?tld ?srole WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa ; apnam:name ?name ; apdisc:appContext "${esc(appContext)}" .
       ${roleFilter}
       OPTIONAL { ?a apnam:registeredAt ?reg }
@@ -468,6 +498,7 @@ export async function listAgentsByContext(env: Env, appContext: string, orgRole 
       OPTIONAL { ?a apdisc:serviceUrl ?svc }
       OPTIONAL { ?a apdisc:siteUrl ?site }
       OPTIONAL { ?a a ?kind . FILTER(?kind IN (ap:PersonAgent, ap:OrganizationAgent, ap:ServiceAgent)) }
+      OPTIONAL { ?a ap:agentType ?atype } OPTIONAL { ?a apnam:tld ?tld } OPTIONAL { ?a ap:serviceRole ?srole }
     } ORDER BY ?name LIMIT ${Math.min(Math.max(limit, 1), 500)}`);
   return rows.map((r) => ({
     name: r.name!.value,
@@ -475,6 +506,7 @@ export async function listAgentsByContext(env: Env, appContext: string, orgRole 
     registeredAt: r.reg?.value ? Number(r.reg.value) : null,
     expiresAt: r.exp?.value ? Number(r.exp.value) : null,
     kind: r.kind?.value ? (r.kind.value.split('#').pop() ?? null) : null,
+    agentType: derivedTypeSlug(r.atype?.value), tld: r.tld?.value ?? null, serviceRole: r.srole?.value ?? null,
     displayName: r.dn?.value ?? null,
     description: r.desc?.value ?? null,
     nameDescription: r.ndesc?.value ?? null,

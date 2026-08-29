@@ -16,3 +16,23 @@ AGENT_NAME = "discovery.agent"
 [[services]]
 binding = "MCP"
 service = "demo-discovery-mcp"
+
+# FAITHNET (chain 34348) — parallel universe. Service-bound to demo-discovery-mcp-faithnet; served on the
+# custom domain (card: https://discovery-a2a.faithnet.io/.well-known/agent-card.json). CORS is open (`cors()`),
+# so https://discovery.faithnet.io is admitted. The route attaches once the faithnet.io zone is on this account.
+[env.faithnet]
+name = "demo-discovery-a2a-faithnet"
+
+[[env.faithnet.routes]]
+pattern = "discovery-a2a.faithnet.io"
+custom_domain = true
+
+[env.faithnet.vars]
+# spec 346: the discovery agent IS the `.registry` operator — a typed name claimed on 34348 by a service SA that
+# declared `atl:agentType = registry` and created `urn:ap:registry:faithnet-agents` on AgentRegistryBase.
+AGENT_NAME = "discovery.registry"
+A2A_PUBLIC_ORIGIN = "https://discovery-a2a.faithnet.io"
+
+[[env.faithnet.services]]
+binding = "MCP"
+service = "demo-discovery-mcp-faithnet"

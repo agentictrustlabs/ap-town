@@ -53,6 +53,9 @@ export interface AgentNode {
    *  on-chain `agentKind` — null when the agent declares no kind on-chain (then it's typed only ap:Agent;
    *  we never infer kind from names/heuristics, ADR-0040). */
   kindClass?: string | null;
+  /** The DERIVED class IRI (spec 346 §2.1: ap:TeamAgent / ap:WorkspaceCoordinator / ap:Treasury / ap:RegistryAgent …),
+   *  decoded from the SA-keyed on-chain `atl:agentType` — null when undeclared. Never inferred from the suffix. */
+  derivedClass?: string | null;
   facets: ProjectedFacet[];
   provenance: { source: string; block: number; indexedAt: string };
 }
@@ -88,7 +91,7 @@ function nodeToJsonLd(n: AgentNode) {
   const present = n.facets.filter((f) => f.present);
   return {
     '@id': agentIri(n.chainId, n.smartAgent),
-    '@type': n.kindClass ? [CLASS.Agent, n.kindClass] : CLASS.Agent,
+    '@type': [CLASS.Agent, ...(n.kindClass ? [n.kindClass] : []), ...(n.derivedClass ? [n.derivedClass] : [])],
     [PREDICATE.smartAgent]: n.smartAgent,
     [PREDICATE.name]: n.name,
     [PREDICATE.node]: n.node,
@@ -137,6 +140,9 @@ export interface SparqlAuth {
 // profile field is attacker-supplied; a raw newline / tab / control char produced a malformed SPARQL
 // string literal that failed the WHOLE INSERT batch (availability — one self-published card griefs the
 // indexer). Named escapes for the common whitespace controls; \uXXXX for the rest of the C0 range.
+/** A JSON-LD style IRI reference in facet data — serialized as `<iri>`, never as a literal. */
+export const isIriRef = (v: unknown): v is { '@id': string } => typeof v === 'object' && v !== null && typeof (v as { '@id'?: unknown })['@id'] === 'string';
+
 export const lit = (v: string) =>
   `"${v
     .replace(/\\/g, '\\\\')
@@ -181,6 +187,7 @@ export class SparqlGraphStore implements AboxStore {
         subjects.push(s);
         const t = [`${s} a <${CLASS.Agent}> .`, `${s} <${PREDICATE.smartAgent}> ${lit(n.smartAgent)} .`];
         if (n.kindClass) t.push(`${s} a <${n.kindClass}> .`); // agent-kind subclass, when declared on-chain
+        if (n.derivedClass) t.push(`${s} a <${n.derivedClass}> .`); // derived type (spec 346), when declared on-chain
         if (n.name) t.push(`${s} <${PREDICATE.name}> ${lit(n.name)} .`);
         t.push(`${s} <${PREDICATE.node}> ${lit(n.node)} .`);
         t.push(`${s} <${PREDICATE.blockNumber}> ${n.provenance.block} .`);
@@ -201,6 +208,7 @@ export class SparqlGraphStore implements AboxStore {
             for (const item of Array.isArray(v) ? v : [v]) {
               if (typeof item === 'number') t.push(`${s} <${k}> ${item} .`);
               else if (typeof item === 'string') t.push(`${s} <${k}> ${lit(item)} .`);
+              else if (isIriRef(item)) t.push(`${s} <${k}> <${item['@id']}> .`); // object-valued (e.g. ap:agentType → skos concept)
             }
           }
           // First-class child nodes: own subject, typed, linked from the agent — spec 286 Offerings and the
@@ -220,7 +228,7 @@ export class SparqlGraphStore implements AboxStore {
               for (const [k, v] of Object.entries(c.data)) {
                 if (!k.startsWith('http')) continue;
                 for (const item of Array.isArray(v) ? v : [v]) {
-                  t.push(`${ci} <${k}> ${typeof item === 'number' ? item : lit(item)} .`);
+                  t.push(`${ci} <${k}> ${typeof item === 'number' ? item : isIriRef(item) ? `<${item['@id']}>` : lit(item)} .`);
                 }
               }
             }

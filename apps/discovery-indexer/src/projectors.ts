@@ -9,6 +9,7 @@ import { RESOLVER_ABI, NAME_REGISTRY_ABI, REGISTRY_ABI, REGISTRY_STATUS, PROFILE
 import {
   PREDICATE, SHAPE, OFFERING_CLASS, offeringIri,
   RELATIONSHIP_EDGE_CLASS, ATTESTATION_CLASS, relationshipEdgeIri, attestationIri, relationshipTypeLabel,
+  AGENT_TYPE_PRED, SERVICE_ROLE_PRED, agentTypeConcept,
 } from './ontology.js';
 import type { ProjectedChildNode, ProjectedFacet } from './store.js';
 
@@ -31,7 +32,7 @@ export interface ProjectCtx {
   resolver: Address;
   /** AgentNameResolver attribute store (spec 280) — node-keyed a2aEndpoint/mcpEndpoint read via getString. */
   nameResolver: Address;
-  registry: Address;
+  registry: Address | null;
   profileResolver: Address;
   relationship: Address;
   discoveryRegistryId: string;
@@ -66,6 +67,9 @@ const naming: FacetProjector = {
     if (registeredAt > 0n) data[PREDICATE.nameRegisteredAt] = Number(registeredAt);
     const expiry = (await client.readContract({ address: nameRegistry, abi: NAME_REGISTRY_ABI, functionName: 'expiry', args: [node] }).catch(() => 0n)) as bigint;
     if (expiry > 0n) data[PREDICATE.nameExpiry] = Number(expiry);
+    // spec 346 §8.5 — the root suffix of the on-chain name (`.impact` / `.agent` = untyped legacy; the seven typed
+    // roots name a derived type). A projection of the string, never parsed as authority.
+    if (name) { const tld = name.split('.').pop(); if (tld) data[PREDICATE.tld] = tld; }
     return { kind: 'naming', present: true, shapeIri: SHAPE.CanonicalAgentId, conforms: !!name, data };
   },
 };
@@ -145,6 +149,12 @@ const profile: FacetProjector = {
       const v = (await client.readContract({ address: nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getString', args: [node, pred(key)] }).catch(() => '')) as string;
       if (v) data[iri] = v;
     }
+    // spec 346 §2.3 — the SA-keyed derived type (bytes32 enum) → the agentTypeScheme concept, and its role.
+    const typeId = (await client.readContract({ address: profileResolver, abi: PROFILE_RESOLVER_ABI, functionName: 'getBytes32Property', args: [sa, AGENT_TYPE_PRED] }).catch(() => null)) as Hex | null;
+    const concept = agentTypeConcept(typeId);
+    if (concept) data[PREDICATE.agentType] = { '@id': concept };
+    const role = (await client.readContract({ address: profileResolver, abi: PROFILE_RESOLVER_ABI, functionName: 'getStringProperty', args: [sa, SERVICE_ROLE_PRED] }).catch(() => '')) as string;
+    if (role) data[PREDICATE.serviceRole] = role;
     // Spec 331 W2 — project the CAPABILITY IDS out of atl:skills as their own triples.
     //
     // LENIENT by design: any CURIE-shaped token becomes a declaration, WITHOUT checking that a
@@ -175,7 +185,8 @@ const profile: FacetProjector = {
 const registry: FacetProjector = {
   kind: 'registry',
   async project({ client, registry: reg, discoveryRegistryId, name }) {
-    if (!name) return { kind: 'registry', present: false, shapeIri: SHAPE.RegistryEntry, conforms: true, data: {} };
+    // No AgentRegistryBase on this chain (e.g. faithchain until `deploy:registries:faithchain` runs) → absent, never guessed.
+    if (!name || !reg) return { kind: 'registry', present: false, shapeIri: SHAPE.RegistryEntry, conforms: true, data: {} };
     const regId = urn(discoveryRegistryId);
     const entryId = urn(`urn:ap:registry-entry:${name}`);
     try {

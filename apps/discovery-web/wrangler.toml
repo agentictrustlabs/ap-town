@@ -1,0 +1,21 @@
+# demo-discovery UI — assets-only Worker (the Gather27 `[assets]` pattern).
+#
+# PRODUCTION stays the Cloudflare Pages project `agenticprimitives-demo-discovery` (Base Sepolia +
+# smart-agents) — this file does NOT retarget it; there is deliberately no default-env deploy here.
+# The only deployable env is `faithnet`: `pnpm build:faithnet && pnpm deploy:faithnet`.
+name = "demo-discovery-web"
+compatibility_date = "2026-06-01"
+
+[assets]
+directory = "./dist"
+not_found_handling = "single-page-application"
+
+# FAITHNET (chain 34348) — parallel universe on discovery.faithnet.io. Built with `vite build --mode
+# faithnet` (.env.faithnet → VITE_DISCOVERY_A2A_URL=https://discovery-a2a.faithnet.io). The custom domain
+# attaches once the faithnet.io zone is on this Cloudflare account (CNAME `discovery` → Cloudflare).
+[env.faithnet]
+name = "demo-discovery-web-faithnet"
+
+[[env.faithnet.routes]]
+pattern = "discovery.faithnet.io"
+custom_domain = true

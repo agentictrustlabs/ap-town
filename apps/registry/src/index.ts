@@ -54,6 +54,8 @@ interface OfferingLite { skillId: string; effect?: string | null; family?: strin
 interface EndorsementLite { issuer: string; skillId: string; valid: boolean; issuedAt: number }
 interface AgentResult {
   agent: string; name: string | null; smartAgent: string; facets: string[]; shaclConforms: boolean;
+  /** spec 346 — derived type slug / name suffix / service role, as the MCP surfaces them (null when undeclared). */
+  agentType?: string | null; tld?: string | null; serviceRole?: string | null;
   registryStatus?: string | null; displayName?: string | null; skills?: string | null;
   /** `approf:description` — the agent's OWN, SA-keyed self-description. Every use below (the requireSkill
    *  haystack, the `geo` fallback, the lexical haystack) means THIS tier and only this tier.
@@ -511,6 +513,9 @@ function matchCandidate(a: AgentResult, intent: Intent, satisfiedMandates: strin
     offerings: a.offerings ?? [],
     // Structured discovery facets + trust fabric, surfaced so a caller can see WHY a candidate ranked.
     kind: a.kind ?? null, languages: a.languages ?? null, regions: a.regions ?? null, focusAreas: a.focusAreas ?? null,
+    // spec 346 §8.5 — the DERIVED type (from the SA-keyed on-chain record), the name's suffix (a projection,
+    // never authority) and the service role. Surfaced so a caller can group by type; never a ranking input.
+    agentType: a.agentType ?? null, tld: a.tld ?? null, serviceRole: a.serviceRole ?? null,
     activeRelationships: a.activeRelationships ?? 0, attestations: a.attestations ?? 0, validAttestations: a.validAttestations ?? 0,
     // Claimed-capability tier — the honest independent-endorser count, plus the capability ids this
     // candidate was BOTH declared AND independently endorsed for (the ones the fit boost fired on).

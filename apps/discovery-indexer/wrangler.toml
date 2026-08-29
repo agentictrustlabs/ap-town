@@ -36,3 +36,47 @@ crons = ["* * * * *"]
 [[kv_namespaces]]
 binding = "INDEXER_STATE"
 id = "fc19d6789ce34373b6a759c819129434"
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# FAITHNET (Azure faithchain, chain 34348) — a PARALLEL universe: `wrangler deploy --env faithnet`.
+# Nothing here touches the production Worker above (Base Sepolia + smart-agents). Addresses come from
+# packages/contracts/deployments-faithchain.json (the same table Field/Gather use). Faithnet names are
+# still `.impact` (typed roots — spec 346 — are not yet provisioned on 34348).
+#
+# Secrets (wrangler secret put <NAME> --env faithnet): GRAPHDB_USER, GRAPHDB_PASSWORD
+#   RPC_URL      — set below as a var: https://a2a.faithnet.io/rpc (the browser-safe read relay Field's Worker uses; Workers
+#                  cannot see the VNet) or https://rpc.faithnet.io with its per-app Bearer (then also
+#                  set it as a secret — never a var). LOGS_RPC_URL below is the same relay; if the relay
+#                  does not allow eth_getLogs windows, point LOGS_RPC_URL at the gateway via secret.
+# REGISTRY = AgentRegistryBase on 34348 (deployed 2026-08-29, deployments-faithchain.json). Set it to ""
+#   on any env whose chain has no registry: the empty string projects the facet as ABSENT
+#   (src/worker.ts registryFromEnv) — never another chain's address.
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+[env.faithnet]
+name = "demo-discovery-indexer-faithnet"
+
+[env.faithnet.vars]
+GRAPHDB_URL = "https://graphdb.agentkg.io/repositories/smart-agents-faithnet/statements"
+CHAIN_ID = "34348"
+NAME_REGISTRY = "0x60E949D52660A9D4143ecB0fdA56c0457f20aED9"
+RESOLVER = "0xF343054e046A4145ccae499ECB28197394eE0798"
+NAME_RESOLVER = "0xa5855906C0De3813E74BEe201973071e0c844115"
+PROFILE_RESOLVER = "0xB03F7C06ad3274F584AB72794406D639c02A45e1"
+RELATIONSHIP = "0x5015bD7d422e003511246f848cDd798cb00BB968"
+ATTESTATION_REGISTRY = "0x4c94A0355380b8F5023eDd5f8A8131B020de19FA"
+REGISTRY = "0x1791316684f08ca7158c639C528980d780B47051"
+TLDS = "impact"
+DISCOVERY_REGISTRY_ID = "urn:ap:registry:faithnet-agents"
+# RPC_URL as a VAR (the relay URL is public; a var of the same name would clobber a secret — keep ONE):
+# the worker must never fall back to its Base Sepolia default on this env.
+RPC_URL = "https://a2a.faithnet.io/rpc"
+LOGS_RPC_URL = "https://a2a.faithnet.io/rpc"
+WATCH_MAX_BLOCKS = "20000"
+
+[env.faithnet.triggers]
+crons = ["* * * * *"]
+
+# Separate cursor — different chain, never the production namespace.
+[[env.faithnet.kv_namespaces]]
+binding = "INDEXER_STATE"
+id = "573ce8cd2a8d4ea7878147c7283318ae"

@@ -12,6 +12,11 @@ export interface DiscoverResult {
   shaclConforms: boolean;
   registered?: boolean;
   skills?: string | null; // publicly-asserted skill labels (spec 282)
+  /** spec 346 — the DERIVED agent type declared on chain (person | org | team | service | workspace-coordinator |
+   *  treasury | registry), the name's suffix, and the service role. Null when the agent has not declared a type. */
+  agentType?: string | null;
+  tld?: string | null;
+  serviceRole?: string | null;
   score: number;
   why: string[];
   satisfiedMandates?: string[];
