@@ -125,9 +125,12 @@ export class DiscoveryIndexer {
   }
 
   /** Binary-search an agent's deploy block via eth_getCode (no log scan, no range limit). null if undeployed. */
-  private async deployBlock(sa: Address, latest: bigint): Promise<bigint | null> {
+  /** The block an SA's code first appears at (bisection over eth_getCode, archive RPC required). `'undeployed'` when
+   *  there is no code at `latest` (a counterfactual SA — genuinely no custody events); THROWS on RPC failure so the
+   *  caller can tell "no custody" from "could not look". */
+  private async deployBlock(sa: Address, latest: bigint): Promise<bigint | 'undeployed'> {
     const has = async (b: bigint) => { const c = await retry(() => this.client.getCode({ address: sa, blockNumber: b })); return !!c && c !== '0x'; };
-    if (!(await has(latest).catch(() => false))) return null;
+    if (!(await has(latest))) return 'undeployed';
     let lo = 0n, hi = latest;
     while (lo < hi) { const mid = (lo + hi) / 2n; if (await has(mid)) hi = mid; else lo = mid + 1n; }
     return lo;
@@ -148,9 +151,14 @@ export class DiscoveryIndexer {
     const LOG_CHUNK = 1999n;
     const window = BigInt(Math.max(0, this.cfg.custodyWindow));
     let dropped = 0;
+    let unlocated = 0;
     await pool(agents, Math.min(2, this.cfg.concurrency), async (sa) => {
       const dep = await this.deployBlock(sa, latest).catch(() => null);
-      if (dep === null) return;
+      // A deploy-block bisection that fails (historical eth_getCode unsupported / rate-limited) is NOT
+      // "this agent has no custodians" — count it so the caller can refuse to treat the scan as complete.
+      // An UNDEPLOYED (counterfactual) SA has no custody events at all: skip it, that is a complete answer.
+      if (dep === null) { unlocated++; return; }
+      if (dep === 'undeployed') return;
       const end = dep + window > latest ? latest : dep + window;
       const creds = new Set<string>();
       for (const ev of CUSTODY_EVENTS_ABI) {
@@ -170,8 +178,15 @@ export class DiscoveryIndexer {
       for (const cred of creds) tokens.add(custodyToken(cred, sa));
     });
     if (dropped) console.warn(`[agent-indexer] WARNING: ${dropped} custody log chunk(s) failed after retries — custody coverage may be incomplete; re-run.`);
+    if (unlocated) console.warn(`[agent-indexer] WARNING: deploy block not located for ${unlocated}/${agents.length} agent(s) (historical eth_getCode failed) — custody coverage incomplete.`);
+    this.lastCustodyScanComplete = dropped === 0 && unlocated === 0;
     return [...tokens];
   }
+
+  /** Whether the last `scanCustody` located every agent and read every log chunk. A full run only REPLACES the
+   *  custody graph on a complete scan; an incomplete or empty one preserves what is indexed (ADR-0013: a failed
+   *  crawl is not "zero", and a blanked custody graph breaks credential → home resolution for everyone). */
+  private lastCustodyScanComplete = true;
 
   private async childNodes(parentNode: Hex): Promise<Hex[]> {
     const lhs = (await this.client.readContract({ address: this.cfg.nameRegistry, abi: NAME_REGISTRY_ABI, functionName: 'childLabelhashes', args: [parentNode] }).catch(() => [] as readonly Hex[])) as readonly Hex[];
@@ -300,8 +315,12 @@ export class DiscoveryIndexer {
     for (const tld of this.cfg.tlds) await this.collect(namehash(tld), 1, Number(latest), attestations, acc);
     const nodes = [...acc.values()];
     const custodyTokens = await this.scanCustody(latest, nodes.map((n) => n.smartAgent as Address));
+    const custodyComplete = this.lastCustodyScanComplete && (nodes.length === 0 || custodyTokens.length > 0);
+    if (!custodyComplete) {
+      console.warn(`[agent-indexer] custody scan INCOMPLETE (${custodyTokens.length} tokens for ${nodes.length} agents) — existing custody graph PRESERVED, not replaced. Fix the RPC and re-run (scripts/rebuild-custody.ts).`);
+    }
     await this.store.upsert(nodes);
-    await this.store.setCustodyTokens(custodyTokens);
+    if (custodyComplete) await this.store.setCustodyTokens(custodyTokens);
     await this.store.flush();
     return { count: nodes.length, registered: nodes.filter((n) => n.facets.some((f) => f.kind === 'registry' && f.present)).length, custodyTokens: custodyTokens.length, nodes };
   }
