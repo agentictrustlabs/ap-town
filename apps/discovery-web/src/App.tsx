@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CONTRACTS } from '@agenticprimitives/contracts/deployments/base-sepolia';
 import { CLASS } from '@agenticprimitives/ontology';
-import { discover, getAgentDetail, fetchA2aCard, getOfferings, DISCOVERY_AGENT_URL, type DiscoverResponse, type AgentDetail, type A2aCard, type CrawledOffering } from './lib/discovery-a2a';
+import { discover, getAgentDetail, fetchA2aCard, getOfferings, DISCOVERY_AGENT_URL, type DiscoverResponse, type AgentDetail, type A2aCard, type CrawledOffering, getFacets, type Facets, type DiscoverMandates } from './lib/discovery-a2a';
 import { Pill, Spinner, short } from './components/ui';
 
 // Single live source of truth: everything reads the GraphDB A-box through the discovery agent + MCP. (The
@@ -40,43 +40,126 @@ export function App() {
   );
 }
 
+// ── Search filters (design 2026-08-30) ──────────────────────────────────────────────────────────────────
+// Type = a HARD mandate over structural facts (never a ranking input — spec 346 §8.3 keeps signals separate):
+// a root pick → requireKind; a derived pick → requireAgentType (undeclared agents count as the generic type of
+// their root). Skill = a searchable picker over the capability ids agents actually DECLARED (KB facets, never
+// the downstream catalog); a picked id is a hard, fail-open mandate; free text that matches no option is a
+// SOFT intent term. Filters live in the URL so a search is shareable.
+type TypeChoice = { value: string; label: string; kind: 'root' | 'derived'; root: 'person' | 'org' | 'service' };
+const TYPE_CHOICES: TypeChoice[] = [
+  { value: 'person', label: 'Person', kind: 'root', root: 'person' },
+  { value: 'org', label: 'Organization', kind: 'root', root: 'org' },
+  { value: 'org:org', label: 'Organization (plain)', kind: 'derived', root: 'org' },
+  { value: 'org:team', label: 'Team', kind: 'derived', root: 'org' },
+  { value: 'org:church', label: 'Church', kind: 'derived', root: 'org' },
+  { value: 'org:circle', label: 'Circle', kind: 'derived', root: 'org' },
+  { value: 'service', label: 'Service', kind: 'root', root: 'service' },
+  { value: 'service:service', label: 'Service (plain)', kind: 'derived', root: 'service' },
+  { value: 'service:workspace-coordinator', label: 'Workspace coordinator', kind: 'derived', root: 'service' },
+  { value: 'service:treasury', label: 'Treasury', kind: 'derived', root: 'service' },
+  { value: 'service:registry', label: 'Registry', kind: 'derived', root: 'service' },
+];
+const typeLabel = (v: string) => TYPE_CHOICES.find((t) => t.value === v)?.label ?? v;
+function readUrl(): { q: string; type: string; skill: string; registered: boolean } {
+  const p = new URLSearchParams(window.location.search);
+  return { q: p.get('q') ?? '', type: p.get('type') ?? '', skill: p.get('skill') ?? '', registered: p.get('registered') === '1' };
+}
+function writeUrl(s: { q: string; type: string; skill: string; registered: boolean }) {
+  const p = new URLSearchParams();
+  if (s.q) p.set('q', s.q); if (s.type) p.set('type', s.type); if (s.skill) p.set('skill', s.skill); if (s.registered) p.set('registered', '1');
+  const qs = p.toString();
+  window.history.replaceState(null, '', qs ? `?${qs}` : window.location.pathname);
+}
+
 function SearchView({ onOpen }: { onOpen: (key: string, label: string) => void }) {
-  const [intent, setIntent] = useState('');
-  const [requireRegistered, setRequireRegistered] = useState(false);
-  const [requireSkill, setRequireSkill] = useState('');
+  const initial = readUrl();
+  const [intent, setIntent] = useState(initial.q);
+  const [requireRegistered, setRequireRegistered] = useState(initial.registered);
+  const [type, setType] = useState(initial.type);
+  const [skill, setSkill] = useState(initial.skill);
+  const [facets, setFacets] = useState<Facets | null>(null);
   const [resp, setResp] = useState<DiscoverResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  useEffect(() => { getFacets().then(setFacets).catch(() => setFacets(null)); }, []);
+  const capabilityIds = facets?.capabilityIds ?? [];
+  const skillIsId = capabilityIds.some((c) => c.value.toLowerCase() === skill.trim().toLowerCase());
+  const countFor = (choice: TypeChoice) => {
+    if (!facets) return null;
+    if (choice.kind === 'root') return facets.kinds.find((k) => k.value === choice.value)?.count ?? 0;
+    const slug = choice.value.split(':')[1]!;
+    const declared = facets.agentTypes.find((t) => t.value === slug)?.count ?? 0;
+    return declared;
+  };
   const run = async () => {
     setLoading(true); setResp(null);
-    try { setResp(await discover({ intent: intent || undefined, mandates: { requireRegistered, requireSkill: requireSkill.trim() || undefined } })); }
+    const mandates: DiscoverMandates = { requireRegistered };
+    if (type) { const c = TYPE_CHOICES.find((t) => t.value === type); if (c?.kind === 'root') mandates.requireKind = c.value; else if (c) mandates.requireAgentType = c.value.split(':')[1]; }
+    const skillText = skill.trim();
+    if (skillText && skillIsId) mandates.requireCapabilityId = skillText;
+    const intentObj = { ...(intent ? { need: intent } : {}), ...(skillText && !skillIsId ? { skills: [skillText] } : {}) };
+    writeUrl({ q: intent, type, skill, registered: requireRegistered });
+    try { setResp(await discover({ intent: Object.keys(intentObj).length ? intentObj : undefined, mandates })); }
     catch (e) { setResp({ ok: false, query: '', intent: null, results: [], error: String(e) }); }
     finally { setLoading(false); }
   };
+  const chips: { key: string; label: string; clear: () => void }[] = [];
+  if (type) chips.push({ key: 'type', label: `Type: ${typeLabel(type)}`, clear: () => setType('') });
+  if (skill.trim()) chips.push({ key: 'skill', label: `${skillIsId ? 'Capability' : 'Skill (soft)'}: ${skill.trim()}`, clear: () => setSkill('') });
+  if (requireRegistered) chips.push({ key: 'registered', label: 'Registered only', clear: () => setRequireRegistered(false) });
+  const dropped = resp?.ok ? resp.droppedBy ?? {} : {};
+  const droppedNote = [
+    dropped.requireAgentType || dropped.requireKind ? `${(dropped.requireAgentType ?? 0) + (dropped.requireKind ?? 0)} dropped by the type filter` : null,
+    dropped.requireCapabilityId || dropped.requireSkill ? `${(dropped.requireCapabilityId ?? 0) + (dropped.requireSkill ?? 0)} dropped by the skill filter` : null,
+    dropped.requireRegistered ? `${dropped.requireRegistered} not registered` : null,
+  ].filter(Boolean).join(' · ');
   return (
     <>
       <p className="eyebrow">Search · agent service</p>
       <h1 style={{ marginBottom: '.4rem' }}>Find an agent for what you need</h1>
       <p className="muted" style={{ marginBottom: '1rem' }}>
-        <b>UI → A2A → MCP → GraphDB.</b> Describe your need; the agent ranks candidates by fit + verifiable trust (0.6·fit + 0.4·trust). Add mandates to hard-filter. Click a result for its full node.
+        <b>UI → A2A → MCP → GraphDB.</b> Describe your need; the agent ranks candidates by fit + verifiable trust (0.6·fit + 0.4·trust). Type and a picked capability are hard filters; free-text skills only shape the ranking. Click a result for its full node.
       </p>
       <div className="card" style={{ marginBottom: '1.2rem' }}>
         <input className="input" placeholder="What do you need? e.g. 'help managing a treasury'" value={intent} onChange={(e) => setIntent(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') run(); }} style={{ marginBottom: '.6rem' }} />
-        <div className="row" style={{ gap: '1rem', flexWrap: 'wrap', marginBottom: '.7rem', alignItems: 'center' }}>
+        <div className="row" style={{ gap: '.8rem', flexWrap: 'wrap', marginBottom: '.7rem', alignItems: 'center' }}>
+          <select className="input" value={type} onChange={(e) => setType(e.target.value)} style={{ marginBottom: 0, width: 'auto', minWidth: 190 }} aria-label="Agent type">
+            <option value="">Type: All</option>
+            <option value="person">Person{facets ? ` (${countFor(TYPE_CHOICES[0]!)})` : ''}</option>
+            <optgroup label="Organization">
+              {TYPE_CHOICES.filter((t) => t.root === 'org').map((t) => <option key={t.value} value={t.value}>{t.kind === 'root' ? 'All organizations' : t.label}{facets ? ` (${countFor(t)})` : ''}</option>)}
+            </optgroup>
+            <optgroup label="Service">
+              {TYPE_CHOICES.filter((t) => t.root === 'service').map((t) => <option key={t.value} value={t.value}>{t.kind === 'root' ? 'All services' : t.label}{facets ? ` (${countFor(t)})` : ''}</option>)}
+            </optgroup>
+          </select>
+          <input className="input" list="discovery-capabilities" placeholder="Skill: search or pick a declared capability…" value={skill} onChange={(e) => setSkill(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') run(); }} style={{ flex: 1, minWidth: 220, marginBottom: 0 }} aria-label="Skill" />
+          <datalist id="discovery-capabilities">
+            {capabilityIds.map((c) => <option key={c.value} value={c.value}>{`${c.count} agent${c.count === 1 ? '' : 's'}`}</option>)}
+          </datalist>
           <label className="row" style={{ gap: '.4rem', cursor: 'pointer', fontSize: '.85rem' }}>
             <input type="checkbox" checked={requireRegistered} onChange={(e) => setRequireRegistered(e.target.checked)} /> Registered only
           </label>
-          <input className="input" placeholder="Required skill (optional)…" value={requireSkill} onChange={(e) => setRequireSkill(e.target.value)} style={{ flex: 1, minWidth: 160, marginBottom: 0 }} />
         </div>
+        {chips.length > 0 && (
+          <div className="row" style={{ gap: '.4rem', flexWrap: 'wrap', marginBottom: '.7rem' }}>
+            {chips.map((c) => <button key={c.key} className="btn" onClick={c.clear} title="Remove filter" style={{ fontSize: '.78rem', padding: '.15rem .55rem' }}>{c.label} ✕</button>)}
+            {facets && type.includes(':') && facets.undeclaredType > 0 && <span className="cite">{facets.undeclaredType} agents have no declared type (counted as their root's generic type)</span>}
+          </div>
+        )}
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <button className="btn --p" onClick={run} disabled={loading}>{loading ? <Spinner /> : 'Discover'}</button>
-          <span className="cite">agent: <a href={`${DISCOVERY_AGENT_URL}/.well-known/agent-card.json`} target="_blank" rel="noreferrer">discovery.agent</a></span>
+          <span className="cite">agent: <a href={`${DISCOVERY_AGENT_URL}/.well-known/agent-card.json`} target="_blank" rel="noreferrer">discovery.registry</a></span>
         </div>
       </div>
       {loading && <div className="row"><Spinner /> <span className="muted">A2A → MCP → GraphDB…</span></div>}
+      {resp?.ok && resp.results.length === 0 && (
+        <div className="card"><b>No agents match {chips.length ? chips.map((c) => c.label).join(' + ') : 'this search'}.</b>{droppedNote ? <span className="muted"> {droppedNote} — remove a filter to see them.</span> : null}</div>
+      )}
       {resp && !resp.ok && <div className="card"><Pill kind="err">error</Pill> <span className="muted">{resp.error}</span></div>}
       {resp?.ok && (
         <>
-          <p className="cite" style={{ marginBottom: '1rem' }}>{resp.results.length} match(es){typeof resp.droppedByMandates === 'number' && resp.droppedByMandates > 0 ? ` · ${resp.droppedByMandates} dropped by mandates` : ''} · {resp.source}</p>
+          <p className="cite" style={{ marginBottom: '1rem' }}>{resp.results.length} match(es){droppedNote ? ` · ${droppedNote}` : ''} · {resp.source}</p>
           {resp.results.map((r) => {
             const skills = (r.skills ?? '').split(',').map((s) => s.trim()).filter(Boolean);
             return (

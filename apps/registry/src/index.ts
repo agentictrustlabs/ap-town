@@ -108,6 +108,11 @@ interface Intent {
 }
 interface Mandates {
   requireRegistered?: boolean; requireShaclConforms?: boolean; requireKind?: string;
+  /** spec 346 — the DERIVED agent type slug (person | org | team | service | workspace-coordinator | treasury |
+   *  registry | church | circle). HARD, exact. An agent with NO declared type is treated as the GENERIC type of
+   *  its root (an undeclared org-root agent IS an organization, but is not a team/church/circle) — so
+   *  requireAgentType='org' keeps legitimate undeclared orgs, while 'team' never floods with unknowns. */
+  requireAgentType?: string;
   requireSkill?: string; requireSkillId?: string; geo?: string;
   requireLanguage?: string; requireRegion?: string;
   /** Spec 331 — the one facet filter that is safe by construction: an id was declared or it was not,
@@ -250,13 +255,26 @@ const isRegistered = (a: AgentResult) => a.registryStatus === 'active' || a.face
 
 /** Hard MANDATE filter: returns the list of satisfied mandate keys, or null if ANY required mandate fails
  *  (→ candidate dropped). Derived purely from public facets (ADR-0040). */
-function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | null {
+/** The mandate key that eliminated a candidate — surfaced per key in the response (`droppedBy`) so the UI can say
+ *  WHICH filter emptied the list, not just that one did. */
+type MandateKey = keyof Mandates;
+const GENERIC_OF_ROOT: Record<string, string> = { person: 'person', org: 'org', organization: 'org', service: 'service' };
+
+function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | { failed: MandateKey } {
   const satisfied: string[] = [];
   if (!m) return satisfied;
-  if (m.requireRegistered) { if (!isRegistered(a)) return null; satisfied.push('registered'); }
-  if (m.requireShaclConforms) { if (!a.shaclConforms) return null; satisfied.push('shaclConforms'); }
-  if (m.requireSkill) { const hay = [a.skills, a.description, a.displayName, ...(a.offerings ?? []).map((o) => o.skillId)].filter(Boolean).join(' ').toLowerCase(); if (!hay.includes(m.requireSkill.toLowerCase())) return null; satisfied.push(`skill:${m.requireSkill}`); }
-  if (m.requireSkillId) { const want = m.requireSkillId.toLowerCase(); if (!(a.offerings ?? []).some((o) => o.skillId.toLowerCase().includes(want))) return null; satisfied.push(`offering:${m.requireSkillId}`); }
+  if (m.requireRegistered) { if (!isRegistered(a)) return { failed: 'requireRegistered' }; satisfied.push('registered'); }
+  if (m.requireShaclConforms) { if (!a.shaclConforms) return { failed: 'requireShaclConforms' }; satisfied.push('shaclConforms'); }
+  if (m.requireSkill) { const hay = [a.skills, a.description, a.displayName, ...(a.offerings ?? []).map((o) => o.skillId)].filter(Boolean).join(' ').toLowerCase(); if (!hay.includes(m.requireSkill.toLowerCase())) return { failed: 'requireSkill' }; satisfied.push(`skill:${m.requireSkill}`); }
+  if (m.requireSkillId) { const want = m.requireSkillId.toLowerCase(); if (!(a.offerings ?? []).some((o) => o.skillId.toLowerCase().includes(want))) return { failed: 'requireSkillId' }; satisfied.push(`offering:${m.requireSkillId}`); }
+  if (m.requireAgentType) {
+    const want = m.requireAgentType.toLowerCase();
+    const declared = (a.agentType ?? '').toLowerCase();
+    const rootGeneric = GENERIC_OF_ROOT[(a.kind ?? '').toLowerCase().replace(/agent$/, '')] ?? null;
+    const ok = declared ? declared === want : rootGeneric === want; // undeclared ⇒ the generic type of its root
+    if (!ok) return { failed: 'requireAgentType' };
+    satisfied.push(`agentType:${m.requireAgentType}${declared ? '' : ' (undeclared, by root)'}`);
+  }
   // G3 — `geo` used to be a substring search over the free-text description blob, applied as a HARD filter:
   // an advisor who covers the EU but lacks the literal token was silently eliminated. It is now set
   // membership over the agent's published `approf:regions` codes, with the description search kept ONLY as
@@ -266,7 +284,7 @@ function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | null {
     const want = m.geo.toLowerCase();
     const regions = codeSet(a.regions);
     const ok = regions.length ? regions.includes(want) : (a.description ?? '').toLowerCase().includes(want);
-    if (!ok) return null;
+    if (!ok) return { failed: 'geo' };
     satisfied.push(`geo:${m.geo}`);
   }
   // Spec 331 §4.3 — hard, and safe: exact set membership over declared ids, with the exemption that
@@ -276,13 +294,13 @@ function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | null {
   if (m.requireCapabilityId) {
     const want = m.requireCapabilityId.toLowerCase();
     const declared = (a.capabilityIds ?? []).map((x) => x.toLowerCase());
-    if (declared.length && !declared.includes(want)) return null;
+    if (declared.length && !declared.includes(want)) return { failed: 'requireCapabilityId' };
     satisfied.push(`capability:${m.requireCapabilityId}`);
   }
-  if (m.requireRegion) { const want = m.requireRegion.toLowerCase(); if (!codeSet(a.regions).includes(want)) return null; satisfied.push(`region:${m.requireRegion}`); }
-  if (m.requireLanguage) { const want = m.requireLanguage.toLowerCase(); if (!langMatches(codeSet(a.languages), want)) return null; satisfied.push(`language:${m.requireLanguage}`); }
-  if (m.requireAttestation) { if (!(a.validAttestations ?? 0)) return null; satisfied.push('attested'); }
-  if (m.requireRelationship) { if (!(a.activeRelationships ?? 0)) return null; satisfied.push('relationship'); }
+  if (m.requireRegion) { const want = m.requireRegion.toLowerCase(); if (!codeSet(a.regions).includes(want)) return { failed: 'requireRegion' }; satisfied.push(`region:${m.requireRegion}`); }
+  if (m.requireLanguage) { const want = m.requireLanguage.toLowerCase(); if (!langMatches(codeSet(a.languages), want)) return { failed: 'requireLanguage' }; satisfied.push(`language:${m.requireLanguage}`); }
+  if (m.requireAttestation) { if (!(a.validAttestations ?? 0)) return { failed: 'requireAttestation' }; satisfied.push('attested'); }
+  if (m.requireRelationship) { if (!(a.activeRelationships ?? 0)) return { failed: 'requireRelationship' }; satisfied.push('relationship'); }
   // G7 — `requireKind` used to push a satisfied string and filter NOTHING. `kindClass` (ap:PersonAgent /
   // OrganizationAgent / ServiceAgent, ADR-0046) IS projected and is now bound by the MCP, so the mandate
   // enforces. Accepts 'person' | 'org' | 'service' or the full class local name.
@@ -290,7 +308,7 @@ function mandatePass(a: AgentResult, m: Mandates | undefined): string[] | null {
     const want = m.requireKind.toLowerCase().replace(/agent$/, '');
     const have = (a.kind ?? '').toLowerCase().replace(/agent$/, '');
     const alias: Record<string, string> = { org: 'organization', organisation: 'organization' };
-    if (!have || (alias[want] ?? want) !== have) return null;
+    if (!have || (alias[want] ?? want) !== have) return { failed: 'requireKind' };
     satisfied.push(`kind:${m.requireKind}`);
   }
   return satisfied;
@@ -560,8 +578,9 @@ app.post('/discover', async (c) => {
   if (needsEndorsements) await enrichEndorsements(c.env, candidates);
 
   let dropped = 0;
+  const droppedBy: Partial<Record<MandateKey, number>> = {};
   const ranked = candidates
-    .map((a) => { const sat = mandatePass(a, mandates); if (sat === null) { dropped++; return null; } return matchCandidate(a, intent, sat); })
+    .map((a) => { const sat = mandatePass(a, mandates); if (!Array.isArray(sat)) { dropped++; droppedBy[sat.failed] = (droppedBy[sat.failed] ?? 0) + 1; return null; } return matchCandidate(a, intent, sat); })
     .filter((x): x is ReturnType<typeof matchCandidate> => x !== null)
     // DETERMINISTIC ordering. The score is rounded to 2dp for display and genuine ties happen (the
     // pre-migration baseline had two: Ferrer/Tanabe at 0.23 and Lindqvist/Tanabe at 0.29, both
@@ -589,6 +608,8 @@ app.post('/discover', async (c) => {
     mandates: mandates ?? null,
     matched: ranked.length,
     droppedByMandates: dropped,
+    // Per-mandate elimination counts so a UI can say WHICH filter emptied the list (design 2026-08-30).
+    droppedBy,
     source: 'discovery-mcp → GraphDB (agentic-trust ontology: T-box + C-box SHACL + A-box)',
     results: ranked,
   });
@@ -605,6 +626,12 @@ app.get('/agent', async (c) => {
 
 // Offerings (spec 286) — the crawled per-skill Offerings one agent advertises (from its public A2A card,
 // host-asserted + provenance). Browser → A2A → MCP → GraphDB. The drill-down behind a discovery result.
+// Facets for the search filters — proxied straight through (same pattern as /offerings, /trust).
+app.get('/facets', async (c) => {
+  const r = await mcpGet(c.env, '/facets').catch((e) => ({ ok: false, error: String(e) }));
+  return c.json(r);
+});
+
 app.get('/offerings', async (c) => {
   const key = c.req.query('key') ?? '';
   if (!key) return c.json({ ok: false, error: 'key (name or 0x SA) required' }, 400);

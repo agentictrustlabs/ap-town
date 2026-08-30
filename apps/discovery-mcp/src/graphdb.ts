@@ -622,3 +622,40 @@ export async function getAgent(env: Env, key: string): Promise<{ agent: string; 
   const rows = await sparqlSelect(env, `SELECT ?p ?o WHERE { <${agent}> ?p ?o }`);
   return { agent, triples: rows.map((r) => ({ p: r.p!.value, o: r.o!.value })) };
 }
+
+// ─── Facets (spec 346 §8.5; discovery filter UX) ──────────────────────────────────────────────────────
+// One grouped aggregate per facet — never N queries — so the dropdowns' option lists and "n agents" counts
+// stay flat as the KB grows. Every value is something an agent actually DECLARED on chain (bottom-up), never
+// the downstream capability catalog (the substrate does not load it — spec 331).
+export interface FacetCount { value: string; count: number }
+export interface Facets {
+  /** Derived agent type slugs (`ap:agentType`), e.g. person / org / team / church … */
+  agentTypes: FacetCount[];
+  /** Root kinds (`rdf:type` ap:PersonAgent | OrganizationAgent | ServiceAgent) as person / org / service. */
+  kinds: FacetCount[];
+  /** Declared capability ids (`approf:declaresCapabilityId`, CURIE-shaped). */
+  capabilityIds: FacetCount[];
+  /** Name suffixes (`apnam:tld`). */
+  tlds: FacetCount[];
+  /** Agents with NO declared derived type (they count as the generic type of their root when filtering). */
+  undeclaredType: number;
+}
+const KIND_SLUG: Record<string, string> = { PersonAgent: 'person', OrganizationAgent: 'org', ServiceAgent: 'service' };
+export async function getFacets(env: Env): Promise<Facets> {
+  const count = (rows: Binding[], key: string, map: (v: string) => string | null = (v) => v): FacetCount[] =>
+    rows.map((r) => ({ value: map(r[key]?.value ?? '') ?? '', count: Number(r.n?.value ?? 0) })).filter((f) => f.value).sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  const [types, kinds, caps, tlds, undeclared] = await Promise.all([
+    sparqlSelect(env, `SELECT ?t (COUNT(DISTINCT ?a) AS ?n) WHERE { ?a ap:smartAgent ?sa ; ap:agentType ?t } GROUP BY ?t`),
+    sparqlSelect(env, `SELECT ?k (COUNT(DISTINCT ?a) AS ?n) WHERE { ?a ap:smartAgent ?sa ; a ?k . FILTER(?k IN (ap:PersonAgent, ap:OrganizationAgent, ap:ServiceAgent)) } GROUP BY ?k`),
+    sparqlSelect(env, `SELECT ?c (COUNT(DISTINCT ?a) AS ?n) WHERE { ?a ap:smartAgent ?sa ; approf:declaresCapabilityId ?c } GROUP BY ?c`),
+    sparqlSelect(env, `SELECT ?t (COUNT(DISTINCT ?a) AS ?n) WHERE { ?a ap:smartAgent ?sa ; apnam:tld ?t } GROUP BY ?t`),
+    sparqlSelect(env, `SELECT (COUNT(DISTINCT ?a) AS ?n) WHERE { ?a ap:smartAgent ?sa . FILTER NOT EXISTS { ?a ap:agentType ?t } }`),
+  ]);
+  return {
+    agentTypes: count(types, 't', (v) => derivedTypeSlug(v)),
+    kinds: count(kinds, 'k', (v) => KIND_SLUG[v.split('#').pop() ?? ''] ?? null),
+    capabilityIds: count(caps, 'c'),
+    tlds: count(tlds, 't'),
+    undeclaredType: Number(undeclared[0]?.n?.value ?? 0),
+  };
+}

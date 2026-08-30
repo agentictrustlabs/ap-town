@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { searchAgents, searchAgentsPage, lookupAgents, getAgent, getOfferings, getTrustFabric, listNames, listAgentsByContext, describeTerm, listShapes, checkCustody, runKbQuery, SEARCH_MAX_LIMIT, type Env } from './graphdb.js';
+import { searchAgents, searchAgentsPage, lookupAgents, getAgent, getOfferings, getTrustFabric, listNames, listAgentsByContext, describeTerm, listShapes, checkCustody, runKbQuery, getFacets, SEARCH_MAX_LIMIT, type Env } from './graphdb.js';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
@@ -79,6 +79,13 @@ app.get('/agent', async (c) => {
 
 // Offerings (spec 286): the crawled per-skill Offerings an agent advertises (from its public A2A card,
 // host-asserted + provenance). The full per-skill set the matcher ranks over, queryable offline.
+// Facets for the discovery filters (spec 346 §8.5): distinct declared agent types / root kinds / capability ids /
+// suffixes with agent counts — grouped aggregates, flat cost. Public, on-chain-derived facts only (ADR-0040).
+app.get('/facets', async (c) => {
+  try { return c.json({ ok: true, ...(await getFacets(c.env)) }); }
+  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
+});
+
 app.get('/offerings', async (c) => {
   const key = c.req.query('key') ?? '';
   if (!key) return c.json({ ok: false, error: 'key (name or 0x SA) required' }, 400);

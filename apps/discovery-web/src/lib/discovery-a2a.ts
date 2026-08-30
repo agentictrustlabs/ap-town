@@ -30,11 +30,40 @@ export interface DiscoverResponse {
   note?: string;
   matched?: number;
   droppedByMandates?: number;
+  /** Per-mandate elimination counts (which filter emptied the list). */
+  droppedBy?: Partial<Record<keyof DiscoverMandates | string, number>>;
   results: DiscoverResult[];
   error?: string;
 }
 
-export interface DiscoverMandates { requireRegistered?: boolean; requireSkill?: string }
+export interface DiscoverMandates {
+  requireRegistered?: boolean;
+  /** Legacy fuzzy substring over labels/description — advanced only; the skill picker emits `requireCapabilityId`. */
+  requireSkill?: string;
+  /** Exact declared capability id (hard, fail-open on agents that declared nothing — spec 331 §4.3). */
+  requireCapabilityId?: string;
+  /** Root kind: person | org | service (hard). */
+  requireKind?: string;
+  /** Derived agent type slug (hard; undeclared agents count as the generic type of their root). */
+  requireAgentType?: string;
+}
+
+export interface FacetCount { value: string; count: number }
+export interface Facets {
+  ok: boolean;
+  agentTypes: FacetCount[];
+  kinds: FacetCount[];
+  capabilityIds: FacetCount[];
+  tlds: FacetCount[];
+  undeclaredType: number;
+  error?: string;
+}
+
+/** Distinct declared facets + agent counts (one grouped query each, server-side). */
+export async function getFacets(): Promise<Facets> {
+  const res = await fetch(`${A2A_URL}/facets`);
+  return res.json() as Promise<Facets>;
+}
 
 export const DISCOVERY_AGENT_URL = A2A_URL;
 
@@ -106,7 +135,7 @@ export async function getOfferings(key: string): Promise<OfferingsResponse> {
 
 /** Invoke the discover-agents skill: an intent DESCRIPTION (+ optional precise query + mandates) → ranked
  *  agents. `intent` ranks (fitScore); `query` is a precise substring filter; mandates hard-filter. */
-export async function discover(input: { query?: string; intent?: string; mandates?: DiscoverMandates }): Promise<DiscoverResponse> {
+export async function discover(input: { query?: string; intent?: string | { need?: string; skills?: string[] }; mandates?: DiscoverMandates }): Promise<DiscoverResponse> {
   const payload: Record<string, unknown> = {};
   if (input.query) payload.query = input.query;
   if (input.intent) payload.intent = { need: input.intent };
