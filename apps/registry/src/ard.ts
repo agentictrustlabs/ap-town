@@ -241,7 +241,8 @@ export function ardExploreResponse(req: ArdExploreRequest, facets: FacetsLike): 
     if (!key) return { status: 400, code: 'INVALID_ARGUMENT', message: `facet field "${f.field}" is not exposed by this registry` };
     const limit = f.limit && f.limit > 0 ? f.limit : 50;
     const min = f.minCount ?? 1;
-    let buckets = key === 'type' ? [{ value: ARD_A2A_CARD_TYPE, count: facets.total ?? 0 }] : [...(facets[key] ?? [])].sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+    const total = facets.total ?? (facets.kinds ?? []).reduce((n, b) => n + b.count, 0);
+    let buckets = key === 'type' ? [{ value: ARD_A2A_CARD_TYPE, count: total }] : [...(facets[key] ?? [])].sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
     buckets = buckets.filter((b) => b.count >= min);
     const shown = buckets.slice(0, limit);
     const otherCount = buckets.slice(limit).reduce((n, b) => n + b.count, 0);

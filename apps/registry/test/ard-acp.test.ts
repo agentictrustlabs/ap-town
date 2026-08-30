@@ -63,6 +63,7 @@ describe('ARD search', () => {
     const ex = ardExploreResponse({ resultType: { facets: [{ field: 'ap:agentType', limit: 1 }, { field: 'type' }] } }, { agentTypes: [{ value: 'org', count: 3 }, { value: 'person', count: 5 }], total: 8 });
     expect(ex).toMatchObject({ resultType: 'facets', facets: { 'ap:agentType': { buckets: [{ value: 'person', count: 5 }], otherCount: 3 }, type: { buckets: [{ value: ARD_A2A_CARD_TYPE, count: 8 }] } } });
     expect(ardExploreResponse({ resultType: { facets: [{ field: 'publisher' }] } }, {})).toMatchObject({ code: 'INVALID_ARGUMENT' });
+    expect(ardExploreResponse({ resultType: { facets: [{ field: 'type' }] } }, { kinds: [{ value: 'PersonAgent', count: 2 }, { value: 'OrganizationAgent', count: 3 }] })).toMatchObject({ facets: { type: { buckets: [{ value: ARD_A2A_CARD_TYPE, count: 5 }] } } });
     expect(parseAgentsFilter('type = "application/a2a-agent-card+json" AND tags:"person"')).toEqual({ type: ARD_A2A_CARD_TYPE, tag: 'person' });
     expect(parseAgentsFilter('name = x')).toMatchObject({ code: 'INVALID_ARGUMENT' });
     const list = ardAgentsResponse([row, { ...row, name: 'org1.org', agentType: 'org' }], { tag: 'org' });
