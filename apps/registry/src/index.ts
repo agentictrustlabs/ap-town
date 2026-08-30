@@ -653,7 +653,7 @@ app.post('/custody', async (c) => {
 // ─── ARD (Agentic Resource Discovery v0.91) — spec 347 §8.5, docs/architecture/ard-acp-crosswalk.md ────────
 // The registry's public discovery envelope. `score` = relevance ONLY (the fit term); trust evidence is a separate
 // namespaced signal. MCP surfaces are never entries (ADR-0057). Errors use ARD Appendix B codes.
-const REGISTRY_DISPLAY = { name: 'discovery.registry', displayName: 'Agentic Primitives Discovery Registry', description: 'Smart-Agent-anchored agent registry: typed names, on-chain profiles, verifiable trust evidence. Serves ARD search over the public knowledge graph.' };
+const REGISTRY_DISPLAY = { name: 'discovery.registry', displayName: 'Agentic Primitives Discovery Registry', description: 'Smart-Agent-anchored agent registry: typed names, on-chain profiles, verifiable trust evidence. Serves ARD search over the public knowledge graph.', representativeQueries: ['find a registered agent for a task', 'which agents declare a given capability id', 'list the organizations, teams and services in this registry', 'discover a treasury or workspace coordinator agent'] };
 const registryOrigin = (c: { env: Env; req: { url: string } }) => (c.env.A2A_PUBLIC_ORIGIN ?? new URL(c.req.url).origin).replace(/\/$/, '');
 /** Join a ranked match back to its KB row: the match carries scores + evidence, the ROW carries the facts an
  *  ARD entry is built from (a2aEndpoint, description, capability ids). */

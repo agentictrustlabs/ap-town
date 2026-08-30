@@ -68,7 +68,7 @@ describe('ARD search', () => {
     expect(parseAgentsFilter('name = x')).toMatchObject({ code: 'INVALID_ARGUMENT' });
     const list = ardAgentsResponse([row, { ...row, name: 'org1.org', agentType: 'org' }], { tag: 'org' });
     if ('code' in list) throw new Error('unexpected');
-    expect(list.agents.map((a) => a.identifier)).toEqual(['urn:air:alice.faithnet.io:agent:org1']);
+    expect(list.items.map((a) => a.identifier)).toEqual(['urn:air:alice.faithnet.io:agent:org1']);
   });
 });
 

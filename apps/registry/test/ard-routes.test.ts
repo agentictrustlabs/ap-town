@@ -47,8 +47,8 @@ describe('ARD + ACP routes on the discovery registry', () => {
     stubMcp();
     const ex = await (await call('/explore', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ resultType: { facets: [{ field: 'ap:agentType' }] } }) })).json() as { facets: Record<string, { buckets: unknown[] }> };
     expect(ex.facets['ap:agentType']!.buckets).toHaveLength(2);
-    const list = await (await call('/agents?filter=' + encodeURIComponent('tags:"person"'))).json() as { agents: Array<{ identifier: string }> };
-    expect(list.agents.map((a) => a.identifier)).toEqual(['urn:air:alice.faithnet.io:agent:alice']);
+    const list = await (await call('/agents?filter=' + encodeURIComponent('tags:"person"'))).json() as { items: Array<{ identifier: string }> };
+    expect(list.items.map((a) => a.identifier)).toEqual(['urn:air:alice.faithnet.io:agent:alice']);
     const acp = await call('/registry/v1/latest/registry.json');
     expect(acp.status).toBe(200);
     expect(await acp.json()).toEqual({ version: '1.0.0', agents: [{ id: 'alice', name: 'Alice', version: '1.0.0', description: 'Estate planning help', distribution: { npx: { package: '@alice/agent@1.0.0' } } }] });

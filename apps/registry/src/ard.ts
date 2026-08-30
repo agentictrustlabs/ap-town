@@ -109,7 +109,7 @@ export function ardEntryForAgent(row: ArdAgentRowLike, opts: { receiptUriFor?: (
 }
 
 /** The registry's own entry (`application/ai-registry+json`) — what other registries list as a referral. */
-export function ardRegistryEntry(origin: string, opts: { name: string; displayName: string; description: string }): ArdEntry {
+export function ardRegistryEntry(origin: string, opts: { name: string; displayName: string; description: string; representativeQueries?: string[] }): ArdEntry {
   const host = hostOf(origin) ?? origin.replace(/^https?:\/\//, '');
   return {
     identifier: `urn:air:${host}:registry:${opts.name.toLowerCase().replace(/[^a-z0-9._-]/g, '')}`,
@@ -117,6 +117,7 @@ export function ardRegistryEntry(origin: string, opts: { name: string; displayNa
     type: ARD_REGISTRY_TYPE,
     url: `${origin.replace(/\/$/, '')}/search`,
     description: opts.description,
+    representativeQueries: opts.representativeQueries ?? ['find an agent that can help with a task', 'which registered agents offer a given capability', 'list organizations and teams in this registry'],
     capabilities: ['search', 'explore', 'agents'],
     trustManifest: { identity: `https://${host}`, identityType: 'https-fqdn', trustSchema: AP_TRUST_SCHEMA },
   };
@@ -253,7 +254,8 @@ export function ardExploreResponse(req: ArdExploreRequest, facets: FacetsLike): 
 
 // ─── List (GET /agents) ─────────────────────────────────────────────────────────────────────────────────────
 
-/** Minimal EBNF filter: `type = "<media type>"` and/or `tags:"<tag>"`, joined by AND. Anything else ⇒ 400. */
+/** GET /agents — a paginated `{ items[], pageToken? }` object (what the ARD conformance tool v0.9.1 probes for).
+ * Minimal EBNF filter: `type = "<media type>"` and/or `tags:"<tag>"`, joined by AND. Anything else ⇒ 400. */
 export function parseAgentsFilter(filter: string | undefined): { type?: string; tag?: string } | ArdError {
   if (!filter?.trim()) return {};
   const out: { type?: string; tag?: string } = {};
@@ -266,18 +268,18 @@ export function parseAgentsFilter(filter: string | undefined): { type?: string; 
   }
   return out;
 }
-export function ardAgentsResponse(rows: ArdAgentRowLike[], opts: { type?: string; tag?: string; pageSize?: number; pageToken?: string }): { '@context': unknown; agents: ArdEntry[]; pageToken?: string } | ArdError {
+export function ardAgentsResponse(rows: ArdAgentRowLike[], opts: { type?: string; tag?: string; pageSize?: number; pageToken?: string }): { '@context': unknown; items: ArdEntry[]; pageToken?: string } | ArdError {
   const pageSize = opts.pageSize ?? 20;
   if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) return { status: 400, code: 'INVALID_ARGUMENT', message: 'pageSize must be an integer in 1..100' };
   const offset = decodePageToken(opts.pageToken);
   if (offset === null) return { status: 400, code: 'INVALID_ARGUMENT', message: 'pageToken is not one this registry issued' };
-  if (opts.type && opts.type !== ARD_A2A_CARD_TYPE) return { '@context': [ARD_CONTEXT_URL, AP_CONTEXT], agents: [] };
+  if (opts.type && opts.type !== ARD_A2A_CARD_TYPE) return { '@context': [ARD_CONTEXT_URL, AP_CONTEXT], items: [] };
   const entries = rows.map((r) => ardEntryForAgent(r).entry).filter((e): e is ArdEntry => !!e)
     .filter((e) => !opts.tag || (e.tags ?? []).includes(opts.tag))
     .sort((a, b) => a.identifier.localeCompare(b.identifier));
   const page = entries.slice(offset, offset + pageSize);
   const next = offset + pageSize < entries.length ? encodePageToken(offset + pageSize) : undefined;
-  return { '@context': [ARD_CONTEXT_URL, AP_CONTEXT], agents: page, ...(next ? { pageToken: next } : {}) };
+  return { '@context': [ARD_CONTEXT_URL, AP_CONTEXT], items: page, ...(next ? { pageToken: next } : {}) };
 }
 
 export function ardError(e: ArdError) { return { error: { code: e.code, message: e.message } }; }
