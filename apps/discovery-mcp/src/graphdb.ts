@@ -11,7 +11,7 @@ export interface Env {
 /** `ap:agentTypeScheme` concept IRI → the DerivedAgentType slug (spec 346 §11). Unknown/absent → null. */
 const AGENT_TYPE_SLUG: Record<string, string> = {
   PersonType: 'person', OrgType: 'org', TeamType: 'team', ServiceType: 'service',
-  WorkspaceCoordinatorType: 'workspace-coordinator', TreasuryType: 'treasury', RegistryType: 'registry',
+  WorkspaceCoordinatorType: 'workspace-coordinator', TreasuryType: 'treasury', RegistryType: 'registry', ChurchType: 'church', CircleType: 'circle',
 };
 export function derivedTypeSlug(iri: string | undefined): string | null {
   if (!iri) return null;

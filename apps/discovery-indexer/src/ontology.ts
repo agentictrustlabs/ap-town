@@ -41,6 +41,8 @@ const DERIVED: Array<[string, string, string]> = [
   ['workspace-coordinator', 'WorkspaceCoordinator', 'WorkspaceCoordinatorType'],
   ['treasury', 'Treasury', 'TreasuryType'],
   ['registry', 'RegistryAgent', 'RegistryType'],
+  ['church', 'ChurchAgent', 'ChurchType'],
+  ['circle', 'CircleAgent', 'CircleType'],
 ];
 const AGENT_TYPE_CLASS: Record<string, string> = Object.fromEntries(DERIVED.map(([v, c]) => [keccak256(toHex(v)), `${NS.ap}${c}`]));
 const AGENT_TYPE_CONCEPT: Record<string, string> = Object.fromEntries(DERIVED.map(([v, , k]) => [keccak256(toHex(v)), `${NS.ap}${k}`]));
