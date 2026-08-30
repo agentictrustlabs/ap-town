@@ -98,6 +98,9 @@ const PROFILE_KEYS: Array<[string, string]> = [
   ['languages', PREDICATE.languages],   // BCP-47, comma-separated, lowercase
   ['regions', PREDICATE.regions],       // ISO 3166 / GeoFeatureRegistry codes, comma-separated, uppercase
   ['focusAreas', PREDICATE.focusAreas], // subject-domain labels, comma-separated
+  // spec 347 §8.5 — the JCS JSON of an AgentDistributionV1 (how to obtain + run the agent's software), stored
+  // as a plain string literal; never parsed here (the MCP decodes it fail-closed). Public on-chain data.
+  ['distribution', PREDICATE.distribution],
 ];
 // Endpoint records keyed by NODE on the AgentNameResolver attribute store (getString) — spec 280. These
 // live on a DIFFERENT resolver than the profile properties (the connect ceremony writes them via

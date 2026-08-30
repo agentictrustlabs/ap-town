@@ -117,6 +117,11 @@ export const PREDICATE = {
   languages: `${NS.approf}languages`,
   regions: `${NS.approf}regions`,
   focusAreas: `${NS.approf}focusAreas`,
+  // spec 347 §8.5 — the SA-keyed `atl:distribution` JSON (AgentDistributionV1: how to obtain + run the
+  // agent's software; mirrors the ACP registry agent.schema.json). Projected as the plain string exactly as
+  // written on chain — public, on-chain-derivable (ADR-0040); the MCP parses it fail-closed. Same rail as
+  // skills/languages; registered on chain by AddDistributionPredicate.s.sol (unregistered → write reverts).
+  distribution: `${NS.approf}distribution`,
   // Spec 331 W2 — the PARSED capability identities inside atl:skills, one triple per id, so a
   // consumer matches on a structured identity instead of re-parsing a comma-separated string.
   // Registered on chain alongside the capability relations (governor tx 0xc7b84690…). Read-side

@@ -1,6 +1,7 @@
 // GraphDB (Ontotext, agentkg.io) read access for the discovery MCP. Holds creds server-side (Worker
 // secrets) and runs SPARQL SELECT over the `smart-agents` A-box that agent-indexer populates.
 
+import { decodeDistribution, type AgentDistributionV1 } from './distribution.js';
 export interface Env {
   GRAPHDB_QUERY_URL: string;
   GRAPHDB_USER?: string;
@@ -161,6 +162,14 @@ export interface AgentResult {
   agentType?: string | null;
   tld?: string | null;
   serviceRole?: string | null;
+  /** spec 347 §8.5 — the agent's `atl:distribution` fact (`approf:distribution`): how to obtain + run its
+   *  software (`acp?`, `version?`, `npx`/`uvx`/`binary`), parsed FAIL-CLOSED from the on-chain JSON literal.
+   *  `null` = undeclared OR unparsable (an unreadable record is not a distribution). The ACP registry /
+   *  ARD projections read `acp === true` as eligibility. Distribution only — never a trust signal. */
+  distribution: AgentDistributionV1 | null;
+  /** spec 280 — the agent's A2A host (`approf:a2aEndpoint`, node-keyed on the name resolver, projected onto
+   *  the agent node). The live card lives at `<a2aEndpoint>/.well-known/agent-card.json`. */
+  a2aEndpoint: string | null;
   /** Agent-kind subclass local name ('PersonAgent' | 'OrganizationAgent' | 'ServiceAgent') or null.
    *  Projected from the on-chain agentKind (ADR-0046 trichotomy); needed so the matcher's `requireKind`
    *  mandate (G7) can filter instead of merely recording a satisfied string. */
@@ -258,7 +267,7 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
   // every consumer gets identical parsing instead of reimplementing it. The triples remain in the graph
   // for SPARQL consumers that want to query BY capability rather than read an agent row.
   const rows = await sparqlSelect(env, `
-    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?ndesc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?edges ?atts ?vatts ?iendorse ?kind ?atype ?tld ?srole WHERE {
+    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?ndesc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?dist ?a2a ?edges ?atts ?vatts ?iendorse ?kind ?atype ?tld ?srole WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa .
       ${extraClause}
       OPTIONAL { ?a apnam:name ?name }
@@ -271,6 +280,11 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
       OPTIONAL { ?a approf:languages ?langs }
       OPTIONAL { ?a approf:regions ?regions }
       OPTIONAL { ?a approf:focusAreas ?focus }
+      # spec 347 §8.5 — the distribution JSON literal (parsed below, fail-closed) + the A2A host both sit on
+      # the agent node: the indexer's profile projector merges the SA-keyed and node-keyed tiers into ONE
+      # data object on the agent node (G8 guard keeps their IRIs disjoint).
+      OPTIONAL { ?a approf:distribution ?dist }
+      OPTIONAL { ?a approf:a2aEndpoint ?a2a }
       OPTIONAL { ?a apdisc:appContext ?ctx }
       OPTIONAL { ?a apdisc:orgRole ?role }
       OPTIONAL { ?a apdisc:serviceUrl ?svc }
@@ -322,6 +336,8 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
       languages: r.langs?.value ?? null,
       regions: r.regions?.value ?? null,
       focusAreas: r.focus?.value ?? null,
+      distribution: decodeDistribution(r.dist?.value),
+      a2aEndpoint: r.a2a?.value ?? null,
       appContext: r.ctx?.value ?? null,
       orgRole: r.role?.value ?? null,
       serviceUrl: r.svc?.value ?? null,
