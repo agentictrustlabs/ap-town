@@ -138,14 +138,23 @@ export async function getOfferings(key: string): Promise<OfferingsResponse> {
 export async function discover(input: { query?: string; intent?: string | { need?: string; skills?: string[] }; mandates?: DiscoverMandates }): Promise<DiscoverResponse> {
   const payload: Record<string, unknown> = {};
   if (input.query) payload.query = input.query;
-  if (input.intent) payload.intent = { need: input.intent };
-  if (input.mandates && (input.mandates.requireRegistered || input.mandates.requireSkill)) payload.mandates = input.mandates;
+  // A string intent is the need; an object is passed through (need + soft skills). Never re-wrap an object —
+  // `{ need: { need } }` made the a2a choke on a non-string need (the 2026-08-30 HTTP 500).
+  if (typeof input.intent === 'string') payload.intent = { need: input.intent };
+  else if (input.intent && Object.keys(input.intent).length) payload.intent = input.intent;
+  // Forward mandates whenever ANY key is set (type / capability / kind / registered / skill).
+  const m = input.mandates;
+  if (m && Object.values(m).some((v) => v !== undefined && v !== false && v !== '')) payload.mandates = m;
   const res = await fetch(`${A2A_URL}/discover`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   });
-  const body = (await res.json().catch(() => ({ ok: false, error: `HTTP ${res.status}` }))) as DiscoverResponse;
-  if (!res.ok && body.ok !== false) return { ok: false, query: input.query ?? '', intent: input.intent ?? null, results: [], error: `HTTP ${res.status}` };
-  return body;
+  if (!res.ok) {
+    // Surface the server's own error body (the a2a returns {ok:false,error}) instead of a bare status.
+    let detail = '';
+    try { const j = (await res.json()) as { error?: string }; detail = j.error ? `: ${j.error}` : ''; } catch { /* non-JSON body */ }
+    throw new Error(`discover HTTP ${res.status}${detail}`);
+  }
+  return res.json() as Promise<DiscoverResponse>;
 }

@@ -9,7 +9,10 @@ import { Pill, Spinner, short } from './components/ui';
 // in favour of this one live path; agent discovery + the detail drill-down both query GraphDB.)
 type View = { tab: 'search' } | { tab: 'agent'; key: string; label: string };
 
-const REGISTRY_ADDRESS = CONTRACTS.agentRegistryBase as string;
+// Per-build deployment facts (vite mode defines; defaults = the Base Sepolia production stack).
+const CHAIN_LABEL = (import.meta.env?.VITE_DISCOVERY_CHAIN_LABEL as string | undefined) ?? 'Base Sepolia';
+const AGENT_NAME = (import.meta.env?.VITE_DISCOVERY_AGENT_NAME as string | undefined) ?? 'discovery.agent';
+const REGISTRY_ADDRESS = ((import.meta.env?.VITE_DISCOVERY_REGISTRY_ADDRESS as string | undefined) ?? CONTRACTS.agentRegistryBase) as string;
 
 export function App() {
   const [view, setView] = useState<View>({ tab: 'search' });
@@ -23,7 +26,7 @@ export function App() {
             <span className="brand-glyph">◎</span>
             <div>AP Discovery<small>agent knowledge graph · spec 279</small></div>
           </div>
-          <span className="powered">via <b>discovery.agent</b> → MCP → GraphDB</span>
+          <span className="powered">via <b>{AGENT_NAME}</b> → MCP → GraphDB</span>
         </div>
       </header>
       <main className="wrap">
@@ -32,7 +35,7 @@ export function App() {
           : <SearchView onOpen={open} />}
       </main>
       <footer className="wrap">
-        Discovery knowledge graph · registry <code>{short(REGISTRY_ADDRESS, 10)}</code> on Base Sepolia ·
+        Discovery knowledge graph · registry <code>{short(REGISTRY_ADDRESS, 10)}</code> on {CHAIN_LABEL} ·
         agents enumerated from agent-naming, projected with the agentic-trust ontology
         (<code>{CLASS.RegistryEntry.split('/ns/')[1]}</code>) into GraphDB · read through the discovery agent + MCP.
       </footer>
@@ -149,7 +152,7 @@ function SearchView({ onOpen }: { onOpen: (key: string, label: string) => void }
         )}
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <button className="btn --p" onClick={run} disabled={loading}>{loading ? <Spinner /> : 'Discover'}</button>
-          <span className="cite">agent: <a href={`${DISCOVERY_AGENT_URL}/.well-known/agent-card.json`} target="_blank" rel="noreferrer">discovery.registry</a></span>
+          <span className="cite">agent: <a href={`${DISCOVERY_AGENT_URL}/.well-known/agent-card.json`} target="_blank" rel="noreferrer">{AGENT_NAME}</a></span>
         </div>
       </div>
       {loading && <div className="row"><Spinner /> <span className="muted">A2A → MCP → GraphDB…</span></div>}
