@@ -7,6 +7,8 @@
 // best agents with an explainable evidence path. It evolves into a full-featured discovery app.
 
 import { Hono } from 'hono';
+import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike } from './ard.js';
+import { ACP_REGISTRY_PATH, acpRegistry } from './acp.js';
 import { cors } from 'hono/cors';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
@@ -71,6 +73,9 @@ interface AgentResult {
   /** Spec 331 — canonical capability ids parsed out of `skills` by the MCP. `[]` = declared nothing
    *  structured, which is a real answer and must never be read as "unknown, assume it matches". */
   capabilityIds?: string[];
+  /** spec 347 §8.5 — `approf:a2aEndpoint` (the agent's A2A host; ARD entries need it) and the parsed
+   *  `approf:distribution` fact (ACP registry eligibility), both as the MCP surfaces them; null when undeclared. */
+  a2aEndpoint?: string | null; distribution?: import('./acp.js').AcpDistributionLike | null; siteUrl?: string | null;
   /** G2/G3/G4 — owner-asserted, comma-separated discovery-ranking facets (approf:languages/regions/focusAreas). */
   languages?: string | null; regions?: string | null; focusAreas?: string | null;
   /** G1 — the trust fabric, now actually projected into the graph. */
@@ -548,57 +553,44 @@ function matchCandidate(a: AgentResult, intent: Intent, satisfiedMandates: strin
 //   mandates = HARD filters (drop failures) · intent = SOFT rank (0.6·fit + 0.4·trust) · evidence path out.
 // `intent` may be a structured object {need,skills?,geo?} OR a bare string (legacy = the need); a bare
 // {query} still works (free-text), so existing callers (the Registry tab's loadRegistry) are unaffected.
+/** The discovery pipeline (spec 281): fetch → enrich → HARD mandates → SOFT rank. Shared by `/discover` and the
+ *  ARD `/search` surface so both rank the same way; only the response envelope differs. */
+async function runDiscovery(env: Env, args: { q: string; intent: Intent; mandates?: Mandates; limit?: number }): Promise<{ ok: true; ranked: ReturnType<typeof matchCandidate>[]; candidates: AgentResult[]; dropped: number; droppedBy: Partial<Record<MandateKey, number>> } | { ok: false; error: string }> {
+  const { intent, mandates, q } = args;
+  const limit = args.limit ?? (q ? 25 : 100);
+  const mcp = await mcpGet(env, `/search?q=${encodeURIComponent(q)}&limit=${limit}`).catch((e) => ({ ok: false, error: String(e) }));
+  if (!mcp?.ok) return { ok: false, error: mcp?.error ?? 'discovery MCP unavailable' };
+  const candidates = mcp.results as AgentResult[];
+  const needsOfferings = !!(mandates?.requireSkillId || mandates?.requireSkill || intent.skills?.length);
+  if (needsOfferings) await enrichOfferings(env, candidates);
+  const needsEndorsements = !!(intent.capabilityIds?.length || mandates?.requireCapabilityId);
+  if (needsEndorsements) await enrichEndorsements(env, candidates);
+  let dropped = 0;
+  const droppedBy: Partial<Record<MandateKey, number>> = {};
+  const ranked = candidates
+    .map((a) => { const sat = mandatePass(a, mandates); if (!Array.isArray(sat)) { dropped++; droppedBy[sat.failed] = (droppedBy[sat.failed] ?? 0) + 1; return null; } return matchCandidate(a, intent, sat); })
+    .filter((x): x is ReturnType<typeof matchCandidate> => x !== null)
+    .sort((x, y) => (y.score as number) - (x.score as number)
+      || y.capabilityHits - x.capabilityHits
+      || y.regionHits - x.regionHits
+      || Number(x.lexicalOnly) - Number(y.lexicalOnly)
+      || (x.name ?? '').localeCompare(y.name ?? ''));
+  return { ok: true, ranked, candidates, dropped, droppedBy };
+}
+
 app.post('/discover', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as {
     query?: string; intent?: Intent | string; mandates?: Mandates; limit?: number;
   };
   const intent: Intent = typeof body.intent === 'string' ? { need: body.intent } : (body.intent ?? {});
   const mandates = body.mandates;
-  // An explicit `query` is a precise substring FILTER at the MCP; an intent `need` is a natural-language
-  // DESCRIPTION that should RANK (fitScore), not filter — so we fetch the broad candidate set (no MCP text
-  // filter) and let the matcher rank it. Without this, "help managing a treasury" filtered to 0 (no name
-  // contains that phrase). Fetch wider when intent-driven so ranking has the full field to work over.
   const q = (body.query ?? '').toString();
-  const limit = body.limit ?? (q ? 25 : 100);
-
-  const mcp = await mcpGet(c.env, `/search?q=${encodeURIComponent(q)}&limit=${limit}`).catch((e) => ({ ok: false, error: String(e) }));
-  if (!mcp?.ok) return c.json({ ok: false, error: mcp?.error ?? 'discovery MCP unavailable' }, 502);
-
-  const candidates = mcp.results as AgentResult[];
-
-  // spec 286 — when matching turns on skill granularity (a skill mandate or intent skills), enrich candidates
-  // with their crawled Offerings so the filter/rank works over the FULL per-skill set, not just coarse
-  // labels. Bounded + logged (no silent truncation, ADR-0013); skip entirely when no skill signal is given.
-  const needsOfferings = !!(mandates?.requireSkillId || mandates?.requireSkill || intent.skills?.length);
-  if (needsOfferings) await enrichOfferings(c.env, candidates);
-
-  // Claimed-capability tier — attach per-capability endorsements when the query is capability-driven, so
-  // "declared AND independently endorsed for X" can outrank a bare declaration. Bounded + logged.
-  const needsEndorsements = !!(intent.capabilityIds?.length || mandates?.requireCapabilityId);
-  if (needsEndorsements) await enrichEndorsements(c.env, candidates);
-
-  let dropped = 0;
-  const droppedBy: Partial<Record<MandateKey, number>> = {};
-  const ranked = candidates
-    .map((a) => { const sat = mandatePass(a, mandates); if (!Array.isArray(sat)) { dropped++; droppedBy[sat.failed] = (droppedBy[sat.failed] ?? 0) + 1; return null; } return matchCandidate(a, intent, sat); })
-    .filter((x): x is ReturnType<typeof matchCandidate> => x !== null)
-    // DETERMINISTIC ordering. The score is rounded to 2dp for display and genuine ties happen (the
-    // pre-migration baseline had two: Ferrer/Tanabe at 0.23 and Lindqvist/Tanabe at 0.29, both
-    // resolved by nothing better than array order). Ties now break on STRUCTURE, in the order the
-    // signals deserve:
-    //   1. more capability-id hits   — the exact, declared identity
-    //   2. more region hits          — the requested coverage, as a TIE-BREAK and never as a filter
-    //   3. a structured result beats a lexical-fallback one at the same score
-    //   4. name, so the result is stable across runs rather than dependent on graph iteration order
-    // Region appears here rather than as a hard filter on purpose: a tie-break can only reorder
-    // candidates, it can never eliminate one. `mandates.geo` eliminated, and that is the failure
-    // this whole design exists to remove.
-    .sort((x, y) => (y.score as number) - (x.score as number)
-      || y.capabilityHits - x.capabilityHits
-      || y.regionHits - x.regionHits
-      || Number(x.lexicalOnly) - Number(y.lexicalOnly)
-      || (x.name ?? '').localeCompare(y.name ?? ''));
-
+  // An explicit `query` is a precise substring FILTER at the MCP; an intent `need` is a natural-language
+  // DESCRIPTION that should RANK (fitScore), not filter — so runDiscovery fetches the broad candidate set when
+  // intent-driven and lets the matcher rank it (see runDiscovery for the ordering rules).
+  const run = await runDiscovery(c.env, { q, intent, mandates, limit: body.limit });
+  if (!run.ok) return c.json({ ok: false, error: run.error }, 502);
+  const { ranked, dropped, droppedBy } = run;
   return c.json({
     ok: true,
     '@context': { apdisc: APDISC, ap: AP, sh: 'http://www.w3.org/ns/shacl#' },
@@ -658,6 +650,69 @@ app.post('/custody', async (c) => {
   return c.json(r);
 });
 
-app.get('/', (c) => c.json({ service: 'demo-discovery-a2a', card: '/.well-known/agent-card.json', discover: 'POST /discover {query?, intent?:{need,skills?,geo?,languages?,regions?,focusAreas?}, mandates?:{requireRegistered?,requireShaclConforms?,requireKind?,requireSkill?,requireSkillId?,requireLanguage?,requireRegion?,requireAttestation?,requireRelationship?,geo?}}', trust: 'GET /trust?key=', agent: 'GET /agent?key=', custody: 'POST /custody {subjectAgents,credential}' }));
+// ─── ARD (Agentic Resource Discovery v0.91) — spec 347 §8.5, docs/architecture/ard-acp-crosswalk.md ────────
+// The registry's public discovery envelope. `score` = relevance ONLY (the fit term); trust evidence is a separate
+// namespaced signal. MCP surfaces are never entries (ADR-0057). Errors use ARD Appendix B codes.
+const REGISTRY_DISPLAY = { name: 'discovery.registry', displayName: 'Agentic Primitives Discovery Registry', description: 'Smart-Agent-anchored agent registry: typed names, on-chain profiles, verifiable trust evidence. Serves ARD search over the public knowledge graph.' };
+const registryOrigin = (c: { env: Env; req: { url: string } }) => (c.env.A2A_PUBLIC_ORIGIN ?? new URL(c.req.url).origin).replace(/\/$/, '');
+/** Join a ranked match back to its KB row: the match carries scores + evidence, the ROW carries the facts an
+ *  ARD entry is built from (a2aEndpoint, description, capability ids). */
+function toRanked(m: ReturnType<typeof matchCandidate>, rows: AgentResult[]): RankedLike {
+  const basis = (m as Record<string, unknown>)[`${APDISC}hasEvidencePath`] as { basis?: { fitScore?: number; trustScore?: number } } | undefined;
+  const row = rows.find((r) => r.smartAgent === m.smartAgent) ?? ({ smartAgent: m.smartAgent } as AgentResult);
+  return { ...row, fitScore: basis?.basis?.fitScore ?? 0, trustScore: basis?.basis?.trustScore, why: m.why, shaclConforms: m.shaclConforms };
+}
+
+app.get(ARD_WELL_KNOWN_PATH, async (c) => {
+  const origin = registryOrigin(c);
+  const mcp = await mcpGet(c.env, '/search?q=&limit=500').catch((e) => ({ ok: false, error: String(e) }));
+  if (!mcp?.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: mcp?.error ?? 'discovery MCP unavailable' } }, 500);
+  const entries = (mcp.results as AgentResult[]).map((r) => ardEntryForAgent(r).entry).filter((e): e is NonNullable<typeof e> => !!e);
+  return c.json(ardManifest([ardRegistryEntry(origin, REGISTRY_DISPLAY), ...entries]), 200, { 'cache-control': 'public, max-age=300' });
+});
+
+app.post('/search', async (c) => {
+  const body = (await c.req.json().catch(() => null)) as Parameters<typeof planArdSearch>[0] | null;
+  if (!body) return c.json(ardError({ status: 400, code: 'INVALID_ARGUMENT', message: 'body must be JSON' }), 400);
+  const plan = planArdSearch(body);
+  if ('code' in plan) return c.json(ardError(plan), plan.status);
+  const origin = registryOrigin(c);
+  if (!plan.typeServable) return c.json({ '@context': undefined, results: [] });
+  const run = await runDiscovery(c.env, { q: '', intent: { need: plan.need }, mandates: plan.mandates, limit: 100 });
+  if (!run.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: run.error } }, 500);
+  return c.json(ardSearchResponse(run.ranked.map((m) => toRanked(m, run.candidates)), plan, { source: `${origin}/search` }));
+});
+
+app.post('/explore', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as Parameters<typeof ardExploreResponse>[0];
+  const facets = await mcpGet(c.env, '/facets').catch((e) => ({ ok: false, error: String(e) }));
+  if (!facets?.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: facets?.error ?? 'discovery MCP unavailable' } }, 500);
+  const out = ardExploreResponse(body, facets as Parameters<typeof ardExploreResponse>[1]);
+  if ('code' in out) return c.json(ardError(out), out.status);
+  return c.json(out);
+});
+
+app.get('/agents', async (c) => {
+  const f = parseAgentsFilter(c.req.query('filter'));
+  if ('code' in f) return c.json(ardError(f), f.status);
+  const pageSize = c.req.query('pageSize') ? Number(c.req.query('pageSize')) : undefined;
+  const mcp = await mcpGet(c.env, '/search?q=&limit=500').catch((e) => ({ ok: false, error: String(e) }));
+  if (!mcp?.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: mcp?.error ?? 'discovery MCP unavailable' } }, 500);
+  const out = ardAgentsResponse(mcp.results as AgentResult[], { ...f, pageSize, pageToken: c.req.query('pageToken') });
+  if ('code' in out) return c.json(ardError(out), out.status);
+  return c.json(out, 200, { 'cache-control': 'public, max-age=300' });
+});
+
+// ─── ACP registry (Agent Client Protocol) — aggregate projection, spec 347 §8.5 ─────────────────────────────
+// Schema-exact `{version, agents[]}`; eligible agents declare an ACP distribution on their canonical profile.
+// Empty until the first agent does — honest, never seeded. `x-ap-skipped` says why rows were not listed.
+app.get(ACP_REGISTRY_PATH, async (c) => {
+  const mcp = await mcpGet(c.env, '/search?q=&limit=500').catch((e) => ({ ok: false, error: String(e) }));
+  if (!mcp?.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: mcp?.error ?? 'discovery MCP unavailable' } }, 500);
+  const { registry, skipped } = acpRegistry(mcp.results as AgentResult[]);
+  return c.json(registry, 200, { 'cache-control': 'public, max-age=300', 'x-ap-skipped': JSON.stringify(skipped) });
+});
+
+app.get('/', (c) => c.json({ service: 'demo-discovery-a2a', card: '/.well-known/agent-card.json', ard: { manifest: ARD_WELL_KNOWN_PATH, search: 'POST /search', explore: 'POST /explore', agents: 'GET /agents' }, acpRegistry: ACP_REGISTRY_PATH, discover: 'POST /discover {query?, intent?:{need,skills?,geo?,languages?,regions?,focusAreas?}, mandates?:{requireRegistered?,requireShaclConforms?,requireKind?,requireSkill?,requireSkillId?,requireLanguage?,requireRegion?,requireAttestation?,requireRelationship?,geo?}}', trust: 'GET /trust?key=', agent: 'GET /agent?key=', custody: 'POST /custody {subjectAgents,credential}' }));
 
 export default app;

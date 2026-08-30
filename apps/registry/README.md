@@ -30,3 +30,14 @@ pnpm --filter @agenticprimitives-demo/discovery-a2a dev      # local (port 8791)
 pnpm --filter @agenticprimitives-demo/discovery-a2a deploy   # → workers.dev (service-bound to the MCP)
 ```
 Live: https://demo-discovery-a2a.richardpedersen3.workers.dev
+
+## ARD + ACP surfaces (spec 347 §8.5)
+
+This Worker is the `discovery.registry` Service Agent's public discovery envelope, conformant to
+[Agentic Resource Discovery v0.91](https://agenticresourcediscovery.org/spec/): `GET /.well-known/ard.json` (registry
+entry + one entry per agent with an A2A host), `POST /search` (`{query:{text,filter},pageSize,pageToken,federation}` →
+`{results[{…entry, score, source}], pageToken}` — **`score` is relevance only**; trust evidence rides under
+`ap:trustEvidence`), `POST /explore` (facets `type`, `capabilities`, `ap:agentType`, `ap:tld`, `ap:kind`), `GET /agents`
+(`filter=type = "…" AND tags:"…"`). It also hosts an [ACP registry](https://agentclientprotocol.com/get-started/registry)
+projection at `GET /registry/v1/latest/registry.json` over agents whose canonical profile declares an ACP distribution.
+Crosswalk + divergences: `docs/architecture/ard-acp-crosswalk.md`. Validate: `pnpm check:demo-discovery-a2a`.

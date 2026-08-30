@@ -8,7 +8,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "deploy:faithnet": "wrangler deploy --env faithnet"
+    "deploy:faithnet": "wrangler deploy --env faithnet",
+    "test": "vitest run"
   },
   "dependencies": {
     "@noble/hashes": "^2.2.0",
@@ -17,6 +18,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240909.0",
     "typescript": "^5.5.0",
-    "wrangler": "^3.78.0"
+    "wrangler": "^3.78.0",
+    "vitest": "^4.1.8"
   }
 }
