@@ -5,6 +5,8 @@
 
 import { keccak256, toHex, type Hex } from 'viem';
 import { NS, CLASS as ONT_CLASS, SHAPE as ONT_SHAPE, PREDICATE as ONT_PREDICATE } from '@agenticprimitives/ontology';
+import { decodeAgentType } from '@agenticprimitives/agent-naming';
+import type { DerivedAgentType } from '@agenticprimitives/types';
 
 export { NS };
 export const CLASS = ONT_CLASS;
@@ -32,27 +34,39 @@ export function agentKindClass(value: Hex | string | null | undefined): string |
  *  the skos concept in ap:agentTypeScheme. On-chain-derivable only (ADR-0040); never inferred from a suffix. */
 export const AGENT_TYPE_PRED: Hex = keccak256(toHex('atl:agentType'));
 export const SERVICE_ROLE_PRED: Hex = keccak256(toHex('atl:serviceRole'));
-const DERIVED: Array<[string, string, string]> = [
-  // [enum value, derived class local name, agentTypeScheme concept local name]
-  ['person', 'PersonAgent', 'PersonType'],
-  ['org', 'OrganizationAgent', 'OrgType'],
-  ['team', 'TeamAgent', 'TeamType'],
-  ['service', 'ServiceAgent', 'ServiceType'],
-  ['workspace', 'WorkspaceAgent', 'WorkspaceType'],
-  ['treasury', 'Treasury', 'TreasuryType'],
-  ['registry', 'RegistryAgent', 'RegistryType'],
-  ['church', 'ChurchAgent', 'ChurchType'],
-  ['circle', 'CircleAgent', 'CircleType'],
-];
-const AGENT_TYPE_CLASS: Record<string, string> = Object.fromEntries(DERIVED.map(([v, c]) => [keccak256(toHex(v)), `${NS.ap}${c}`]));
-const AGENT_TYPE_CONCEPT: Record<string, string> = Object.fromEntries(DERIVED.map(([v, , k]) => [keccak256(toHex(v)), `${NS.ap}${k}`]));
-export function agentTypeClass(value: Hex | string | null | undefined): string | null {
+/** Derived type SLUG → the class + agentTypeScheme concept it projects as. Keyed by the slug, NOT by a
+ *  hash this file computes: decoding the on-chain bytes32 belongs to `agent-naming.decodeAgentType`,
+ *  which is also where the legacy encodings live.
+ *
+ *  This file used to build its own `keccak256(<current name>)` map. That is a second decoder, and a
+ *  second decoder drifts: when `workspace-coordinator` was renamed to `workspace`, agent-naming and
+ *  agent-profile both learned the old encoding and this one did not — so every `.workspace` agent
+ *  indexed as UNTYPED, vanished from the type facet, and could not be filtered for. One decoder. */
+const DERIVED: Record<DerivedAgentType, [cls: string, concept: string]> = {
+  person: ['PersonAgent', 'PersonType'],
+  org: ['OrganizationAgent', 'OrgType'],
+  team: ['TeamAgent', 'TeamType'],
+  service: ['ServiceAgent', 'ServiceType'],
+  workspace: ['WorkspaceAgent', 'WorkspaceType'],
+  treasury: ['Treasury', 'TreasuryType'],
+  registry: ['RegistryAgent', 'RegistryType'],
+  church: ['ChurchAgent', 'ChurchType'],
+  circle: ['CircleAgent', 'CircleType'],
+};
+
+/** The slug a stored bytes32 denotes — current encodings and the renamed ones alike. */
+function slugOf(value: Hex | string | null | undefined): DerivedAgentType | null {
   if (!value || value === ZERO_B32) return null;
-  return AGENT_TYPE_CLASS[value.toLowerCase()] ?? null;
+  return decodeAgentType(value as Hex) ?? null;
+}
+
+export function agentTypeClass(value: Hex | string | null | undefined): string | null {
+  const slug = slugOf(value);
+  return slug ? `${NS.ap}${DERIVED[slug][0]}` : null;
 }
 export function agentTypeConcept(value: Hex | string | null | undefined): string | null {
-  if (!value || value === ZERO_B32) return null;
-  return AGENT_TYPE_CONCEPT[value.toLowerCase()] ?? null;
+  const slug = slugOf(value);
+  return slug ? `${NS.ap}${DERIVED[slug][1]}` : null;
 }
 
 export const SHAPE = {

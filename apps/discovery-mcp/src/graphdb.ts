@@ -9,10 +9,16 @@ export interface Env {
   GRAPHDB_TOKEN?: string;
 }
 
-/** `ap:agentTypeScheme` concept IRI → the DerivedAgentType slug (spec 346 §11). Unknown/absent → null. */
+/** `ap:agentTypeScheme` concept IRI → the DerivedAgentType slug (spec 346 §11). Unknown/absent → null.
+ *
+ *  `WorkspaceCoordinatorType` is a concept the A-box may still carry: rows projected before the
+ *  2026-08-31 rename hold it, and a read tier that refuses to decode its own history reports a correctly
+ *  typed agent as untyped — which is exactly what happened (every `.workspace` agent dropped out of the
+ *  type facet). Reading honours the past; the indexer only ever WRITES the current concept. */
 const AGENT_TYPE_SLUG: Record<string, string> = {
   PersonType: 'person', OrgType: 'org', TeamType: 'team', ServiceType: 'service',
   WorkspaceType: 'workspace', TreasuryType: 'treasury', RegistryType: 'registry', ChurchType: 'church', CircleType: 'circle',
+  WorkspaceCoordinatorType: 'workspace',
 };
 export function derivedTypeSlug(iri: string | undefined): string | null {
   if (!iri) return null;
