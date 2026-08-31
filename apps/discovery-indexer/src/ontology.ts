@@ -28,7 +28,7 @@ export function agentKindClass(value: Hex | string | null | undefined): string |
 
 /** Spec 346 §2.3 / §8.5 — the SA-KEYED DERIVED type (`atl:agentType`, bytes32 = keccak256(<DerivedAgentType>)) read
  *  off the AgentProfileResolver, and its open-set `atl:serviceRole`. Projected as (a) `rdf:type` of the derived
- *  class (ap:TeamAgent / ap:WorkspaceCoordinator / ap:Treasury / ap:RegistryAgent …) and (b) `ap:agentType` →
+ *  class (ap:TeamAgent / ap:WorkspaceAgent / ap:Treasury / ap:RegistryAgent …) and (b) `ap:agentType` →
  *  the skos concept in ap:agentTypeScheme. On-chain-derivable only (ADR-0040); never inferred from a suffix. */
 export const AGENT_TYPE_PRED: Hex = keccak256(toHex('atl:agentType'));
 export const SERVICE_ROLE_PRED: Hex = keccak256(toHex('atl:serviceRole'));
@@ -38,7 +38,7 @@ const DERIVED: Array<[string, string, string]> = [
   ['org', 'OrganizationAgent', 'OrgType'],
   ['team', 'TeamAgent', 'TeamType'],
   ['service', 'ServiceAgent', 'ServiceType'],
-  ['workspace-coordinator', 'WorkspaceCoordinator', 'WorkspaceCoordinatorType'],
+  ['workspace', 'WorkspaceAgent', 'WorkspaceType'],
   ['treasury', 'Treasury', 'TreasuryType'],
   ['registry', 'RegistryAgent', 'RegistryType'],
   ['church', 'ChurchAgent', 'ChurchType'],

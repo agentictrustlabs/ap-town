@@ -53,7 +53,7 @@ export interface AgentNode {
    *  on-chain `agentKind` — null when the agent declares no kind on-chain (then it's typed only ap:Agent;
    *  we never infer kind from names/heuristics, ADR-0040). */
   kindClass?: string | null;
-  /** The DERIVED class IRI (spec 346 §2.1: ap:TeamAgent / ap:WorkspaceCoordinator / ap:Treasury / ap:RegistryAgent …),
+  /** The DERIVED class IRI (spec 346 §2.1: ap:TeamAgent / ap:WorkspaceAgent / ap:Treasury / ap:RegistryAgent …),
    *  decoded from the SA-keyed on-chain `atl:agentType` — null when undeclared. Never inferred from the suffix. */
   derivedClass?: string | null;
   facets: ProjectedFacet[];

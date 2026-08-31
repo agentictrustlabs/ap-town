@@ -59,7 +59,7 @@ const TYPE_CHOICES: TypeChoice[] = [
   { value: 'org:circle', label: 'Circle', kind: 'derived', root: 'org' },
   { value: 'service', label: 'Service', kind: 'root', root: 'service' },
   { value: 'service:service', label: 'Service (plain)', kind: 'derived', root: 'service' },
-  { value: 'service:workspace-coordinator', label: 'Workspace coordinator', kind: 'derived', root: 'service' },
+  { value: 'service:workspace', label: 'Workspace', kind: 'derived', root: 'service' },
   { value: 'service:treasury', label: 'Treasury', kind: 'derived', root: 'service' },
   { value: 'service:registry', label: 'Registry', kind: 'derived', root: 'service' },
 ];

@@ -12,7 +12,7 @@ export interface Env {
 /** `ap:agentTypeScheme` concept IRI → the DerivedAgentType slug (spec 346 §11). Unknown/absent → null. */
 const AGENT_TYPE_SLUG: Record<string, string> = {
   PersonType: 'person', OrgType: 'org', TeamType: 'team', ServiceType: 'service',
-  WorkspaceCoordinatorType: 'workspace-coordinator', TreasuryType: 'treasury', RegistryType: 'registry', ChurchType: 'church', CircleType: 'circle',
+  WorkspaceType: 'workspace', TreasuryType: 'treasury', RegistryType: 'registry', ChurchType: 'church', CircleType: 'circle',
 };
 export function derivedTypeSlug(iri: string | undefined): string | null {
   if (!iri) return null;
@@ -156,7 +156,7 @@ export interface AgentResult {
    *  collapsed at projection). The honest corroboration count the trust matcher reads; per-CAPABILITY
    *  endorsement detail (for the declared-AND-endorsed fit boost) is a drill-down via getTrustFabric. */
   independentEndorsers?: number;   // ap:independentEndorserCount
-  /** spec 346 §8.5 — the DERIVED agent type slug ('person' | 'org' | 'team' | 'service' | 'workspace-coordinator' |
+  /** spec 346 §8.5 — the DERIVED agent type slug ('person' | 'org' | 'team' | 'service' | 'workspace' |
    *  'treasury' | 'registry') decoded from `ap:agentType` (the SA-keyed on-chain record), or null when undeclared.
    *  `tld` is the name's suffix (a projection, never authority); `serviceRole` the open-set role. */
   agentType?: string | null;
@@ -442,7 +442,7 @@ export interface NameListing {
   registeredAt: number | null;
   /** Unix seconds the registration expires; null = no expiry recorded. */
   expiresAt: number | null;
-  /** spec 346 §8.5 — the DERIVED agent type slug ('person' | 'org' | 'team' | 'service' | 'workspace-coordinator' |
+  /** spec 346 §8.5 — the DERIVED agent type slug ('person' | 'org' | 'team' | 'service' | 'workspace' |
    *  'treasury' | 'registry') decoded from `ap:agentType` (the SA-keyed on-chain record), or null when undeclared.
    *  `tld` is the name's suffix (a projection, never authority); `serviceRole` the open-set role. */
   agentType?: string | null;

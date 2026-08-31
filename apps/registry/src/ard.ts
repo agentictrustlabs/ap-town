@@ -148,7 +148,7 @@ export interface ArdSearchPlan {
 }
 export type ArdError = { status: 400 | 404; code: 'INVALID_ARGUMENT' | 'NOT_FOUND'; message: string };
 
-const DERIVED_TYPES = new Set(['person', 'org', 'team', 'service', 'workspace-coordinator', 'treasury', 'registry', 'church', 'circle']);
+const DERIVED_TYPES = new Set(['person', 'org', 'team', 'service', 'workspace', 'treasury', 'registry', 'church', 'circle']);
 const ROOT_KINDS = new Set(['person', 'org', 'service']);
 
 function arr(v: string[] | string | undefined): string[] { return v === undefined ? [] : Array.isArray(v) ? v : [v]; }
