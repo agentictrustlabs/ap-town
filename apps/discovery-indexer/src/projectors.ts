@@ -91,8 +91,10 @@ const PROFILE_KEYS: Array<[string, string]> = [
   // setStringProperty), surviving a rename and existing for nameless agents. The name-record description
   // is a different fact and now lands under `apnam:description` (see NAME_ATTR_KEYS below).
   ['description', PREDICATE.description],
-  ['skills', PREDICATE.skills], // spec 282 — publicly-asserted skill labels (atl:skills)
-  // G2/G3/G4 — owner-asserted discovery-ranking facets on the atl:skills rail. Registered on-chain by
+  // ADR-0051 — publicly-asserted CAPABILITY ids. Read below rather than here, because it consults two
+  // predicates (the current `atl:capabilities`, and `atl:skills` for an agent that has not published
+  // since the rename) and this loop is one key → one predicate.
+  // G2/G3/G4 — owner-asserted discovery-ranking facets on the same rail. Registered on-chain by
   // packages/contracts/script/AddDiscoveryPredicates.s.sol; unregistered predicates revert on write, so
   // these three are read paths for data that CAN now be written (the G5 rule, applied forward).
   ['languages', PREDICATE.languages],   // BCP-47, comma-separated, lowercase
@@ -174,9 +176,19 @@ const profile: FacetProjector = {
     //
     // It also decouples the waves: an advisor's declaration projects correctly whether or not the
     // steward has published the definition yet.
-    const skills = data[PREDICATE.skills];
-    if (typeof skills === 'string') {
-      const ids = skills.split(',').map((s) => s.trim()).filter((s) => /^[a-z][a-z0-9]*:[a-z0-9][a-z0-9-]*$/i.test(s));
+    // ADR-0051 — the advertised capability ids. ONE mechanism with a documented migration (ADR-0013):
+    // `atl:capabilities` is the rail; `atl:skills` is that same rail under the name it had before the
+    // vocabulary settled, and an agent that has not published since still has its ids there. Same
+    // contract, same owner, same kind of value — only the key moved.
+    const readProfile = async (curie: string): Promise<string> =>
+      (await client.readContract({ address: profileResolver, abi: PROFILE_RESOLVER_ABI, functionName: 'getStringProperty', args: [sa, pred(curie)] }).catch(() => '')) as string;
+    const capabilityCsv = (await readProfile('capabilities')) || (await readProfile('skills'));
+    if (capabilityCsv) {
+      data[PREDICATE.capabilities] = capabilityCsv;
+      // Deprecated alias, written for ONE release so consumers can move their queries. Dropping a
+      // predicate out from under a live query is worse than a duplicated triple for one release.
+      data[PREDICATE.skills] = capabilityCsv;
+      const ids = capabilityCsv.split(',').map((x) => x.trim()).filter((x) => /^[a-z][a-z0-9]*:[a-z0-9][a-z0-9-]*$/i.test(x));
       if (ids.length) data[PREDICATE.declaresCapabilityId] = [...new Set(ids)];
     }
     const present = Object.keys(data).length > 0;

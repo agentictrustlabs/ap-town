@@ -117,6 +117,12 @@ export const PREDICATE = {
   // choose. Declared in tbox/identity.ttl; NO governor tx is involved (the on-chain term is unchanged).
   nameDescription: `${NS.apnam}description`,
   authOrigin: `${NS.approf}authOrigin`,
+  /** ADR-0051 — what the agent CAN DO. The ids come from `atl:capabilities` (or, for an agent that has
+   *  not published since the rename, `atl:skills`, which is the same rail under its old name). */
+  capabilities: `${NS.approf}capabilities`,
+  /** @deprecated Kept for ONE indexer release so consumers can move their queries; `approf:capabilities`
+   *  is the term. Written alongside, and only because dropping a predicate out from under a live query
+   *  is a worse failure than a duplicated triple for one release. */
   skills: `${NS.approf}skills`,
   a2aEndpoint: `${NS.approf}a2aEndpoint`, // spec 280 — the agent's A2A host (its live skills card)
   mcpEndpoint: `${NS.approf}mcpEndpoint`,
