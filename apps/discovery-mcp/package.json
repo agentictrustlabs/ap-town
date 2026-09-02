@@ -11,6 +11,7 @@
     "deploy:faithnet": "wrangler deploy --env faithnet"
   },
   "dependencies": {
+    "@agenticprimitives/capability-claims": "workspace:*",
     "hono": "^4.12.33"
   },
   "devDependencies": {

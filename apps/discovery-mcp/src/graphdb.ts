@@ -242,15 +242,15 @@ export async function lookupAgents(env: Env, smartAgents: string[]): Promise<Age
   return out;
 }
 
-/** Capability ids declared inside an `atl:skills` value — the CURIE-shaped tokens, deduped, order
- *  preserved. This is EXACT TOKENIZATION on a comma boundary, not substring matching: a token either
- *  is a well-formed CURIE or it is dropped, and no token ever partially matches another. */
-export function parseCapabilityIds(skills?: string | null): string[] {
-  if (!skills) return [];
-  const ids = skills.split(',').map((s) => s.trim())
-    .filter((s) => /^[a-z][a-z0-9]*:[a-z0-9][a-z0-9-]*$/i.test(s));
-  return [...new Set(ids)];
-}
+/** Capability ids declared inside the profile's capability value — exact tokenization on a comma
+ *  boundary, never substring matching, so no token ever partially matches another.
+ *
+ *  The shape rule lives in `capability-claims`, which owns the catalog and therefore the id vocabulary.
+ *  The copy that was here demanded a CURIE colon and silently dropped every DOTTED id the substrate
+ *  catalog uses (`messaging.deliver`, `interactions.deliverCredential`), so no agent could be
+ *  discovered by them. Three apps each had their own version of this rule and two were wrong. */
+export { parseCapabilityIds } from '@agenticprimitives/capability-claims';
+import { parseCapabilityIds } from '@agenticprimitives/capability-claims';
 
 /** The one agent-row query both `searchAgentsPage` and `lookupAgents` use, so the two paths can never
  *  drift in which facets they expose. `extraClause` is trusted, caller-built SPARQL (never user text). */

@@ -16,12 +16,13 @@
     "rebuild-custody": "tsx scripts/rebuild-custody.ts"
   },
   "dependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/registry-kit": "workspace:*",
+    "@agenticprimitives/agent-naming": "workspace:*",
+    "@agenticprimitives/capability-claims": "workspace:*",
     "@agenticprimitives/ontology": "workspace:*",
+    "@agenticprimitives/registry-kit": "workspace:*",
+    "@agenticprimitives/types": "workspace:*",
     "hono": "^4.12.33",
-    "viem": "^2.52.2",
-    "@agenticprimitives/agent-naming": "workspace:*"
+    "viem": "^2.52.2"
   },
   "devDependencies": {
     "@types/node": "^22.7.0",

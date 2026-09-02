@@ -4,6 +4,7 @@
 // facet. The indexer runs ALL projectors per agent and merges their facets into a single A-box node keyed
 // by the SA. Adding a source = drop a FacetProjector here; the pipeline, store, and UI are unchanged.
 
+import { parseCapabilityIds } from '@agenticprimitives/capability-claims';
 import { keccak256, toBytes, type Address, type Hex, type PublicClient } from 'viem';
 import { RESOLVER_ABI, NAME_REGISTRY_ABI, REGISTRY_ABI, REGISTRY_STATUS, PROFILE_RESOLVER_ABI, NAME_ATTR_RESOLVER_ABI, RELATIONSHIP_ABI, EDGE_STATUS } from './abi.js';
 import {
@@ -188,8 +189,10 @@ const profile: FacetProjector = {
       // Deprecated alias, written for ONE release so consumers can move their queries. Dropping a
       // predicate out from under a live query is worse than a duplicated triple for one release.
       data[PREDICATE.skills] = capabilityCsv;
-      const ids = capabilityCsv.split(',').map((x) => x.trim()).filter((x) => /^[a-z][a-z0-9]*:[a-z0-9][a-z0-9-]*$/i.test(x));
-      if (ids.length) data[PREDICATE.declaresCapabilityId] = [...new Set(ids)];
+      // The shape rule lives in `capability-claims` (it owns the catalog, so it owns the vocabulary).
+      // The copy here demanded a CURIE colon and dropped every dotted id the substrate catalog uses.
+      const ids = parseCapabilityIds(capabilityCsv);
+      if (ids.length) data[PREDICATE.declaresCapabilityId] = ids;
     }
     const present = Object.keys(data).length > 0;
     return { kind: 'profile', present, shapeIri: SHAPE.AgentProfile, conforms: present, data };
