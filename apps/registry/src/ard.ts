@@ -153,6 +153,43 @@ const ROOT_KINDS = new Set(['person', 'org', 'service']);
 
 function arr(v: string[] | string | undefined): string[] { return v === undefined ? [] : Array.isArray(v) ? v : [v]; }
 
+/**
+ * Resolve a filter key to the term this registry indexes, through the query's effective context.
+ *
+ * ARD §5.3.1 is explicit that a filter key naming a term is matched BY ITS IRI, not by the literal key
+ * string — "this is what makes namespaced filtering work across publishers: a client filtering on
+ * `okf:taxonomy` matches any entry whose author bound the same namespace, regardless of the prefix that
+ * author chose". We matched the literal string, so a client that bound `zz:` to our own namespace and
+ * asked for `zz:agentType` was told the registry does not filter that term — while `ap:agentType`, the
+ * same IRI, worked. A prefix is a local nickname; rejecting someone else's nickname for a term we do
+ * index is exactly the interoperability failure the rule exists to prevent.
+ *
+ * Core terms (`type`, `tags`, `capabilities`) resolve through the base context and carry no prefix.
+ */
+export function resolveFilterKey(key: string, queryContext: unknown): string {
+  const colon = key.indexOf(':');
+  if (colon <= 0) return key; // a core term, or a bare path — no prefix to resolve
+  const prefix = key.slice(0, colon);
+  const rest = key.slice(colon + 1);
+  // The effective context: the ARD base (which binds nothing of ours) plus this query's bindings,
+  // over the top of the bindings we publish in our own manifest.
+  const bound: Record<string, string> = { ...AP_CONTEXT };
+  if (queryContext && typeof queryContext === 'object' && !Array.isArray(queryContext)) {
+    for (const [k, v] of Object.entries(queryContext as Record<string, unknown>)) {
+      if (typeof v === 'string') bound[k] = v;
+    }
+  }
+  const iri = bound[prefix];
+  if (!iri) return key; // unbound prefix — not ours to interpret; falls through to the unknown-term 400
+  // Re-express the IRI under the prefix THIS registry indexes under, so one canonical key reaches the
+  // rest of the planner. An IRI we do not publish stays as written and is refused below.
+  for (const [ourPrefix, ourIri] of Object.entries(AP_CONTEXT)) {
+    if (ourIri === iri) return `${ourPrefix}:${rest}`;
+  }
+  return key;
+}
+
+
 export function decodePageToken(t: string | undefined): number | null {
   if (!t) return 0;
   try { const o = JSON.parse(atob(t)) as { offset?: unknown }; return typeof o.offset === 'number' && o.offset >= 0 ? o.offset : null; } catch { return null; }
@@ -161,9 +198,17 @@ export function encodePageToken(offset: number): string { return btoa(JSON.strin
 
 /** ARD query → discovery plan. Within a key = OR, across keys = AND (ARD §5.3.1); we serve one value per
  *  structured key in W1 and say so with INVALID_ARGUMENT rather than silently taking the first. */
-export function planArdSearch(body: ArdSearchRequest): ArdSearchPlan | ArdError {
+export function planArdSearch(body: ArdSearchRequest, opts: { textRequired?: boolean } = {}): ArdSearchPlan | ArdError {
   const q = body.query ?? {};
-  const filter = q.filter ?? {};
+  // Filter keys are matched by IRI, so a client's own prefix for a term we index resolves to ours.
+  const filter: Record<string, string[] | string> = {};
+  for (const [k, v] of Object.entries(q.filter ?? {})) filter[resolveFilterKey(k, q['@context'])] = v;
+  const text = (q.text ?? '').toString().trim();
+  // ARD §5.3.2: "For Search, text is required." Explore says the opposite ("text and filter are both
+  // optional"), which is why this is a caller's choice and not a constant.
+  if (opts.textRequired && !text) {
+    return { status: 400, code: 'INVALID_ARGUMENT', message: 'query.text is required for search (ARD §5.3.2); use /explore to aggregate without a query' };
+  }
   const pageSize = body.pageSize === undefined ? 10 : body.pageSize;
   if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) return { status: 400, code: 'INVALID_ARGUMENT', message: 'pageSize must be an integer in 1..100' };
   const federation = body.federation ?? 'auto';
@@ -189,7 +234,7 @@ export function planArdSearch(body: ArdSearchRequest): ArdSearchPlan | ArdError 
   const known = new Set(['type', 'capabilities', 'tags', 'ap:agentType', 'ap:registered']);
   for (const k of Object.keys(filter)) if (!known.has(k)) return { status: 400, code: 'INVALID_ARGUMENT', message: `filter.${k} is not a term this registry filters` };
   if (arr(filter['ap:registered'])[0] === 'true') mandates.requireRegistered = true;
-  return { need: (q.text ?? '').toString().trim(), mandates, typeServable, federation, pageSize, offset };
+  return { need: text, mandates, typeServable, federation, pageSize, offset };
 }
 
 /** A ranked discovery match, structurally (the discovery a2a's `matchCandidate` output). */
@@ -268,15 +313,34 @@ export function parseAgentsFilter(filter: string | undefined): { type?: string; 
   }
   return out;
 }
-export function ardAgentsResponse(rows: ArdAgentRowLike[], opts: { type?: string; tag?: string; pageSize?: number; pageToken?: string }): { '@context': unknown; items: ArdEntry[]; pageToken?: string } | ArdError {
+/** The fields List can order by. `orderBy` was ACCEPTED AND IGNORED — `name` and `name DESC` returned the
+ *  same order — which is worse than refusing it: a client cannot tell a sort it did not get from a sort
+ *  that happened to look like that. A field we cannot order by is now a 400. */
+const ORDER_FIELDS: Record<string, (e: ArdEntry) => string> = {
+  name: (e) => (e.displayName ?? e.identifier).toLowerCase(),
+  identifier: (e) => e.identifier,
+};
+
+export function ardAgentsResponse(rows: ArdAgentRowLike[], opts: { type?: string; tag?: string; pageSize?: number; pageToken?: string; orderBy?: string }): { '@context': unknown; items: ArdEntry[]; pageToken?: string } | ArdError {
   const pageSize = opts.pageSize ?? 20;
   if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) return { status: 400, code: 'INVALID_ARGUMENT', message: 'pageSize must be an integer in 1..100' };
   const offset = decodePageToken(opts.pageToken);
   if (offset === null) return { status: 400, code: 'INVALID_ARGUMENT', message: 'pageToken is not one this registry issued' };
+  const order = (opts.orderBy ?? '').trim();
+  let key = ORDER_FIELDS.identifier!;
+  let desc = false;
+  if (order) {
+    const [field, dir] = order.split(/\s+/);
+    const k = ORDER_FIELDS[(field ?? '').toLowerCase()];
+    if (!k) return { status: 400, code: 'INVALID_ARGUMENT', message: `orderBy: this registry orders by ${Object.keys(ORDER_FIELDS).join(' or ')}, not "${field}"` };
+    if (dir && !/^(asc|desc)$/i.test(dir)) return { status: 400, code: 'INVALID_ARGUMENT', message: `orderBy: direction must be ASC or DESC, not "${dir}"` };
+    key = k;
+    desc = /^desc$/i.test(dir ?? '');
+  }
   if (opts.type && opts.type !== ARD_A2A_CARD_TYPE) return { '@context': [ARD_CONTEXT_URL, AP_CONTEXT], items: [] };
   const entries = rows.map((r) => ardEntryForAgent(r).entry).filter((e): e is ArdEntry => !!e)
     .filter((e) => !opts.tag || (e.tags ?? []).includes(opts.tag))
-    .sort((a, b) => a.identifier.localeCompare(b.identifier));
+    .sort((a, b) => (desc ? -1 : 1) * key(a).localeCompare(key(b)));
   const page = entries.slice(offset, offset + pageSize);
   const next = offset + pageSize < entries.length ? encodePageToken(offset + pageSize) : undefined;
   return { '@context': [ARD_CONTEXT_URL, AP_CONTEXT], items: page, ...(next ? { pageToken: next } : {}) };

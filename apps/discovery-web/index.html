@@ -4,6 +4,11 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AP Discovery · agent registry explorer (demo)</title>
+    <!-- ARD §5.1: a consumer resolving this domain MUST honour rel="ard". This host is an assets-only
+         Worker with an SPA fallback, so /.well-known/ard.json here returns the app's HTML with a 200 —
+         a crawler asking this domain for entries would conclude we publish none. The link names the
+         registry that actually serves them. -->
+    <link rel="ard" href="https://discovery-a2a.faithnet.io/.well-known/ard.json" />
     <style>
       :root {
         /* demo-discovery identity — a "discovery / graph" cyan-teal, distinct from demo-gs (indigo),

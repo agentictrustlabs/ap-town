@@ -674,7 +674,7 @@ app.get(ARD_WELL_KNOWN_PATH, async (c) => {
 app.post('/search', async (c) => {
   const body = (await c.req.json().catch(() => null)) as Parameters<typeof planArdSearch>[0] | null;
   if (!body) return c.json(ardError({ status: 400, code: 'INVALID_ARGUMENT', message: 'body must be JSON' }), 400);
-  const plan = planArdSearch(body);
+  const plan = planArdSearch(body, { textRequired: true }); // ARD §5.3.2 — /explore is the endpoint that takes no text
   if ('code' in plan) return c.json(ardError(plan), plan.status);
   const origin = registryOrigin(c);
   if (!plan.typeServable) return c.json({ '@context': undefined, results: [] });
@@ -698,7 +698,7 @@ app.get('/agents', async (c) => {
   const pageSize = c.req.query('pageSize') ? Number(c.req.query('pageSize')) : undefined;
   const mcp = await mcpGet(c.env, '/search?q=&limit=500').catch((e) => ({ ok: false, error: String(e) }));
   if (!mcp?.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: mcp?.error ?? 'discovery MCP unavailable' } }, 500);
-  const out = ardAgentsResponse(mcp.results as AgentResult[], { ...f, pageSize, pageToken: c.req.query('pageToken') });
+  const out = ardAgentsResponse(mcp.results as AgentResult[], { ...f, pageSize, pageToken: c.req.query('pageToken'), ...(c.req.query('orderBy') ? { orderBy: c.req.query('orderBy')! } : {}) });
   if ('code' in out) return c.json(ardError(out), out.status);
   return c.json(out, 200, { 'cache-control': 'public, max-age=300' });
 });
