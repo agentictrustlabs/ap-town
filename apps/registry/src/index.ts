@@ -7,7 +7,7 @@
 // best agents with an explainable evidence path. It evolves into a full-featured discovery app.
 
 import { Hono } from 'hono';
-import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike, applyRelevanceCutoff, facetsOverMatches } from './ard.js';
+import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike, applyRelevanceCutoff, facetsOverMatches, parseUpstreamRegistries } from './ard.js';
 import { ACP_REGISTRY_PATH, acpRegistry } from './acp.js';
 import { cors } from 'hono/cors';
 import { keccak_256 } from '@noble/hashes/sha3.js';
@@ -688,9 +688,16 @@ app.post('/search', async (c) => {
   if ('code' in plan) return c.json(ardError(plan), plan.status);
   const origin = registryOrigin(c);
   if (!plan.typeServable) return c.json({ '@context': undefined, results: [] });
+  const upstreams = parseUpstreamRegistries((c.env as { ARD_UPSTREAM_REGISTRIES?: string }).ARD_UPSTREAM_REGISTRIES);
+  // `auto` promises a MERGE of upstream results (§5.4). With none configured it is `none` by definition
+  // and answering from our own index is exact. With upstreams configured it would be a claim we do not
+  // honour — so say so instead of quietly returning a partial set as if it were the merged one.
+  if (plan.federation === 'auto' && upstreams.length) {
+    return c.json(ardError({ status: 400, code: 'INVALID_ARGUMENT', message: 'federation=auto (upstream merge) is not implemented by this registry; use federation=referrals to be told which registries to query, or none' }), 400);
+  }
   const run = await runDiscovery(c.env, { q: '', intent: { need: plan.need }, mandates: plan.mandates, limit: 100 });
   if (!run.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: run.error } }, 500);
-  return c.json(ardSearchResponse(run.ranked.map((m) => toRanked(m, run.candidates)), plan, { source: `${origin}/search` }));
+  return c.json(ardSearchResponse(run.ranked.map((m) => toRanked(m, run.candidates)), plan, { source: `${origin}/search`, referrals: upstreams }));
 });
 
 app.post('/explore', async (c) => {

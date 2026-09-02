@@ -270,6 +270,36 @@ export interface RankedLike extends ArdAgentRowLike {
 }
 
 export interface ArdSearchResult extends ArdEntry { score: number; source: string }
+/**
+ * The registries this one will refer a client to (§5.4).
+ *
+ * `federation` was accepted and inert: `auto`, `referrals` and `none` behaved identically and no
+ * `referrals` key was ever returned, so a client asking to be told about other registries could not
+ * distinguish "there are none" from "this registry ignored the parameter". With no upstreams configured
+ * the three modes ARE identical and that is honest — what was missing is saying so.
+ *
+ * Configured as a JSON array in `ARD_UPSTREAM_REGISTRIES`; anything malformed is dropped rather than
+ * thrown, because a bad entry in operator config must not take search down.
+ */
+export function parseUpstreamRegistries(raw: string | undefined): ArdEntry[] {
+  if (!raw?.trim()) return [];
+  try {
+    const list = JSON.parse(raw) as Array<{ identifier?: unknown; displayName?: unknown; url?: unknown }>;
+    if (!Array.isArray(list)) return [];
+    return list.flatMap((e) => {
+      const identifier = typeof e.identifier === 'string' ? e.identifier : null;
+      const url = typeof e.url === 'string' ? e.url : null;
+      if (!identifier || !url || !url.startsWith('https://')) return [];
+      return [{
+        identifier,
+        ...(typeof e.displayName === 'string' ? { displayName: e.displayName } : {}),
+        type: ARD_REGISTRY_TYPE,
+        url,
+      } as ArdEntry];
+    });
+  } catch { return []; }
+}
+
 export interface ArdSearchResponse { '@context': unknown; results: ArdSearchResult[]; referrals?: ArdEntry[]; pageToken?: string }
 
 export function ardSearchResponse(ranked: RankedLike[], plan: ArdSearchPlan, opts: { source: string; referrals?: ArdEntry[]; receiptUriFor?: (sa: string) => string | null }): ArdSearchResponse {
@@ -292,7 +322,10 @@ export function ardSearchResponse(ranked: RankedLike[], plan: ArdSearchPlan, opt
   return {
     '@context': [ARD_CONTEXT_URL, AP_CONTEXT],
     results: page,
-    ...(plan.federation !== 'none' && opts.referrals?.length ? { referrals: opts.referrals } : {}),
+    // `referrals` mode ALWAYS carries the key, empty included: a client that asked to be told about
+    // other registries must be able to tell "there are none" from "the parameter was ignored".
+    ...(plan.federation === 'referrals' ? { referrals: opts.referrals ?? [] }
+      : plan.federation === 'auto' && opts.referrals?.length ? { referrals: opts.referrals } : {}),
     ...(next ? { pageToken: next } : {}),
   };
 }

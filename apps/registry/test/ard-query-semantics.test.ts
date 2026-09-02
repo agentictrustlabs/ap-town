@@ -3,7 +3,7 @@
  * like one, plus the ordering contract for List.
  */
 import { describe, it, expect } from 'vitest';
-import { resolveFilterKey, planArdSearch, ardAgentsResponse, applyRelevanceCutoff, facetsOverMatches, ARD_RELEVANCE_CUTOFF } from '../src/ard.js';
+import { resolveFilterKey, planArdSearch, ardAgentsResponse, applyRelevanceCutoff, facetsOverMatches, ARD_RELEVANCE_CUTOFF, parseUpstreamRegistries, ardSearchResponse } from '../src/ard.js';
 
 describe('§5.3.1 — a filter key is matched by its IRI, not by its prefix', () => {
   // "this is what makes namespaced filtering work across publishers: a client filtering on okf:taxonomy
@@ -111,5 +111,37 @@ describe('§5.3.3 — facets cover the MATCHED set', () => {
 
   it('an empty match set is an empty aggregate, not a fallback to everything', () => {
     expect(facetsOverMatches([]).total).toBe(0);
+  });
+});
+
+describe('§5.4 — federation says what it does and does not do', () => {
+  it('parses configured upstreams, dropping anything malformed rather than throwing', () => {
+    const r = parseUpstreamRegistries(JSON.stringify([
+      { identifier: 'urn:air:x.example:registry:public', displayName: 'X', url: 'https://x.example/search' },
+      { identifier: 'no-url' },
+      { identifier: 'urn:air:insecure', url: 'http://plain.example/search' },
+    ]));
+    // A bad entry in operator config must not take search down with it.
+    expect(r).toHaveLength(1);
+    expect(r[0]!.url).toBe('https://x.example/search');
+    expect(r[0]!.type).toBe('application/ai-registry+json');
+  });
+
+  it('is empty, not thrown, for absent or malformed config', () => {
+    expect(parseUpstreamRegistries(undefined)).toEqual([]);
+    expect(parseUpstreamRegistries('{not json')).toEqual([]);
+    expect(parseUpstreamRegistries('{"a":1}')).toEqual([]);
+  });
+
+  it('referrals mode carries the key even when empty', () => {
+    // The bug: no `referrals` key was EVER returned, so a client could not tell "there are none" from
+    // "this registry ignored the parameter".
+    const plan = planArdSearch({ query: { text: 'x' }, federation: 'referrals' }) as Exclude<ReturnType<typeof planArdSearch>, { code: unknown }>;
+    expect(ardSearchResponse([], plan, { source: 'https://r.example/search', referrals: [] }).referrals).toEqual([]);
+  });
+
+  it('none mode carries no referrals key at all', () => {
+    const plan = planArdSearch({ query: { text: 'x' }, federation: 'none' }) as Exclude<ReturnType<typeof planArdSearch>, { code: unknown }>;
+    expect(ardSearchResponse([], plan, { source: 'https://r.example/search', referrals: [] }).referrals).toBeUndefined();
   });
 });
