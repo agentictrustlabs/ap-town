@@ -7,7 +7,7 @@
 // best agents with an explainable evidence path. It evolves into a full-featured discovery app.
 
 import { Hono } from 'hono';
-import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike } from './ard.js';
+import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike, applyRelevanceCutoff, facetsOverMatches } from './ard.js';
 import { ACP_REGISTRY_PATH, acpRegistry } from './acp.js';
 import { cors } from 'hono/cors';
 import { keccak_256 } from '@noble/hashes/sha3.js';
@@ -429,7 +429,11 @@ function fitScore(a: AgentResult, intent: Intent, cites: string[]): FitBreakdown
   // inspectable instead of indistinguishable from a structured one (ADR-0013).
   const lexicalOnly = needed.length === 0;
   if (lexicalOnly) {
-    const hay = [a.name, a.displayName, a.description, a.skills].filter(Boolean).join(' ').toLowerCase();
+    // The capability ids are part of the haystack: they are the most specific words an agent has
+    // published about itself, and leaving them out meant a query naming a capability in prose could not
+    // reach the agent that declares it.
+    const hay = [a.name, a.displayName, a.description, a.skills, (a.capabilityIds ?? []).join(' ')]
+      .filter(Boolean).join(' ').toLowerCase();
     let lex = 0;
     if (!need) lex = 0.15;
     else {
@@ -440,8 +444,14 @@ function fitScore(a: AgentResult, intent: Intent, cites: string[]): FitBreakdown
     }
     for (const sk of intent.skills ?? []) if (hay.includes(sk.toLowerCase())) lex = Math.min(1, lex + 0.2);
     if (lex > 0) {
-      s += 0.15 * lex;
-      cites.push('— no capability id resolved from the question; lexical fallback only');
+      // WEIGHT 0.85, not 0.15. `lexicalOnly` is a property of the QUERY, not of the candidate — when no
+      // capability id resolved, every candidate is scored this way, so there is no structured signal for
+      // a small cap to protect. Capping it anyway made a perfect text match score 15/100 while a total
+      // mismatch scored 0, which is an ordering with almost no range and an ARD `score` that reads as
+      // "nothing matched" even for the best hit. Scaling a term that is the only term is
+      // ORDER-PRESERVING, so /discover ranks exactly as before; only the reported magnitude changes.
+      s += 0.85 * lex;
+      cites.push('— no capability id resolved from the question; ranked on text alone');
     }
   }
 
@@ -685,8 +695,28 @@ app.post('/search', async (c) => {
 
 app.post('/explore', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as Parameters<typeof ardExploreResponse>[0];
-  const facets = await mcpGet(c.env, '/facets').catch((e) => ({ ok: false, error: String(e) }));
-  if (!facets?.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: facets?.error ?? 'discovery MCP unavailable' } }, 500);
+  // §5.3.3 — facets are computed over the MATCHED set, narrowed by the same text and filter as Search.
+  // This used to hand the registry-wide aggregate straight back, so "which agent types match 'estate
+  // planning'?" answered "which agent types exist?": a plausible number for a question nobody asked.
+  // With NEITHER text nor filter the whole registry IS the matched set, and the cheap global aggregate
+  // is then the right answer rather than a shortcut.
+  const q = body.query ?? {};
+  const narrowed = !!(q.text ?? '').toString().trim() || Object.keys(q.filter ?? {}).length > 0;
+  let facets: unknown;
+  if (narrowed) {
+    const plan = planArdSearch({ query: q });
+    if ('code' in plan) return c.json(ardError(plan), plan.status);
+    if (!plan.typeServable) return c.json({ resultType: 'facets', facets: {} });
+    const run = await runDiscovery(c.env, { q: '', intent: { need: plan.need }, mandates: plan.mandates, limit: 500 });
+    if (!run.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: run.error } }, 500);
+    // The SAME cutoff as Search — §5.3.3 requires one cutoff per registry, not one per endpoint.
+    const matched = applyRelevanceCutoff(run.ranked.map((m) => toRanked(m, run.candidates)), plan.need.length > 0);
+    facets = facetsOverMatches(matched);
+  } else {
+    const global = await mcpGet(c.env, '/facets').catch((e) => ({ ok: false, error: String(e) }));
+    if (!global?.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: global?.error ?? 'discovery MCP unavailable' } }, 500);
+    facets = global;
+  }
   const out = ardExploreResponse(body, facets as Parameters<typeof ardExploreResponse>[1]);
   if ('code' in out) return c.json(ardError(out), out.status);
   return c.json(out);

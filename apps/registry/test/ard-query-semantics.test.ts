@@ -3,7 +3,7 @@
  * like one, plus the ordering contract for List.
  */
 import { describe, it, expect } from 'vitest';
-import { resolveFilterKey, planArdSearch, ardAgentsResponse } from '../src/ard.js';
+import { resolveFilterKey, planArdSearch, ardAgentsResponse, applyRelevanceCutoff, facetsOverMatches, ARD_RELEVANCE_CUTOFF } from '../src/ard.js';
 
 describe('§5.3.1 — a filter key is matched by its IRI, not by its prefix', () => {
   // "this is what makes namespaced filtering work across publishers: a client filtering on okf:taxonomy
@@ -70,5 +70,46 @@ describe('§5.3.4 — orderBy either orders or is refused', () => {
 
   it('refuses a direction it does not understand', () => {
     expect('code' in ardAgentsResponse(rows, { orderBy: 'name SIDEWAYS' })).toBe(true);
+  });
+});
+
+describe('§5.3.3 — one relevance cutoff, governing Search and Explore alike', () => {
+  const ranked = (fit: number[]) => fit.map((f, i) => ({ fitScore: f, smartAgent: `0x${String(i).repeat(40)}` }));
+
+  it('drops what the text did not touch', () => {
+    expect(applyRelevanceCutoff(ranked([0.9, 0.3, 0, 0]), true).map((r) => r.fitScore)).toEqual([0.9, 0.3]);
+  });
+
+  it('drops NOTHING without text — a filter-only or empty query is not a relevance question', () => {
+    // §5.3.3: an Explore with neither text nor filter "covers the entire registry".
+    expect(applyRelevanceCutoff(ranked([0.9, 0, 0]), false)).toHaveLength(3);
+  });
+
+  it('the cutoff is low on purpose: drop the untouched, do not second-guess a weak match', () => {
+    expect(ARD_RELEVANCE_CUTOFF).toBeGreaterThan(0);
+    expect(ARD_RELEVANCE_CUTOFF).toBeLessThan(0.1);
+  });
+});
+
+describe('§5.3.3 — facets cover the MATCHED set', () => {
+  const rows = [
+    { smartAgent: '0xa', agentType: 'person', tld: 'me', capabilityIds: ['adv:tax'] },
+    { smartAgent: '0xb', agentType: 'person', tld: 'me', capabilityIds: ['adv:tax', 'adv:trust'] },
+    { smartAgent: '0xc', agentType: 'org', tld: 'org', capabilityIds: [] },
+  ] as never[];
+
+  it('counts the rows it was given, not the registry', () => {
+    const f = facetsOverMatches(rows);
+    expect(f.total).toBe(3);
+    expect(f.agentTypes).toEqual([{ value: 'person', count: 2 }, { value: 'org', count: 1 }]);
+    expect(f.capabilityIds).toEqual([{ value: 'adv:tax', count: 2 }, { value: 'adv:trust', count: 1 }]);
+  });
+
+  it('a narrowed match set yields narrowed counts — the bug was answering the unasked question', () => {
+    expect(facetsOverMatches([rows[0]!]).agentTypes).toEqual([{ value: 'person', count: 1 }]);
+  });
+
+  it('an empty match set is an empty aggregate, not a fallback to everything', () => {
+    expect(facetsOverMatches([]).total).toBe(0);
   });
 });

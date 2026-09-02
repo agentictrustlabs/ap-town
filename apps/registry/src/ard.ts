@@ -237,6 +237,29 @@ export function planArdSearch(body: ArdSearchRequest, opts: { textRequired?: boo
   return { need: text, mandates, typeServable, federation, pageSize, offset };
 }
 
+/**
+ * The relevance floor for a TEXT query (ARD §5.3.3).
+ *
+ * "For semantic text queries, the registry applies a relevance cutoff: entries whose relevance falls
+ * below the cutoff are excluded from the matched set. The cutoff is registry-defined, but within a
+ * single registry the same cutoff governs both Search results and Explore facets."
+ *
+ * Without one, `text` neither ranked nor narrowed: a nonsense query returned the whole first page at
+ * score 0 and faceted over every agent in the registry, so `/search` was a list endpoint with a zero
+ * column. This is deliberately LOW — the job is to drop entries the text did not touch at all, not to
+ * second-guess a weak match — and it is exported so Search and Explore cannot drift apart.
+ *
+ * It is a RELEVANCE floor and nothing else: §5.3.2 and spec 346 §8.3 both forbid reading `score` as a
+ * trust, compliance or safety rating, and trust evidence rides under `ap:` where it can be inspected.
+ */
+export const ARD_RELEVANCE_CUTOFF = 0.02;
+
+/** Entries the text query actually touched. No text ⇒ no cutoff: a filter-only or empty query is not a
+ *  relevance question, and §5.3.3 says an Explore with neither covers the entire registry. */
+export function applyRelevanceCutoff<T extends { fitScore: number }>(matches: T[], hasText: boolean): T[] {
+  return hasText ? matches.filter((m) => m.fitScore >= ARD_RELEVANCE_CUTOFF) : matches;
+}
+
 /** A ranked discovery match, structurally (the discovery a2a's `matchCandidate` output). */
 export interface RankedLike extends ArdAgentRowLike {
   /** The FIT term alone (0..1). The blended spec-281 `score` is NOT used here — trust is not relevance. */
@@ -251,7 +274,9 @@ export interface ArdSearchResponse { '@context': unknown; results: ArdSearchResu
 
 export function ardSearchResponse(ranked: RankedLike[], plan: ArdSearchPlan, opts: { source: string; referrals?: ArdEntry[]; receiptUriFor?: (sa: string) => string | null }): ArdSearchResponse {
   const entries: ArdSearchResult[] = [];
-  for (const r of ranked) {
+  // §5.3.3 — drop what the text did not touch, BEFORE paging. Filtering a page would report a page size
+  // the caller did not ask for and leave `pageToken` walking over entries that were never in the set.
+  for (const r of applyRelevanceCutoff(ranked, plan.need.length > 0)) {
     const e = ardEntryForAgent(r, { receiptUriFor: opts.receiptUriFor });
     if (!e.entry) continue;
     entries.push({
@@ -279,6 +304,28 @@ export interface ArdExploreRequest { query?: ArdSearchRequest['query']; resultTy
 export interface FacetsLike { agentTypes?: Array<{ value: string; count: number }>; kinds?: Array<{ value: string; count: number }>; capabilityIds?: Array<{ value: string; count: number }>; tlds?: Array<{ value: string; count: number }>; total?: number }
 
 const FACET_FIELDS: Record<string, keyof Omit<FacetsLike, 'total'> | 'type'> = { type: 'type', capabilities: 'capabilityIds', 'ap:agentType': 'agentTypes', tags: 'agentTypes', 'ap:tld': 'tlds', 'ap:kind': 'kinds' };
+
+/**
+ * Aggregate a MATCHED SET into the same `FacetsLike` shape the registry-wide `/facets` returns.
+ *
+ * §5.3.3: "Facets are computed over the full matched set" — narrowed by the same text and filter as
+ * Search. Explore previously took the registry-wide aggregate and ignored `query` entirely, so asking
+ * "which agent types match 'estate planning'?" answered "which agent types exist?" — a plausible number
+ * for a question nobody asked. Deriving the buckets from the matched rows is the whole fix.
+ */
+export function facetsOverMatches(rows: ArdAgentRowLike[]): FacetsLike {
+  const count = (pick: (r: ArdAgentRowLike) => string[] | undefined): Array<{ value: string; count: number }> => {
+    const n = new Map<string, number>();
+    for (const r of rows) for (const v of pick(r) ?? []) if (v) n.set(v, (n.get(v) ?? 0) + 1);
+    return [...n].map(([value, c]) => ({ value, count: c })).sort((a, b) => b.count - a.count || a.value.localeCompare(b.value));
+  };
+  return {
+    total: rows.length,
+    agentTypes: count((r) => (r.agentType ? [r.agentType] : [])),
+    capabilityIds: count((r) => r.capabilityIds),
+    tlds: count((r) => (r.tld ? [r.tld] : [])),
+  };
+}
 
 export function ardExploreResponse(req: ArdExploreRequest, facets: FacetsLike): { resultType: 'facets'; facets: Record<string, { buckets: Array<{ value: string; count: number }>; otherCount?: number }> } | ArdError {
   const out: Record<string, { buckets: Array<{ value: string; count: number }>; otherCount?: number }> = {};
