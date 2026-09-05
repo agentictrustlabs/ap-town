@@ -8,15 +8,19 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "deploy:faithnet": "wrangler deploy --env faithnet"
+    "deploy:faithnet": "wrangler deploy --env faithnet",
+    "test": "vitest run"
   },
   "dependencies": {
     "@agenticprimitives/capability-claims": "workspace:*",
-    "hono": "^4.12.33"
+    "hono": "^4.12.33",
+    "sparqljs": "^3.7.4"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240909.0",
     "typescript": "^5.5.0",
-    "wrangler": "^3.78.0"
+    "wrangler": "^3.78.0",
+    "@types/sparqljs": "^3.1.12",
+    "vitest": "^2.1.0"
   }
 }

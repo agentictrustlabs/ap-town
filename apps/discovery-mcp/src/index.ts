@@ -6,7 +6,7 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { searchAgents, searchAgentsPage, lookupAgents, getAgent, getOfferings, getTrustFabric, listNames, listAgentsByContext, describeTerm, listShapes, checkCustody, runKbQuery, getFacets, SEARCH_MAX_LIMIT, type Env } from './graphdb.js';
+import { searchAgents, searchAgentsPage, lookupAgents, getAgent, getOfferings, getTrustFabric, listNames, listAgentsByContext, describeTerm, listShapes, checkCustody, runKbQuery, runKbConstruct, getFacets, SEARCH_MAX_LIMIT, type Env } from './graphdb.js';
 
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
@@ -19,6 +19,19 @@ app.post('/kb/query', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { query?: string };
   if (!body.query) return c.json({ ok: false, error: 'query required' }, 400);
   try { return c.json({ ok: true, ...(await runKbQuery(c.env, body.query)) }); }
+  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 400); }
+});
+
+// THE ANSWER PATH — spec 357 §3. CONSTRUCT in, JSON-LD out, the query returned with it.
+//
+// Separate from `/kb/query` on purpose rather than by sniffing the form: this surface answers with the
+// DOMAIN (entities, typed, with properties from the ontology) and the browser surface answers with a
+// table. Two shapes, two routes, neither pretending to be the other. Still a read of world-readable data
+// (ADR-0040) — a query here decides what is shown, never what may be seen.
+app.post('/kb/construct', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { query?: string };
+  if (!body.query) return c.json({ ok: false, error: 'query required' }, 400);
+  try { return c.json({ ok: true, ...(await runKbConstruct(c.env, body.query)) }); }
   catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 400); }
 });
 

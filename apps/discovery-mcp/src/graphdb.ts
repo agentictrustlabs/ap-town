@@ -2,6 +2,7 @@
 // secrets) and runs SPARQL SELECT over the `smart-agents` A-box that agent-indexer populates.
 
 import { decodeDistribution, type AgentDistributionV1 } from './distribution.js';
+import { decideKbQuery } from './sparql-guard.js';
 export interface Env {
   GRAPHDB_QUERY_URL: string;
   GRAPHDB_USER?: string;
@@ -54,39 +55,66 @@ export async function sparqlSelect(env: Env, query: string): Promise<Binding[]> 
   return json.results?.bindings ?? [];
 }
 
-// ── Read-only SPARQL passthrough for the admin KB browser ──────────────────────────────────────────────
-// The public A-box is world-readable (ADR-0040), so exposing READ SPARQL over it is fine; but we hard-reject
-// any update verb, cap unbounded SELECTs, and (KC-2, seam audit) block two shapes an update-verb filter
-// misses: SPARQL federation (SERVICE) and any reference to the custody membership graph.
-const FORBIDDEN_SPARQL = /\b(INSERT|DELETE|LOAD|CLEAR|DROP|CREATE|ADD|MOVE|COPY|MODIFY)\b/i;
-// KC-2: a SERVICE clause makes the GraphDB backend fetch an arbitrary URL during query evaluation → SSRF from
-// the server's network position. A read-only KB browser never needs federation.
-const FORBIDDEN_SERVICE = /\bSERVICE\b/i;
-// KC-2 / ADR-0040: the custody membership graph answers EXACT-MATCH existence only (checkCustody recomputes a
-// single token and asks "does it exist"), NEVER enumeration. A direct query referencing it (GRAPH/FROM
-// <urn:ap:custody>) would dump every unsalted token, so reject any query that names it.
-const CUSTODY_GRAPH_REF = /urn:ap:custody/i;
+// ── Read-only SPARQL over the public A-box (spec 357 W1) ───────────────────────────────────────────────
+// The A-box is world-readable (ADR-0040), so exposing READ SPARQL over it is fine. What must not be
+// exposed is federation (SERVICE makes the STORE fetch a URL — SSRF from its network position) or the
+// custody membership graph (existence checks only, never enumeration). Those were the KC-2 findings.
+//
+// The DECISION now lives in `decideKbQuery`, which parses. The regexes it replaced could only say what a
+// query did not look like; a syntax tree says what it does. See `src/sparql-guard.ts`.
 const RESULT_CAP = 2000;
+/** Wall clock. A public read tier owes a caller an answer or a refusal, not an open connection. */
+const QUERY_TIMEOUT_MS = 15_000;
 export interface KbResult { vars: string[]; rows: Record<string, string>[] }
 
-export async function runKbQuery(env: Env, query: string): Promise<KbResult> {
-  const q = query.trim();
-  if (!q) throw new Error('empty query');
-  if (FORBIDDEN_SPARQL.test(q)) throw new Error('read-only: SPARQL update operations are not allowed');
-  if (FORBIDDEN_SERVICE.test(q)) throw new Error('SPARQL SERVICE (federation) is not allowed');
-  if (CUSTODY_GRAPH_REF.test(q)) throw new Error('the custody membership graph is not directly queryable');
-  const capped = /\bselect\b/i.test(q) && !/\blimit\b/i.test(q) ? `${q}\nLIMIT ${RESULT_CAP}` : q;
+async function askGraphDb(env: Env, query: string, accept: string): Promise<Response> {
   const res = await fetch(env.GRAPHDB_QUERY_URL, {
     method: 'POST',
-    headers: { 'content-type': 'application/sparql-query', accept: 'application/sparql-results+json', ...authHeader(env) },
-    body: PREFIXES + capped,
+    headers: { 'content-type': 'application/sparql-query', accept, ...authHeader(env) },
+    body: PREFIXES + query,
+    signal: AbortSignal.timeout(QUERY_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`GraphDB ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`);
+  return res;
+}
+
+/** The ADMIN KB browser: every read-only form, because navigating a T-box means ASK-ing and DESCRIBE-ing
+ *  as much as selecting. Bindings out — this surface shows a table on purpose. */
+export async function runKbQuery(env: Env, query: string): Promise<KbResult> {
+  const decision = decideKbQuery(query, ['SELECT', 'ASK', 'CONSTRUCT', 'DESCRIBE']);
+  if (!decision.ok) throw new Error(decision.refusal);
+  const capped = decision.form === 'SELECT' && !decision.hasLimit ? `${query.trim()}\nLIMIT ${RESULT_CAP}` : query.trim();
+  const res = await askGraphDb(env, capped, 'application/sparql-results+json');
   const json = (await res.json()) as { head?: { vars?: string[] }; results?: { bindings?: Binding[] }; boolean?: boolean };
   if (typeof json.boolean === 'boolean') return { vars: ['result'], rows: [{ result: String(json.boolean) }] };
   const vars = json.head?.vars ?? [];
   const rows = (json.results?.bindings ?? []).map((b) => Object.fromEntries(vars.map((v) => [v, b[v]?.value ?? ''])));
   return { vars, rows };
+}
+
+/**
+ * The ANSWER path — spec 357 §3. CONSTRUCT only, JSON-LD out.
+ *
+ * A SELECT returns variable bindings: a table, whose columns mean whatever the query author had in mind.
+ * A CONSTRUCT returns a GRAPH — entities with types and properties from the ontology — which serialises
+ * as JSON-LD without anybody inventing a shape for it. That is why the answer path takes one form and not
+ * the other, and why refusing the other is a feature rather than a restriction.
+ *
+ * The JSON-LD here is EXPANDED, as the store emits it. Compaction and framing to a published `@context`
+ * are W4; promising a stable shape before that ships would be a promise this does not keep.
+ */
+export interface KbGraphResult { jsonld: unknown; query: string }
+
+export async function runKbConstruct(env: Env, query: string): Promise<KbGraphResult> {
+  const decision = decideKbQuery(query, ['CONSTRUCT']);
+  if (!decision.ok) throw new Error(decision.refusal);
+  const q = query.trim();
+  // A CONSTRUCT's LIMIT bounds the SOLUTIONS its template is applied to, which is the thing that can run
+  // away here. Unbounded, one careless triple pattern returns the graph.
+  const capped = decision.hasLimit ? q : `${q}\nLIMIT ${RESULT_CAP}`;
+  const res = await askGraphDb(env, capped, 'application/ld+json');
+  // The query travels with the answer (spec 357 §4): an answer whose query nobody can inspect is a claim.
+  return { jsonld: await res.json(), query: capped };
 }
 
 // ── Custody check (ADR-0040) ──────────────────────────────────────────────────────────────────────────
