@@ -21,11 +21,17 @@ export type KbQueryDecision = KbQueryOk | KbQueryRefused;
 
 /**
  * The cheap pre-filter, kept deliberately. It is redundant with the parse for everything the parser
- * understands — and it still earns its place for what a parser accepts happily: an update verb inside a
- * string literal is harmless, but a custody-graph IRI ANYWHERE in a query is a query nobody should be
- * writing, whatever position it holds in the tree.
+ * understands — and it still earns its place for what a parser accepts happily: a custody IRI or the
+ * membership CLASS anywhere in a query is a query nobody should be writing, whatever position it holds in
+ * the tree.
+ *
+ * PARTIAL, AND KNOWN TO BE (finding KC-2b). The membership tokens live in a named graph, and GraphDB's
+ * default dataset is the UNION of all graphs — so they are reachable WITHOUT naming the graph or the
+ * class, and `SELECT ?s ?p ?o WHERE { ?s ?p ?o }` still returns them among everything else. No filter over
+ * query TEXT can separate them while they are in the queryable dataset; the fix belongs at the store. This
+ * closes the obvious path and is not the control it would need to be.
  */
-const CUSTODY_GRAPH_REF = /urn:ap:c(ustody|m)/i;
+const CUSTODY_GRAPH_REF = /urn:ap:c(ustody|m)|core#CustodyMember/i;
 
 /** Named graphs a caller-supplied query may name. Empty: the public A-box is the DEFAULT graph, and the
  *  only named graph this KB has is the custody membership one, which answers existence and never
