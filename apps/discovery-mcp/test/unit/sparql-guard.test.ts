@@ -60,3 +60,22 @@ describe('decideKbQuery', () => {
     expect(refusal('   ')).toMatch(/empty query/);
   });
 });
+
+// Spec 357 W2 — an example that the endpoint would refuse teaches a shape nobody can use. These are the
+// corpus a query generator learns from, so they are held to the same standard as a real query.
+describe('the worked examples are queries this endpoint would actually run', () => {
+  it('every example is a valid CONSTRUCT the answer path admits', async () => {
+    const { KB_EXAMPLES } = await import('../../src/kb-schema.js');
+    expect(KB_EXAMPLES.length).toBeGreaterThan(0);
+    for (const ex of KB_EXAMPLES) {
+      expect(decideKbQuery(ex.query, ['CONSTRUCT']), ex.question).toMatchObject({ ok: true, form: 'CONSTRUCT' });
+    }
+  });
+
+  it('and each one states a LIMIT rather than relying on the cap', async () => {
+    const { KB_EXAMPLES } = await import('../../src/kb-schema.js');
+    for (const ex of KB_EXAMPLES) {
+      expect(decideKbQuery(ex.query, ['CONSTRUCT']), ex.question).toMatchObject({ hasLimit: true });
+    }
+  });
+});

@@ -6,6 +6,7 @@
 
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { kbSchema } from './kb-schema.js';
 import { searchAgents, searchAgentsPage, lookupAgents, getAgent, getOfferings, getTrustFabric, listNames, listAgentsByContext, describeTerm, listShapes, checkCustody, runKbQuery, runKbConstruct, getFacets, SEARCH_MAX_LIMIT, type Env } from './graphdb.js';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -20,6 +21,16 @@ app.post('/kb/query', async (c) => {
   if (!body.query) return c.json({ ok: false, error: 'query required' }, 400);
   try { return c.json({ ok: true, ...(await runKbQuery(c.env, body.query)) }); }
   catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 400); }
+});
+
+// THE GROUNDING CORPUS — spec 357 W2. What this store actually contains: the classes and properties that
+// HAVE DATA, with the T-box's own labels and comments, plus worked question→query examples.
+//
+// Read-only and public, like everything else here: it describes a world-readable graph (ADR-0040). Custody
+// vocabulary is excluded — see `kb-schema.ts`. `?fresh=1` skips the isolate cache.
+app.get('/kb/schema', async (c) => {
+  try { return c.json({ ok: true, ...(await kbSchema(c.env, { fresh: c.req.query('fresh') === '1' })) }); }
+  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
 });
 
 // THE ANSWER PATH — spec 357 §3. CONSTRUCT in, JSON-LD out, the query returned with it.
