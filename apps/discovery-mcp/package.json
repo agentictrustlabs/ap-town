@@ -21,6 +21,6 @@
     "typescript": "^5.5.0",
     "wrangler": "^3.78.0",
     "@types/sparqljs": "^3.1.12",
-    "vitest": "^2.1.0"
+    "vitest": "^4.1.8"
   }
 }
