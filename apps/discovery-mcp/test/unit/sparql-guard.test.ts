@@ -79,3 +79,26 @@ describe('the worked examples are queries this endpoint would actually run', () 
     }
   });
 });
+
+// Spec 357 W4 — framing to the published context: the same shape every time, without losing data.
+describe('JSON-LD framing (357 W4)', () => {
+  it('compacts IRIs, unwraps a single literal/ref, and keeps multiplicity', async () => {
+    const { frameForTest } = await import('../../src/graphdb.js') as unknown as { frameForTest: (n: unknown) => unknown };
+    const framed = frameForTest({
+      '@id': 'urn:ap:agent:eip155:34348:0xabc',
+      '@type': ['https://agenticprimitives.dev/ns/core#OrganizationAgent'],
+      'https://agenticprimitives.dev/ns/naming#name': [{ '@value': 'weld.org' }],
+      'https://agenticprimitives.dev/ns/core#smartAgent': [{ '@value': '0xABC' }, { '@value': '0xDEF' }],
+    }) as Record<string, unknown>;
+    expect(framed['@type']).toEqual(['ap:OrganizationAgent']);       // compacted; @type stays an array (JSON-LD convention)
+    expect(framed['apnam:name']).toBe('weld.org');                  // single literal unwrapped
+    expect(framed['ap:smartAgent']).toEqual(['0xABC', '0xDEF']);    // multi stays an array
+    expect(framed['@id']).toBe('urn:ap:agent:eip155:34348:0xabc');  // non-published IRI left whole
+  });
+
+  it('leaves an unpublished namespace whole rather than inventing a prefix', async () => {
+    const { frameForTest } = await import('../../src/graphdb.js') as unknown as { frameForTest: (n: unknown) => unknown };
+    const framed = frameForTest({ 'http://example.org/foo#bar': [{ '@value': 'x' }] }) as Record<string, unknown>;
+    expect(Object.keys(framed)).toContain('http://example.org/foo#bar');
+  });
+});

@@ -132,10 +132,66 @@ export async function runKbQuery(env: Env, query: string): Promise<KbResult> {
  * as JSON-LD without anybody inventing a shape for it. That is why the answer path takes one form and not
  * the other, and why refusing the other is a feature rather than a restriction.
  *
- * The JSON-LD here is EXPANDED, as the store emits it. Compaction and framing to a published `@context`
- * are W4; promising a stable shape before that ships would be a promise this does not keep.
+ * FRAMED to a published `@context` (spec 357 W4): the store emits EXPANDED JSON-LD — full IRIs, every
+ * value a `[{ "@value": … }]` array — which is stable but unreadable and different in shape for every
+ * query. The context below maps the namespaces we actually serve to short prefixes and unwraps
+ * single-valued literals, so an answer is the SAME JSON-LD whoever asked and whatever they asked, without
+ * a triplestore-side frame or a jsonld.js dependency in the Worker. It is deterministic string work over
+ * a graph the guard already bounded — no network, no context fetch (ADR-0040 stays intact).
  */
-export interface KbGraphResult { jsonld: unknown; query: string }
+export interface KbGraphResult { jsonld: unknown; query: string; '@context'?: Record<string, string> }
+
+/** The published prefixes — the interop contract for ARD/ACP consumers (crosswalk in docs). Stable: a
+ *  consumer keys off these, so a prefix is added, never repurposed. */
+export const KB_JSONLD_CONTEXT: Record<string, string> = {
+  ap: 'https://agenticprimitives.dev/ns/core#',
+  apnam: 'https://agenticprimitives.dev/ns/naming#',
+  apreg: 'https://agenticprimitives.dev/ns/registry#',
+  approf: 'https://agenticprimitives.dev/ns/profile#',
+  apdisc: 'https://agenticprimitives.dev/ns/discovery#',
+  aps: 'https://agenticprimitives.dev/ns/skill#',
+  aporg: 'https://agenticprimitives.dev/ns/org#',
+};
+
+/** Compact one IRI to `prefix:local` when its namespace is published; leave it whole otherwise (an
+ *  unpublished IRI compacted to a bare local would be a lie about which vocabulary it is). */
+function compactIri(iri: string): string {
+  for (const [pfx, ns] of Object.entries(KB_JSONLD_CONTEXT)) {
+    if (iri.startsWith(ns)) return `${pfx}:${iri.slice(ns.length)}`;
+  }
+  return iri;
+}
+
+/** Expanded JSON-LD → framed. `@id`/`@type` compacted; a single `[{ "@value" }]` unwrapped to the value;
+ *  a single `[{ "@id" }]` unwrapped to the reference. Multi-valued stays an array — losing multiplicity to
+ *  make a shape prettier is the framing lying about the data. */
+export function frameForTest(node: unknown): unknown { return frameNode(node); }
+/** A `{ "@value": … }` or single `{ "@id": … }` wrapper → its bare value. Anything else → frameNode. */
+function unwrapValue(v: unknown): unknown {
+  if (v && typeof v === 'object' && !Array.isArray(v)) {
+    const o = v as Record<string, unknown>;
+    if ('@value' in o && Object.keys(o).every((k) => k === '@value' || k === '@type' || k === '@language')) return o['@value'];
+    if ('@id' in o && Object.keys(o).length === 1) return compactIri(String(o['@id']));
+  }
+  return frameNode(v);
+}
+
+function frameNode(node: unknown): unknown {
+  if (Array.isArray(node)) {
+    const mapped = node.map(unwrapValue);
+    return mapped.length === 1 ? mapped[0] : mapped;   // one value is the value; many stays a list
+  }
+  if (node && typeof node === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(node as Record<string, unknown>)) {
+      if (k === '@id') out['@id'] = compactIri(String(v));
+      else if (k === '@type') out['@type'] = Array.isArray(v) ? v.map((t) => compactIri(String(t))) : compactIri(String(v));
+      else out[compactIri(k)] = frameNode(v);
+    }
+    return out;
+  }
+  return node;
+}
 
 export async function runKbConstruct(env: Env, query: string): Promise<KbGraphResult> {
   const decision = decideKbQuery(query, ['CONSTRUCT']);
@@ -145,8 +201,16 @@ export async function runKbConstruct(env: Env, query: string): Promise<KbGraphRe
   // away here. Unbounded, one careless triple pattern returns the graph.
   const capped = decision.hasLimit ? q : `${q}\nLIMIT ${RESULT_CAP}`;
   const res = await askGraphDb(env, capped, 'application/ld+json');
-  // The query travels with the answer (spec 357 §4): an answer whose query nobody can inspect is a claim.
-  return { jsonld: await res.json(), query: capped };
+  const expanded = await res.json();
+  // Framed to the published context — the same shape every time (spec 357 W4). The graph is under
+  // `@graph`, so a single-node result and a many-node result read the same way.
+  const nodes = Array.isArray(expanded) ? expanded : (expanded as { '@graph'?: unknown[] })['@graph'] ?? [expanded];
+  return {
+    '@context': KB_JSONLD_CONTEXT,
+    jsonld: { '@context': KB_JSONLD_CONTEXT, '@graph': (nodes as unknown[]).map(frameNode) },
+    // The query travels with the answer (spec 357 §4): an answer whose query nobody can inspect is a claim.
+    query: capped,
+  };
 }
 
 // ── Custody check (ADR-0040) ──────────────────────────────────────────────────────────────────────────
