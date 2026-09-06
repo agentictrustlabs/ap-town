@@ -36,6 +36,38 @@ PREFIX apatt: <https://agenticprimitives.dev/ns/attestation#>
 PREFIX aptrust: <https://agenticprimitives.dev/ns/trust#>
 `;
 
+/**
+ * THE DATASET A QUERY MAY SEE — finding KC-2b, fixed where it lives.
+ *
+ * GraphDB's default dataset for a query with no FROM is the UNION of every graph, so the custody
+ * membership tokens were reachable from a plain default-graph pattern — `?s a ap:CustodyMember` returned
+ * them — without naming the graph KC-2's guard refuses to name. That guard was doing what it said and
+ * still not what it meant: no filter over query TEXT can help, because the query does not have to mention
+ * the graph at all.
+ *
+ * So the dataset is CONSTRUCTED here rather than inherited. Every caller-supplied query runs against the
+ * unnamed default graph (the A-box) plus the T-box, and nothing else. `sesame:nil` is how RDF4J/GraphDB
+ * names the null context in the SPARQL protocol; naming it is what stops "default" meaning "everything".
+ *
+ * The custody graph is then reachable by exactly ONE code path — `checkCustody`, which recomputes a
+ * single token and asks whether it exists. That is the property ADR-0040 always claimed and the
+ * deployment did not have.
+ */
+const NULL_CONTEXT = 'http://www.openrdf.org/schema/sesame#nil';
+const ONTOLOGY_GRAPH = 'urn:ap:ontology';
+const CUSTODY_GRAPH_IRI = 'urn:ap:custody';
+
+/** The dataset for public reads: the A-box and the T-box. Deliberately NOT the custody graph. */
+const PUBLIC_DATASET = [NULL_CONTEXT, ONTOLOGY_GRAPH];
+/** The one dataset that can see custody — used only by the existence check. */
+const CUSTODY_DATASET = [CUSTODY_GRAPH_IRI];
+
+function endpoint(env: Env, graphs: readonly string[]): string {
+  const url = new URL(env.GRAPHDB_QUERY_URL);
+  for (const g of graphs) url.searchParams.append('default-graph-uri', g);
+  return url.toString();
+}
+
 function authHeader(env: Env): Record<string, string> {
   if (env.GRAPHDB_TOKEN) return { authorization: `Bearer ${env.GRAPHDB_TOKEN}` };
   if (env.GRAPHDB_USER) return { authorization: `Basic ${btoa(`${env.GRAPHDB_USER}:${env.GRAPHDB_PASSWORD ?? ''}`)}` };
@@ -44,8 +76,8 @@ function authHeader(env: Env): Record<string, string> {
 
 export interface Binding { [k: string]: { value: string; type: string } }
 
-export async function sparqlSelect(env: Env, query: string): Promise<Binding[]> {
-  const res = await fetch(env.GRAPHDB_QUERY_URL, {
+export async function sparqlSelect(env: Env, query: string, opts: { dataset?: readonly string[] } = {}): Promise<Binding[]> {
+  const res = await fetch(endpoint(env, opts.dataset ?? PUBLIC_DATASET), {
     method: 'POST',
     headers: { 'content-type': 'application/sparql-query', accept: 'application/sparql-results+json', ...authHeader(env) },
     body: PREFIXES + query,
@@ -68,7 +100,7 @@ const QUERY_TIMEOUT_MS = 15_000;
 export interface KbResult { vars: string[]; rows: Record<string, string>[] }
 
 async function askGraphDb(env: Env, query: string, accept: string): Promise<Response> {
-  const res = await fetch(env.GRAPHDB_QUERY_URL, {
+  const res = await fetch(endpoint(env, PUBLIC_DATASET), {
     method: 'POST',
     headers: { 'content-type': 'application/sparql-query', accept, ...authHeader(env) },
     body: PREFIXES + query,
@@ -139,7 +171,13 @@ export async function checkCustody(env: Env, smartAgents: string[], credential: 
   for (const sa of smartAgents) { out[sa.toLowerCase()] = false; tokenBySa.set(await custodyToken(credential, sa), sa.toLowerCase()); }
   if (!tokenBySa.size) return out;
   const values = [...tokenBySa.keys()].map((t) => `<urn:ap:cm:${t}>`).join(' ');
-  const rows = await sparqlSelect(env, `SELECT ?m WHERE { GRAPH <${CUSTODY_GRAPH}> { VALUES ?m { ${values} } ?m a <${CUSTODY_MEMBER_CLASS}> } }`);
+  // The ONE query that may see the membership graph, and it asks only "do these exact tokens exist".
+  // Every other path runs against PUBLIC_DATASET, which does not include it (KC-2b).
+  const rows = await sparqlSelect(
+    env,
+    `SELECT ?m WHERE { GRAPH <${CUSTODY_GRAPH}> { VALUES ?m { ${values} } ?m a <${CUSTODY_MEMBER_CLASS}> } }`,
+    { dataset: CUSTODY_DATASET },
+  );
   for (const r of rows) { const sa = tokenBySa.get(r.m!.value.replace('urn:ap:cm:', '')); if (sa) out[sa] = true; }
   return out;
 }

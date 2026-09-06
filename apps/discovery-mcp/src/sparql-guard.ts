@@ -25,11 +25,11 @@ export type KbQueryDecision = KbQueryOk | KbQueryRefused;
  * membership CLASS anywhere in a query is a query nobody should be writing, whatever position it holds in
  * the tree.
  *
- * PARTIAL, AND KNOWN TO BE (finding KC-2b). The membership tokens live in a named graph, and GraphDB's
- * default dataset is the UNION of all graphs — so they are reachable WITHOUT naming the graph or the
- * class, and `SELECT ?s ?p ?o WHERE { ?s ?p ?o }` still returns them among everything else. No filter over
- * query TEXT can separate them while they are in the queryable dataset; the fix belongs at the store. This
- * closes the obvious path and is not the control it would need to be.
+ * NOT THE CONTROL, and no longer pretending to be (finding KC-2b, closed). The membership tokens were
+ * reachable without naming the graph or the class, because GraphDB's default dataset is the union of every
+ * graph — and no filter over query TEXT can separate them while they are in the queryable dataset. The
+ * control is `graphdb.ts`, which now CONSTRUCTS the dataset so the custody graph is not in it. This stays
+ * as a cheap first refusal with a clearer message than an empty result.
  */
 const CUSTODY_GRAPH_REF = /urn:ap:c(ustody|m)|core#CustodyMember/i;
 
