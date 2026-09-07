@@ -51,6 +51,7 @@ const DERIVED: Record<DerivedAgentType, [cls: string, concept: string]> = {
   treasury: ['Treasury', 'TreasuryType'],
   registry: ['RegistryAgent', 'RegistryType'],
   church: ['ChurchAgent', 'ChurchType'],
+  household: ['HouseholdAgent', 'HouseholdType'],
   circle: ['CircleAgent', 'CircleType'],
 };
 

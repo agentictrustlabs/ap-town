@@ -18,7 +18,7 @@ export interface Env {
  *  type facet). Reading honours the past; the indexer only ever WRITES the current concept. */
 const AGENT_TYPE_SLUG: Record<string, string> = {
   PersonType: 'person', OrgType: 'org', TeamType: 'team', ServiceType: 'service',
-  WorkspaceType: 'workspace', TreasuryType: 'treasury', RegistryType: 'registry', ChurchType: 'church', CircleType: 'circle',
+  WorkspaceType: 'workspace', TreasuryType: 'treasury', RegistryType: 'registry', ChurchType: 'church', HouseholdType: 'household', CircleType: 'circle',
   WorkspaceCoordinatorType: 'workspace',
 };
 export function derivedTypeSlug(iri: string | undefined): string | null {
