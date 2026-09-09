@@ -66,6 +66,17 @@ describe('spec 386 — the discovery connector', () => {
     expect(r.result.structuredContent.explanation).toMatch(/nothing registered matched/);
   });
 
+  it('a language filter that matches nothing says so and shows the matches that assert no language, labelled', async () => {
+    seen.length = 0;
+    let n = 0;
+    const env = { REGISTRY_ORIGIN: 'https://discovery-a2a.faithnet.io', DISCOVERY: { fetch: async (url: string, init?: RequestInit) => { const body = JSON.parse(String(init?.body)); seen.push({ url, body }); n++; const withLang = !!body.query?.filter?.['ap:language']; return new Response(JSON.stringify({ results: withLang ? [] : [LIGONIER] }), { headers: { 'content-type': 'application/json' } }); } } };
+    const r = (await (await rpc(env, { jsonrpc: '2.0', id: 8, method: 'tools/call', params: { name: 'find_services', arguments: { topic: 'justification', capability: 'study plans', language: 'en' } } })).json()) as { result: { structuredContent: { services: Array<{ name: string; languageAsserted?: boolean }>; explanation: string } } };
+    expect(n).toBe(2);
+    expect((seen[1]!.body as { query: { filter?: Record<string, unknown> } }).query.filter).toEqual({ capabilities: ['gc:CFnDiscipleshipCurricula'] });
+    expect(r.result.structuredContent.services).toEqual([expect.objectContaining({ name: 'Ligonier Ministries', languageAsserted: false })]);
+    expect(r.result.structuredContent.explanation).toMatch(/no registered service asserts the language “en”/);
+  });
+
   it('a registry 502 is a tool error in the registry’s words — never a fallback', async () => {
     const r = (await (await rpc(registry([], 502), { jsonrpc: '2.0', id: 6, method: 'tools/call', params: { name: 'find_services', arguments: { topic: 'justification' } } })).json()) as { result: { isError?: boolean; structuredContent: { error: string } } };
     expect(r.result.isError).toBe(true);

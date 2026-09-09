@@ -16,7 +16,7 @@ export const TOOLS: ToolSpec[] = [
     inputSchema: { type: 'object', properties: {
       topic: { type: 'string', description: 'A topic word, e.g. "justification". Known topics resolve to a shared concept and the publishers\' own terms; an unknown word is searched as-is.' },
       capability: { type: 'string', description: 'A capability id (gc:CFnDiscipleshipCurricula) or a plain phrase the connector maps ("study plans").' },
-      language: { type: 'string', description: 'BCP-47 tag, e.g. "en" — only services that assert the language.' },
+      language: { type: 'string', description: 'BCP-47 tag, e.g. "en". Pass it ONLY when the person asked for a language: it keeps only services that assert that language, and a service that has not asserted one is excluded.' },
       limit: { type: 'integer', minimum: 1, maximum: 25, default: 5 },
     } },
     annotations: ro('Find services'),
@@ -40,6 +40,8 @@ export interface ShapedService {
   capabilities: string[]; tags: string[]; agentType?: string; registryStatus?: string;
   verification: { identity?: string; identityType?: string; attestations: Array<{ type: string; uri: string }> };
   relevance: number | null;
+  /** Absent when a language filter matched; false when the service was shown despite asserting none. */
+  languageAsserted?: false;
   entry: Record<string, unknown>;
 }
 
@@ -74,11 +76,24 @@ export async function findServices(env: DiscoveryEnv, args: FindServicesArgs): P
   const plan = planFindServices(args);
   if (plan.refused) return { refused: plan.refused, note: DISCOVERY_NOTE };
   const out = await search(env, plan.body);
-  const services = out.results.map(shapeService);
+  let services = out.results.map(shapeService);
+  // A language filter is a HARD mandate at the registry: a service that asserts no language is excluded. When
+  // that leaves nothing, the answer says so and shows the matches that assert none — the same registry, the
+  // same query less that one clause, stated in the explanation (never a silent switch, ADR-0013).
+  let languageNote: string | null = null;
+  if (services.length === 0 && plan.language && plan.body.query.filter?.['ap:language']) {
+    const { 'ap:language': _lang, ...rest } = plan.body.query.filter;
+    const again = await search(env, { ...plan.body, query: { ...plan.body.query, ...(Object.keys(rest).length ? { filter: rest } : {}) } });
+    const unasserted = again.results.map(shapeService);
+    if (unasserted.length) {
+      services = unasserted.map((sv) => ({ ...sv, languageAsserted: false as const }));
+      languageNote = `no registered service asserts the language “${plan.language}”; showing ${unasserted.length} match${unasserted.length === 1 ? '' : 'es'} that assert no language at all (languageAsserted: false)`;
+    }
+  }
   const parts = [
     plan.topic ? plan.topic.explanation : null,
     plan.capability ? `capability filter ${plan.capability}` : null,
-    plan.language ? `language ${plan.language}` : null,
+    plan.language ? (languageNote ?? `language ${plan.language}`) : null,
     `${services.length} result${services.length === 1 ? '' : 's'} from ${CONNECTOR.registryLabel}, ordered by relevance`,
     services.length === 0 ? 'nothing registered matched; the registry was asked, not guessed for' : null,
   ].filter(Boolean);
