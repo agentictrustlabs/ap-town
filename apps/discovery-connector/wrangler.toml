@@ -16,6 +16,8 @@ service = "demo-discovery-a2a"
 # ── FAITHNET (chain 34348) — the registry at discovery-a2a.faithnet.io ──
 [env.faithnet]
 name = "demo-discovery-connector-faithnet"
+# Pinned: two accounts deploy this Worker, and wrangler caches the last account it used per project.
+account_id = "5da2feaa56593839672948e16c6e809d"
 
 [[env.faithnet.routes]]
 pattern = "discovery-connector.faithnet.io"
@@ -45,6 +47,7 @@ simple = { limit = 60, period = 60 }
 # until then the Worker answers on its workers.dev hostname.
 [env.richcanvas]
 name = "gc-discovery-connector"
+account_id = "0a1fdbaf6dc871dd3faf7a8d0dc6c534"
 workers_dev = true
 
 [env.richcanvas.vars]

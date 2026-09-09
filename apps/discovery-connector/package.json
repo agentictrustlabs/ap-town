@@ -2,7 +2,7 @@
   "name": "@agenticprimitives-demo/discovery-connector",
   "version": "0.0.1-alpha.0",
   "private": true,
-  "description": "Discovery connector (spec 386): a thin, public, read-only Streamable HTTP MCP server that lets an external assistant find a registered ministry through the ARD registry and go to it directly. A registry client — never a runtime, never a content connector.",
+  "description": "Discovery connector (spec 386): a thin, public, read-only Streamable HTTP MCP server that lets an external assistant find a registered ministry through the ARD registry and go to it directly. A registry client \u2014 never a runtime, never a content connector.",
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
@@ -19,6 +19,6 @@
     "@cloudflare/workers-types": "^4.20240909.0",
     "typescript": "^5.5.0",
     "vitest": "^4.1.8",
-    "wrangler": "^3.78.0"
+    "wrangler": "^4.0.0"
   }
 }
