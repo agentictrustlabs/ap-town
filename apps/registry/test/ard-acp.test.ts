@@ -20,6 +20,13 @@ describe('ARD entries (spec 347 §8.5)', () => {
     expect(e['ap:canonicalAgentId']).toBe(row.smartAgent);
     expect(JSON.stringify(e)).not.toMatch(/mcp/i);
   });
+  it('spec 386 — the publisher’s own site rides as ap:siteUrl, https only; the entry stays a pointer', () => {
+    const e = (ardEntryForAgent({ ...row, siteUrl: 'https://www.ligonier.org' }).entry ?? {}) as Record<string, unknown>;
+    expect(e['ap:siteUrl']).toBe('https://www.ligonier.org');
+    expect((ardEntryForAgent({ ...row, siteUrl: 'http://insecure.example' }).entry ?? {}) as Record<string, unknown>).not.toHaveProperty('ap:siteUrl');
+    expect((ardEntryForAgent({ ...row, siteUrl: null }).entry ?? {}) as Record<string, unknown>).not.toHaveProperty('ap:siteUrl');
+  });
+
   it('an agent without an A2A host is an honest miss, never a fabricated url', () => {
     expect(ardEntryForAgent({ ...row, a2aEndpoint: null })).toEqual({ entry: null, reason: 'no-a2a-host' });
     expect(ardEntryForAgent({ ...row, a2aEndpoint: 'http://localhost:8787' })).toEqual({ entry: null, reason: 'bad-host' });
@@ -33,6 +40,15 @@ describe('ARD entries (spec 347 §8.5)', () => {
 });
 
 describe('ARD search', () => {
+  it('spec 386 — ap:language is one BCP-47 tag → the requireLanguage mandate; anything else is a 400', () => {
+    const plan = planArdSearch({ query: { text: 'justification study', filter: { capabilities: ['gc:CFnDiscipleshipCurricula'], 'ap:language': ['EN'] } } });
+    expect('code' in plan).toBe(false);
+    expect((plan as { mandates: Record<string, unknown> }).mandates).toMatchObject({ requireCapabilityId: 'gc:CFnDiscipleshipCurricula', requireLanguage: 'en' });
+    expect(planArdSearch({ query: { text: 'x', filter: { 'ap:language': ['en', 'es'] } } })).toMatchObject({ status: 400 });
+    expect(planArdSearch({ query: { text: 'x', filter: { 'ap:language': ['english!'] } } })).toMatchObject({ status: 400 });
+    expect(planArdSearch({ query: { text: 'x', filter: { language: ['en'] } } })).toMatchObject({ status: 400 }); // the bare key is not a term this registry filters
+  });
+
   it('maps text → need, capabilities → hard mandate, tags → derived type; score is fit only', () => {
     const plan = planArdSearch({ query: { text: 'estate planning', filter: { capabilities: ['adv:estate-planning'], tags: ['person'] } }, pageSize: 5 });
     expect('code' in plan).toBe(false);

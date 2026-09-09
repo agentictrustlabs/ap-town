@@ -61,6 +61,8 @@ export interface ArdAgentRowLike {
   a2aEndpoint?: string | null;
   /** Curated public skill examples when the KB has them (crawled card `skills[].examples`). */
   examples?: string[] | null;
+  /** `apdisc:siteUrl` — the agent's public website (spec 386: what an assistant reads after the registry points). */
+  siteUrl?: string | null;
 }
 
 export const AP_CONTEXT = { ap: AP_NS, apdisc: 'https://agenticprimitives.dev/ns/discovery#' } as const;
@@ -102,6 +104,8 @@ export function ardEntryForAgent(row: ArdAgentRowLike, opts: { receiptUriFor?: (
       ...(receipt ? { attestations: [{ type: 'ap-registry-receipt', uri: receipt }] } : {}),
     },
     'ap:canonicalAgentId': row.smartAgent,
+    // Spec 386 — the publisher's own site, https only: the registry points, the client goes there itself.
+    ...(row.siteUrl && /^https:\/\/[^\s/]+/i.test(row.siteUrl.trim()) ? { 'ap:siteUrl': row.siteUrl.trim() } : {}),
     ...(row.agentType ? { 'ap:agentType': row.agentType } : {}),
     ...(row.registryStatus ? { 'ap:registryStatus': row.registryStatus } : {}),
   };
@@ -139,7 +143,7 @@ export interface ArdSearchRequest {
 export interface ArdSearchPlan {
   need: string;
   /** Mandates in the discovery a2a's own vocabulary. */
-  mandates: { requireCapabilityId?: string; requireAgentType?: string; requireKind?: string; requireRegistered?: boolean };
+  mandates: { requireCapabilityId?: string; requireAgentType?: string; requireKind?: string; requireRegistered?: boolean; requireLanguage?: string };
   /** False when `filter.type` names only types this registry cannot serve ⇒ empty result, not an error. */
   typeServable: boolean;
   federation: ArdFederation;
@@ -231,7 +235,16 @@ export function planArdSearch(body: ArdSearchRequest, opts: { textRequired?: boo
     else if (ROOT_KINDS.has(t) && !mandates.requireKind) mandates.requireKind = t;
     else return { status: 400, code: 'INVALID_ARGUMENT', message: `filter.tags: unsupported tag "${t}" (supported: derived agent types)` };
   }
-  const known = new Set(['type', 'capabilities', 'tags', 'ap:agentType', 'ap:registered']);
+  // Spec 386 — `ap:language`: one BCP-47 tag, lowercased, the /discover `requireLanguage` mandate (a code set the
+  // agent asserted, enforceable as a filter; `focusAreas` stays intent-only).
+  const langs = arr(filter['ap:language']);
+  if (langs.length > 1) return { status: 400, code: 'INVALID_ARGUMENT', message: 'filter.ap:language: one value per query' };
+  if (langs[0] !== undefined) {
+    const lang = String(langs[0]).trim().toLowerCase();
+    if (!/^[a-z]{2,3}(-[a-z0-9]{2,8})*$/.test(lang)) return { status: 400, code: 'INVALID_ARGUMENT', message: `filter.ap:language: not a BCP-47 tag ("${langs[0]}")` };
+    mandates.requireLanguage = lang;
+  }
+  const known = new Set(['type', 'capabilities', 'tags', 'ap:agentType', 'ap:registered', 'ap:language']);
   for (const k of Object.keys(filter)) if (!known.has(k)) return { status: 400, code: 'INVALID_ARGUMENT', message: `filter.${k} is not a term this registry filters` };
   if (arr(filter['ap:registered'])[0] === 'true') mandates.requireRegistered = true;
   return { need: text, mandates, typeServable, federation, pageSize, offset };

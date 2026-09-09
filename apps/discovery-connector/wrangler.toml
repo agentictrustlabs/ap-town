@@ -1,0 +1,35 @@
+# Cloudflare Worker — demo-discovery-connector (spec 386). A thin ARD client speaking stateless Streamable HTTP
+# MCP for external assistants (Claude.ai custom connector). Public, read-only, rate-limited. It reaches the
+# discovery registry over a service binding and NOTHING else: never a ministry's A2A or MCP, never a page.
+name = "demo-discovery-connector"
+main = "src/index.ts"
+compatibility_date = "2026-05-19"
+compatibility_flags = ["nodejs_compat"]
+
+[dev]
+port = 8795
+
+[[services]]
+binding = "DISCOVERY"
+service = "demo-discovery-a2a"
+
+# ── FAITHNET (chain 34348) — the registry at discovery-a2a.faithnet.io ──
+[env.faithnet]
+name = "demo-discovery-connector-faithnet"
+
+[[env.faithnet.routes]]
+pattern = "discovery-connector.faithnet.io"
+custom_domain = true
+
+[env.faithnet.vars]
+REGISTRY_ORIGIN = "https://discovery-a2a.faithnet.io"
+
+[[env.faithnet.services]]
+binding = "DISCOVERY"
+service = "demo-discovery-a2a-faithnet"
+
+# One rate-limit namespace per Worker on the account (edge admission, never authority).
+[[env.faithnet.ratelimits]]
+name = "LIMITER"
+namespace_id = "2884"
+simple = { limit = 60, period = 60 }
