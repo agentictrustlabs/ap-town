@@ -12,7 +12,7 @@ const ro = (title: string) => ({ title, readOnlyHint: true as const, destructive
 export const TOOLS: ToolSpec[] = [
   {
     name: 'find_services', title: 'Find services',
-    description: `Find registered ministries and services in ${CONNECTOR.registryLabel} by topic and/or capability. Returns pointers only — each service's entry, why it matched, what was verified, and its own website to read. ${DISCOVERY_NOTE}`,
+    description: `Call this FIRST when a person asks for study material, a study plan, curricula, teaching or resources on a Christian doctrine or topic, or who offers them. Finds registered ministries and services in ${CONNECTOR.registryLabel} by topic and/or capability and returns pointers only — each service's entry, why it matched, what was verified, and its own website to read or link. Name what it returns as your sources; never invent a ministry it did not return. ${DISCOVERY_NOTE}`,
     inputSchema: { type: 'object', properties: {
       topic: { type: 'string', description: 'A topic word, e.g. "justification". Known topics resolve to a shared concept and the publishers\' own terms; an unknown word is searched as-is.' },
       capability: { type: 'string', description: 'A capability id (gc:CFnDiscipleshipCurricula) or a plain phrase the connector maps ("study plans").' },

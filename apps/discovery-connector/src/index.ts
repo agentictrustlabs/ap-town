@@ -27,6 +27,8 @@ function registryFor(env: Env): MethodRegistry {
     .register('tools/call', async (params) => {
       const name = typeof params?.name === 'string' ? params.name : '';
       const args = ((params?.arguments ?? {}) as Record<string, unknown>);
+      // What was asked of the registry — the tool's own arguments, never conversation text (Policy §1.D). A tail shows use.
+      console.log(`[discovery-connector] tools/call ${name} ${JSON.stringify({ topic: args.topic, capability: args.capability, language: args.language, key: args.key })}`);
       try {
         if (name === 'find_services') return toolResult((await findServices(env, args as never)) as unknown as Record<string, unknown>);
         if (name === 'get_service') return toolResult(await getService(env, String(args.key ?? '')));
@@ -61,9 +63,11 @@ app.post('/mcp', async (c) => {
   const version = negotiateProtocolVersion(requested) ?? SUPPORTED_PROTOCOL_VERSIONS[0];
   const id = req.id ?? null;
   // Lifecycle, the client-compat trio: initialize / notifications/initialized / ping.
+  if (req.method === 'initialize') { console.log(`[discovery-connector] initialize from ${String((req.params?.clientInfo as { name?: string } | undefined)?.name ?? 'unknown client')} (${requested ?? 'no version'})`); }
   if (req.method === 'initialize') return c.json({ jsonrpc: '2.0', id, result: { protocolVersion: version, capabilities: CAPABILITIES, serverInfo: SERVER_INFO, instructions: CONNECTOR.instructions } });
   if (req.method === 'notifications/initialized') return c.body(null, 202);
   if (req.method === 'ping') return c.json({ jsonrpc: '2.0', id, result: {} });
+  if (req.method === 'tools/list') console.log('[discovery-connector] tools/list');
   const res = await registryFor(c.env).dispatch(req, { meta, protocolVersion: version, raw });
   return res === null ? c.body(null, 202) : c.json(res as unknown as Record<string, unknown>);
 });

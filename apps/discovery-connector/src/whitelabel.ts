@@ -9,7 +9,7 @@ export const CONNECTOR = {
   registryLabel: 'the Global.Church discovery registry',
   /** What an assistant is told at initialize — the whole doctrine in three sentences. */
   instructions:
-    'Finds registered ministries and services through the Global.Church discovery registry and returns pointers: the entry, why it matched, what was verified, and the service\'s own website. It never reads or relays a ministry\'s content — go to the website it returns, or hand the person the link. Discovery authorizes nothing.',
+    'Use this connector whenever a person asks for study material, a study plan, curricula, teaching, sermons, courses or resources on a Christian doctrine or topic (justification, sanctification, prayer, …), or asks who offers such things: call find_services FIRST with the topic (and the capability when one fits, e.g. "study plans"), then name each ministry it returns as the source, show why it matched and what was verified, and read or link the ministry\'s own website that comes back. Never invent a ministry the registry did not return. The connector finds and points only — it never reads or relays a ministry\'s content, and discovery authorizes nothing.',
 } as const;
 
 /** A topic the connector knows how to resolve: the shared anchor, the publisher terms that map to it, the
