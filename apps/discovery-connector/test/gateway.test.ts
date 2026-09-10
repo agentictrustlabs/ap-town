@@ -53,6 +53,13 @@ describe('spec 387 — the AP gateway', () => {
     const out = await invokeAgent(env, { target: found.agents[0]!.target, message: 'what do you offer on justification' }, net()) as { task: { state: string; text: string; artifacts: Array<{ name?: string; data?: unknown }> }; cardMatchesPin: boolean };
     expect(out.task).toMatchObject({ state: 'TASK_STATE_COMPLETED', text: 'Here is what we offer on justification.' });
     expect(out.task.artifacts[0]).toMatchObject({ name: 'resources', data: { resources: [{ title: 'The Doctrine of Justification' }] } });
+    // Spec 387 W2 — the flow trace: the gateway's own hops in order, the flow id on the A2A message, the target's trace lifted in.
+    const trace = out.trace as { flowId: string; hops: Array<{ hop: string; ms: number; request?: Record<string, unknown>; response?: Record<string, unknown> }> };
+    expect(trace.flowId).toMatch(/^fl-[0-9a-f]{8}$/);
+    expect(trace.hops.map((h) => h.hop)).toEqual(['gateway.card', 'gateway.invoke']);
+    expect(trace.hops[1]).toMatchObject({ request: { endpoint: 'https://edge.faithnet.io/api/a2a/ligonier.svc', as: AGENT, method: 'SendMessage' }, response: { state: 'TASK_STATE_COMPLETED', artifacts: ['resources'] } });
+    const sent = calls.filter((c) => c.url.endsWith('/api/a2a/ligonier.svc')).map((c) => JSON.parse(String(c.init?.body)) as { params: { message: { metadata?: unknown } } }).at(-1);
+    expect(sent?.params.message.metadata).toEqual({ flowId: trace.flowId });
     expect(out.cardMatchesPin).toBe(true);
     const send = calls.find((c) => c.url.endsWith('/api/a2a/ligonier.svc'))!;
     const raw = String(send.init!.body);

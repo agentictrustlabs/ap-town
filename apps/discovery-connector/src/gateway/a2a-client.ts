@@ -43,8 +43,8 @@ async function signedHeaders(id: GatewayIdentity, endpoint: string, raw: string)
 
 const hex32 = (): string => `0x${[...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 
-export async function sendMessage(id: GatewayIdentity, endpoint: string, text: string, opts: { taskId?: string; contextId?: string; fetch?: typeof fetch } = {}): Promise<{ ok: true; task: TaskV1 } | { ok: false; refused: string; status?: number }> {
-  const message: MessageV1 = { messageId: hex32(), role: 'ROLE_USER', parts: [{ text }], ...(opts.taskId ? { taskId: opts.taskId } : {}), ...(opts.contextId ? { contextId: opts.contextId } : {}) };
+export async function sendMessage(id: GatewayIdentity, endpoint: string, text: string, opts: { taskId?: string; contextId?: string; fetch?: typeof fetch; /** Spec 387 W2 — the flow id the target echoes in its `trace` artifact and its logs. */ flowId?: string } = {}): Promise<{ ok: true; task: TaskV1 } | { ok: false; refused: string; status?: number }> {
+  const message: MessageV1 = { messageId: hex32(), role: 'ROLE_USER', parts: [{ text }], ...(opts.taskId ? { taskId: opts.taskId } : {}), ...(opts.contextId ? { contextId: opts.contextId } : {}), ...(opts.flowId ? { metadata: { flowId: opts.flowId } } : {}) };
   const raw = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'SendMessage', params: { message } });
   return rpc(id, endpoint, raw, opts.fetch ?? fetch);
 }

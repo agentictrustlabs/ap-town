@@ -18,6 +18,7 @@ export const TOOLS: ToolSpec[] = [
       topic: { type: 'string', description: 'A topic word, e.g. "justification".' },
       capability: { type: 'string', description: 'A capability id (gc:CFnDiscipleshipCurricula) or a plain phrase ("study plans").' },
       language: { type: 'string', description: 'BCP-47 tag. Pass it ONLY when the person asked for a language.' },
+      flow: { type: 'string', description: 'Optional. The trace.flowId a previous call returned, to keep one trace across discover → inspect → invoke.' },
       limit: { type: 'integer', minimum: 1, maximum: 25, default: 5 },
     } },
     annotations: ro('Discover agents'),
@@ -25,13 +26,13 @@ export const TOOLS: ToolSpec[] = [
   {
     name: 'inspect_agent', title: 'Inspect an agent',
     description: 'The public card of a discovered agent (its skills, provider, interfaces) and whether the served card still matches what discovery pinned. Read-only.',
-    inputSchema: { type: 'object', properties: { target: { type: 'string', description: 'The "target" handle from discover_agents.' } }, required: ['target'] },
+    inputSchema: { type: 'object', properties: { target: { type: 'string', description: 'The "target" handle from discover_agents.' } }, flow: { type: 'string', description: 'Optional. The trace.flowId a previous call returned, to keep one trace across discover → inspect → invoke.' }, required: ['target'] },
     annotations: ro('Inspect an agent'),
   },
   {
     name: 'invoke_agent', title: 'Ask an agent',
     description: 'Send ONE message to a discovered agent over A2A, as this gateway\'s own agent, and return the agent\'s task: its words and artifacts. Use it after discover_agents to ask the ministry\'s agent for what the person wants (e.g. "build a six-week study on justification"). The gateway spends no authority: a read or an informational skill answers; an act waits at the agent for its stewards. Say who said what; never present the agent\'s words as your own.',
-    inputSchema: { type: 'object', properties: { target: { type: 'string', description: 'The "target" handle from discover_agents.' }, message: { type: 'string', description: 'What to ask, in words.' }, task: { type: 'string', description: 'To continue an earlier task: its taskId.' }, context: { type: 'string', description: 'To continue an earlier conversation: its contextId.' } }, required: ['target', 'message'] },
+    inputSchema: { type: 'object', properties: { target: { type: 'string', description: 'The "target" handle from discover_agents.' }, flow: { type: 'string', description: 'Optional. The trace.flowId a previous call returned, to keep one trace across discover → inspect → invoke.' }, message: { type: 'string', description: 'What to ask, in words.' }, task: { type: 'string', description: 'To continue an earlier task: its taskId.' }, context: { type: 'string', description: 'To continue an earlier conversation: its contextId.' } }, required: ['target', 'message'] },
     annotations: { title: 'Ask an agent', readOnlyHint: false as unknown as true, destructiveHint: false, idempotentHint: false as unknown as true, openWorldHint: true as unknown as false },
   },
   {
