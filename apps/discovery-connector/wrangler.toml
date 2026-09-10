@@ -25,6 +25,9 @@ custom_domain = true
 
 [env.faithnet.vars]
 REGISTRY_ORIGIN = "https://discovery-a2a.faithnet.io"
+# Spec 387 — the gateway's own agent (gateway.svc, chartered under globalchurch.org; custodied by its steward, the
+# Worker holds only a session wire pinned to harness.ask). Secrets: HANDLE_SECRET, GATEWAY_PRIVATE_KEY, GATEWAY_SESSION_WIRE.
+GATEWAY_AGENT = "0x3d9af054981994e7e321d545139e68361873f90a"
 
 [[env.faithnet.services]]
 binding = "DISCOVERY"
@@ -52,6 +55,7 @@ workers_dev = true
 
 [env.richcanvas.vars]
 REGISTRY_ORIGIN = "https://discovery-a2a.faithnet.io"
+GATEWAY_AGENT = "0x3d9af054981994e7e321d545139e68361873f90a"
 
 [[env.richcanvas.ratelimits]]
 name = "LIMITER"

@@ -5,10 +5,11 @@
 import { Hono } from 'hono';
 import { MethodRegistry, RpcError, RPC_ERROR, SUPPORTED_PROTOCOL_VERSIONS, buildServerDiscover, negotiateProtocolVersion, parseJsonRpc, parseRequestMeta } from '@agenticprimitives/mcp-protocol';
 import { TOOLS, findServices, getService, listTopics } from './catalog.js';
-import { RegistryError, type DiscoveryEnv } from './ard-client.js';
+import { RegistryError } from './ard-client.js';
+import { discoverAgents, inspectAgent, invokeAgent, getTaskTool, type GatewayEnv } from './gateway/tools.js';
 import { CONNECTOR } from './whitelabel.js';
 
-export interface Env extends DiscoveryEnv { LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> } }
+export interface Env extends GatewayEnv { LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> } }
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -30,6 +31,10 @@ function registryFor(env: Env): MethodRegistry {
       // What was asked of the registry — the tool's own arguments, never conversation text (Policy §1.D). A tail shows use.
       console.log(`[discovery-connector] tools/call ${name} ${JSON.stringify({ topic: args.topic, capability: args.capability, language: args.language, key: args.key })}`);
       try {
+        if (name === 'discover_agents') return toolResult(await discoverAgents(env, args as never));
+        if (name === 'inspect_agent') return toolResult(await inspectAgent(env, args as never));
+        if (name === 'invoke_agent') { const out = await invokeAgent(env, args as never); return toolResult(out, 'refused' in out); }
+        if (name === 'get_task') return toolResult(await getTaskTool(env, args as never));
         if (name === 'find_services') return toolResult((await findServices(env, args as never)) as unknown as Record<string, unknown>);
         if (name === 'get_service') return toolResult(await getService(env, String(args.key ?? '')));
         if (name === 'list_topics') return toolResult(listTopics() as unknown as Record<string, unknown>);
@@ -42,7 +47,7 @@ function registryFor(env: Env): MethodRegistry {
     });
 }
 
-app.get('/health', (c) => c.json({ ok: true, service: 'demo-discovery-connector', spec: 386, tools: TOOLS.map((t) => t.name) }));
+app.get('/health', (c) => c.json({ ok: true, service: 'ap-gateway (demo-discovery-connector)', spec: [386, 387], agent: c.env.GATEWAY_AGENT ?? null, tools: TOOLS.map((t) => t.name) }));
 app.get('/', (c) => c.json({ service: 'demo-discovery-connector', mcp: 'POST /mcp (Streamable HTTP, stateless)', tools: TOOLS.map((t) => t.name), doctrine: CONNECTOR.instructions }));
 app.get('/mcp', (c) => c.json({ error: 'this server is stateless: POST JSON-RPC to /mcp; no SSE stream is offered' }, 405));
 

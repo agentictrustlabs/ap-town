@@ -11,6 +11,36 @@ const ro = (title: string) => ({ title, readOnlyHint: true as const, destructive
 
 export const TOOLS: ToolSpec[] = [
   {
+    name: 'discover_agents', title: 'Discover agents',
+    description: `Call this FIRST when a person asks for study material, a study plan, curricula, teaching or resources on a Christian doctrine or topic, or who offers them. Finds registered ministries and services in ${CONNECTOR.registryLabel} by topic and/or capability; each match comes back with its entry, why it matched, what was verified, its own website, and a "target" handle — the only way to reach that agent through this gateway (invoke_agent). ${DISCOVERY_NOTE}`,
+    inputSchema: { type: 'object', properties: {
+      intent: { type: 'string', description: 'What the person wants, in a few words (used as the topic when no topic is given).' },
+      topic: { type: 'string', description: 'A topic word, e.g. "justification".' },
+      capability: { type: 'string', description: 'A capability id (gc:CFnDiscipleshipCurricula) or a plain phrase ("study plans").' },
+      language: { type: 'string', description: 'BCP-47 tag. Pass it ONLY when the person asked for a language.' },
+      limit: { type: 'integer', minimum: 1, maximum: 25, default: 5 },
+    } },
+    annotations: ro('Discover agents'),
+  },
+  {
+    name: 'inspect_agent', title: 'Inspect an agent',
+    description: 'The public card of a discovered agent (its skills, provider, interfaces) and whether the served card still matches what discovery pinned. Read-only.',
+    inputSchema: { type: 'object', properties: { target: { type: 'string', description: 'The "target" handle from discover_agents.' } }, required: ['target'] },
+    annotations: ro('Inspect an agent'),
+  },
+  {
+    name: 'invoke_agent', title: 'Ask an agent',
+    description: 'Send ONE message to a discovered agent over A2A, as this gateway\'s own agent, and return the agent\'s task: its words and artifacts. Use it after discover_agents to ask the ministry\'s agent for what the person wants (e.g. "build a six-week study on justification"). The gateway spends no authority: a read or an informational skill answers; an act waits at the agent for its stewards. Say who said what; never present the agent\'s words as your own.',
+    inputSchema: { type: 'object', properties: { target: { type: 'string', description: 'The "target" handle from discover_agents.' }, message: { type: 'string', description: 'What to ask, in words.' }, task: { type: 'string', description: 'To continue an earlier task: its taskId.' }, context: { type: 'string', description: 'To continue an earlier conversation: its contextId.' } }, required: ['target', 'message'] },
+    annotations: { title: 'Ask an agent', readOnlyHint: false as unknown as true, destructiveHint: false, idempotentHint: false as unknown as true, openWorldHint: true as unknown as false },
+  },
+  {
+    name: 'get_task', title: 'Get a task',
+    description: 'Read a task at a discovered agent by its taskId (from invoke_agent). Read-only.',
+    inputSchema: { type: 'object', properties: { target: { type: 'string' }, task: { type: 'string' } }, required: ['target', 'task'] },
+    annotations: ro('Get a task'),
+  },
+  {
     name: 'find_services', title: 'Find services',
     description: `Call this FIRST when a person asks for study material, a study plan, curricula, teaching or resources on a Christian doctrine or topic, or who offers them. Finds registered ministries and services in ${CONNECTOR.registryLabel} by topic and/or capability and returns pointers only — each service's entry, why it matched, what was verified, and its own website to read or link. Name what it returns as your sources; never invent a ministry it did not return. ${DISCOVERY_NOTE}`,
     inputSchema: { type: 'object', properties: {

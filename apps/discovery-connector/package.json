@@ -13,7 +13,9 @@
   },
   "dependencies": {
     "@agenticprimitives/mcp-protocol": "workspace:*",
-    "hono": "^4.12.33"
+    "hono": "^4.12.33",
+    "@agenticprimitives/a2a": "workspace:*",
+    "viem": "^2.52.2"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240909.0",
