@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mintHandle, verifyHandle } from '../src/gateway/handle.js';
 import { translateTask } from '../src/gateway/a2a-client.js';
-import { discoverAgents, invokeAgent, inspectAgent } from '../src/gateway/tools.js';
+import { discoverAgents, invokeAgent, continueTask, inspectAgent } from '../src/gateway/tools.js';
 import { parseSessionAuthorization, callerAssertionDigest, requestBodyHash } from '@agenticprimitives/a2a/standard';
 import { parseSessionWrappedSignature } from '@agenticprimitives/a2a';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
@@ -59,7 +59,8 @@ describe('spec 387 — the AP gateway', () => {
     expect(trace.hops.map((h) => h.hop)).toEqual(['gateway.card', 'gateway.invoke']);
     expect(trace.hops[1]).toMatchObject({ request: { endpoint: 'https://edge.faithnet.io/api/a2a/ligonier.svc', as: AGENT, method: 'SendMessage' }, response: { state: 'TASK_STATE_COMPLETED', artifacts: ['resources'] } });
     const sent = calls.filter((c) => c.url.endsWith('/api/a2a/ligonier.svc')).map((c) => JSON.parse(String(c.init?.body)) as { params: { message: { metadata?: unknown } } }).at(-1);
-    expect(sent?.params.message.metadata).toEqual({ flowId: trace.flowId });
+    // Spec 387 W3 — the referral (the registry the handle names) rides on the message; the receipt when the entry carried one.
+    expect(sent?.params.message.metadata).toEqual({ flowId: trace.flowId, referral: { registry: expect.stringContaining('discovery-a2a.faithnet.io') } });
     expect(out.cardMatchesPin).toBe(true);
     const send = calls.find((c) => c.url.endsWith('/api/a2a/ligonier.svc'))!;
     const raw = String(send.init!.body);
@@ -83,5 +84,30 @@ describe('spec 387 — the AP gateway', () => {
   it('translateTask names a need for input or authority', () => {
     expect(translateTask({ id: 't', contextId: 'c', status: { state: 'TASK_STATE_AUTH_REQUIRED', message: { messageId: 'm', role: 'ROLE_AGENT', parts: [{ text: 'needs a mandate' }] } }, metadata: { runRef: 'run-1' } } as never)).toMatchObject({ needs: 'authority', runRef: 'run-1', text: 'needs a mandate' });
     expect(translateTask({ id: 't', contextId: 'c', status: { state: 'TASK_STATE_INPUT_REQUIRED' } } as never).needs).toBe('input');
+  });
+  it('continue_task answers a parked prompt on the SAME task as a data part keyed by the prompt\'s fields — and refuses an answer with no fields', async () => {
+    calls.length = 0;
+    const parked = (async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url); calls.push({ url: u, init });
+      if (u.endsWith('/agent-card.json')) return new Response(JSON.stringify(CARD), { headers: { 'content-type': 'application/json' } });
+      if (u.endsWith('/api/a2a/ligonier.svc')) {
+        const body = JSON.parse(String(init?.body)) as { params: { message: { taskId?: string; parts: Array<{ text?: string; data?: unknown }> } } };
+        const cont = !!body.params.message.taskId;
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: { task: cont
+          ? { id: 't9', contextId: 'c9', status: { state: 'TASK_STATE_COMPLETED', message: { messageId: 'm2', role: 'ROLE_AGENT', parts: [{ text: 'Paul\'s Transformation in Christ — https://learn.ligonier.org/x' }] } }, artifacts: [] }
+          : { id: 't9', contextId: 'c9', status: { state: 'TASK_STATE_INPUT_REQUIRED', message: { messageId: 'm1', role: 'ROLE_AGENT', parts: [{ text: 'Which item?' }, { data: { kind: 'data', prompt: 'Which item?', stepRef: 's0', fields: [{ name: 'id' }] } }] } }, artifacts: [] } } }), { headers: { 'content-type': 'application/json' } });
+      }
+      return new Response('{}', { status: 404 });
+    }) as typeof fetch;
+    const found = await discoverAgents(env, { topic: 'justification' }, parked) as { agents: Array<{ target: string }> };
+    const first = await invokeAgent(env, { target: found.agents[0]!.target, message: 'fetch one item by id' }, parked) as { task: { state: string; needs?: string; prompt?: { fields?: Array<{ name: string }> } } };
+    expect(first.task).toMatchObject({ state: 'TASK_STATE_INPUT_REQUIRED', needs: 'input', prompt: { kind: 'data', stepRef: 's0', fields: [{ name: 'id' }] } });
+    expect(await continueTask(env, { target: found.agents[0]!.target, task: 't9', answer: {} }, parked)).toMatchObject({ refused: expect.stringContaining('answer is required') });
+    const done = await continueTask(env, { target: found.agents[0]!.target, task: 't9', answer: { id: 'pauls-transformation-in-christ' } }, parked) as { task: { state: string; text: string }; trace: { hops: Array<{ hop: string; request?: { taskId?: string; fields?: string[] } }> } };
+    expect(done.task).toMatchObject({ state: 'TASK_STATE_COMPLETED', text: expect.stringContaining('learn.ligonier.org') });
+    expect(done.trace.hops[0]).toMatchObject({ hop: 'gateway.continue', request: { taskId: 't9', fields: ['id'] } });
+    const sent = calls.filter((c) => c.url.endsWith('/api/a2a/ligonier.svc')).map((c) => JSON.parse(String(c.init?.body)) as { params: { message: { taskId?: string; parts: Array<{ data?: unknown }> } } }).at(-1)!;
+    expect(sent.params.message.taskId).toBe('t9');
+    expect(sent.params.message.parts.find((p) => p.data)?.data).toEqual({ id: 'pauls-transformation-in-christ' });
   });
 });

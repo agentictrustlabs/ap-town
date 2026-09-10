@@ -11,6 +11,8 @@ import type { Hex } from 'viem';
 export interface GatewayIdentity { agent: string; privateKey: Hex; wire: DelegationWireV1 }
 
 export interface TranslatedTask {
+  /** Spec 387 W3 — the target's prompt when it needs input: `{ kind, prompt, stepRef, fields? }`. */
+  prompt?: Record<string, unknown>;
   taskId: string | null; contextId?: string; state: string; text: string;
   artifacts: Array<{ name?: string; text?: string; data?: unknown }>;
   needs?: 'input' | 'authority'; runRef?: string;
@@ -43,8 +45,9 @@ async function signedHeaders(id: GatewayIdentity, endpoint: string, raw: string)
 
 const hex32 = (): string => `0x${[...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 
-export async function sendMessage(id: GatewayIdentity, endpoint: string, text: string, opts: { taskId?: string; contextId?: string; fetch?: typeof fetch; /** Spec 387 W2 — the flow id the target echoes in its `trace` artifact and its logs. */ flowId?: string } = {}): Promise<{ ok: true; task: TaskV1 } | { ok: false; refused: string; status?: number }> {
-  const message: MessageV1 = { messageId: hex32(), role: 'ROLE_USER', parts: [{ text }], ...(opts.taskId ? { taskId: opts.taskId } : {}), ...(opts.contextId ? { contextId: opts.contextId } : {}), ...(opts.flowId ? { metadata: { flowId: opts.flowId } } : {}) };
+export async function sendMessage(id: GatewayIdentity, endpoint: string, text: string, opts: { taskId?: string; contextId?: string; fetch?: typeof fetch; /** Spec 387 W2 — the flow id the target echoes in its `trace` artifact and its logs. */ flowId?: string; /** Spec 387 W3 — how this gateway found the target (the registry and its receipt), said to the target as evidence. */ referral?: { registry: string; receipt?: string }; /** Spec 387 W3 — a continuation's answer to the target's prompt, keyed by the prompt's field names. */ data?: Record<string, unknown> } = {}): Promise<{ ok: true; task: TaskV1 } | { ok: false; refused: string; status?: number }> {
+  const metadata = { ...(opts.flowId ? { flowId: opts.flowId } : {}), ...(opts.referral ? { referral: opts.referral } : {}) };
+  const message: MessageV1 = { messageId: hex32(), role: 'ROLE_USER', parts: [...(text ? [{ text }] : []), ...(opts.data ? [{ data: opts.data }] : [])], ...(opts.taskId ? { taskId: opts.taskId } : {}), ...(opts.contextId ? { contextId: opts.contextId } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
   const raw = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'SendMessage', params: { message } });
   return rpc(id, endpoint, raw, opts.fetch ?? fetch);
 }
@@ -72,5 +75,8 @@ export function translateTask(task: TaskV1): TranslatedTask {
   const artifacts = (task.artifacts ?? []).map((a) => ({ ...(a.name ? { name: a.name } : {}), ...(a.parts.find((p) => typeof p.text === 'string') ? { text: a.parts.filter((p) => typeof p.text === 'string').map((p) => p.text).join(' ') } : {}), ...(a.parts.find((p) => p.data !== undefined) ? { data: a.parts.find((p) => p.data !== undefined)!.data } : {}) }));
   const meta = (task.metadata ?? {}) as { runRef?: string };
   const needs = /INPUT_REQUIRED/.test(state) ? 'input' : /AUTH_REQUIRED/.test(state) ? 'authority' : undefined;
-  return { taskId: task.id ?? null, ...(task.contextId ? { contextId: task.contextId } : {}), state, text, artifacts, ...(needs ? { needs } : {}), ...(meta.runRef ? { runRef: meta.runRef } : {}) };
+  // Spec 387 W3 — WHAT the target asks for: the prompt's data part (kind, the question, the field names) so a host
+  // can answer it with continue_task keyed by exactly those names.
+  const prompt = needs === 'input' ? (task.status?.message?.parts ?? []).find((p) => p.data && typeof p.data === 'object')?.data as Record<string, unknown> | undefined : undefined;
+  return { taskId: task.id ?? null, ...(task.contextId ? { contextId: task.contextId } : {}), state, text, artifacts, ...(needs ? { needs } : {}), ...(prompt ? { prompt } : {}), ...(meta.runRef ? { runRef: meta.runRef } : {}) };
 }

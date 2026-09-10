@@ -36,6 +36,12 @@ export const TOOLS: ToolSpec[] = [
     annotations: { title: 'Ask an agent', readOnlyHint: false as unknown as true, destructiveHint: false, idempotentHint: false as unknown as true, openWorldHint: true as unknown as false },
   },
   {
+    name: 'continue_task', title: 'Answer an agent\'s question',
+    description: 'When invoke_agent came back with state TASK_STATE_INPUT_REQUIRED, the agent asked for something (task.prompt says what: the question and its field names). Answer it on the SAME task with this tool: answer is an object keyed by exactly those field names (e.g. { "id": "pauls-transformation-in-christ" }). The agent continues its run from where it stopped and returns the finished task. Only the caller the task parked for may answer; a task waiting on a steward\'s signature cannot be continued from here.',
+    inputSchema: { type: 'object', properties: { target: { type: 'string', description: 'The "target" handle from discover_agents.' }, task: { type: 'string', description: 'The taskId invoke_agent returned.' }, answer: { type: 'object', description: 'The answer, keyed by the prompt\'s field names.', additionalProperties: true }, note: { type: 'string', description: 'Optional words to send with the answer.' }, flow: { type: 'string', description: 'Optional. The trace.flowId, to keep one trace.' } }, required: ['target', 'task', 'answer'] },
+    annotations: { title: 'Answer an agent\'s question', readOnlyHint: false as unknown as true, destructiveHint: false, idempotentHint: false as unknown as true, openWorldHint: true as unknown as false },
+  },
+  {
     name: 'get_task', title: 'Get a task',
     description: 'Read a task at a discovered agent by its taskId (from invoke_agent). Read-only.',
     inputSchema: { type: 'object', properties: { target: { type: 'string' }, task: { type: 'string' } }, required: ['target', 'task'] },

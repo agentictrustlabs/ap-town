@@ -37,9 +37,9 @@ describe('spec 386 — the discovery connector', () => {
     expect((await rpc(env, { jsonrpc: '2.0', method: 'notifications/initialized' })).status).toBe(202);
     expect(((await (await rpc(env, { jsonrpc: '2.0', id: 2, method: 'ping' })).json()) as { result: unknown }).result).toEqual({});
     const list = (await (await rpc(env, { jsonrpc: '2.0', id: 3, method: 'tools/list' })).json()) as { result: { tools: Array<{ name: string; annotations: { readOnlyHint: boolean } }> } };
-    expect(list.result.tools.map((t) => t.name)).toEqual(['discover_agents', 'inspect_agent', 'invoke_agent', 'get_task', 'find_services', 'get_service', 'list_topics']);
-    // Every tool is read-only but invoke_agent, which sends one message as the gateway's own agent (spec 387).
-    expect(list.result.tools.filter((t) => t.name !== 'invoke_agent').every((t) => t.annotations.readOnlyHint === true)).toBe(true);
+    expect(list.result.tools.map((t) => t.name)).toEqual(['discover_agents', 'inspect_agent', 'invoke_agent', 'continue_task', 'get_task', 'find_services', 'get_service', 'list_topics']);
+    // Every tool is read-only but invoke_agent and continue_task, which send one message each as the gateway's own agent (spec 387).
+    expect(list.result.tools.filter((t) => t.name !== 'invoke_agent' && t.name !== 'continue_task').every((t) => t.annotations.readOnlyHint === true)).toBe(true);
     expect((await app.fetch(new Request('https://connector.test/mcp'), env as never)).status).toBe(405);
   });
 

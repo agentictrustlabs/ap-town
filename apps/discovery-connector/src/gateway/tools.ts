@@ -29,6 +29,13 @@ function logHop(flowId: string, hop: FlowHop): FlowHop {
   return hop;
 }
 
+/** A task's artifacts ACCUMULATE across turns (a continued task carries the first turn's trace and the second's); the
+ *  one that describes the turn just answered is the last of its name. */
+function lastArtifact(artifacts: Array<{ name?: string; data?: unknown }>, name: string): Record<string, unknown> | undefined {
+  const hit = [...artifacts].reverse().find((a) => a.name === name);
+  return hit && hit.data && typeof hit.data === 'object' ? hit.data as Record<string, unknown> : undefined;
+}
+
 function identityOf(env: GatewayEnv): GatewayIdentity | { refused: string } {
   if (!env.GATEWAY_AGENT || !env.GATEWAY_PRIVATE_KEY || !env.GATEWAY_SESSION_WIRE) return { refused: 'this gateway has no agent identity configured (GATEWAY_AGENT, GATEWAY_PRIVATE_KEY, GATEWAY_SESSION_WIRE) — it cannot speak to anyone as itself' };
   try {
@@ -49,7 +56,9 @@ export async function discoverAgents(env: GatewayEnv, args: { intent?: string; t
     const c = await fetchCard(sv.card, fetchImpl);
     if (!c.ok) return { ...sv, target: null, targetNote: c.refused };
     if (!c.endpoint) return { ...sv, target: null, targetNote: 'its card publishes no A2A 1.x JSON-RPC interface' };
-    const target = await mintHandle(env.HANDLE_SECRET!, { anchor: sv.key ?? '', name: sv.name, cardUrl: sv.card, endpoint: c.endpoint, cardDigest: c.digest, registry, ...(sv.capabilities[0] ? { skill: sv.capabilities[0] } : {}) });
+    // Spec 387 W3 — the registry's own receipt for this entry rides on the handle, so an invoke can say how it found the agent.
+    const receipt = (sv as { verification?: { attestations?: Array<{ type: string; uri: string }> } }).verification?.attestations?.find((a) => a.type === 'ap-registry-receipt')?.uri;
+    const target = await mintHandle(env.HANDLE_SECRET!, { anchor: sv.key ?? '', name: sv.name, cardUrl: sv.card, endpoint: c.endpoint, cardDigest: c.digest, registry, ...(receipt ? { receipt } : {}), ...(sv.capabilities[0] ? { skill: sv.capabilities[0] } : {}) });
     return { ...sv, target, skills: (c.card.skills ?? []).map((s) => ({ id: s.id, name: s.name })) };
   }));
   const trace = { flowId, hops: [logHop(flowId, { hop: 'gateway.discover', ms: Date.now() - t0, request: { registry: found.query.registry, query: { text: found.query.text, ...(found.query.capability ? { capability: found.query.capability } : {}), ...(found.query.language ? { language: found.query.language } : {}) } }, response: { results: agents.length, withTarget: agents.filter((a) => a.target).length, cards: agents.map((a) => a.card).filter(Boolean) } })] };
@@ -68,6 +77,32 @@ export async function inspectAgent(env: GatewayEnv, args: { target?: string; flo
   return { trace, handle: publicOf(v.payload), card: { name: c.card.name, description: c.card.description, provider: c.card.provider, skills: (c.card.skills ?? []).map((s) => ({ id: s.id, name: s.name, description: s.description })), interfaces: (c.card.supportedInterfaces ?? []).map((i) => ({ binding: i.protocolBinding, version: i.protocolVersion })) }, cardMatchesPin: c.digest === v.payload.cardDigest, endpointMatchesPin: c.endpoint === v.payload.endpoint, note: DISCOVERY_NOTE };
 }
 
+/** Spec 387 W3 — CONTINUE a task the target parked on a prompt: the host's answer, keyed by the prompt's field names,
+ *  sent as a data part on the SAME task. The target decides whether this caller may answer (the run parked for it),
+ *  whether the answer is for a declared field, and what follows — the gateway carries the answer and nothing else. */
+export async function continueTask(env: GatewayEnv, args: { target?: string; task?: string; answer?: Record<string, unknown>; note?: string; flow?: string }, fetchImpl: typeof fetch = fetch): Promise<Record<string, unknown>> {
+  if (!env.HANDLE_SECRET) return { refused: 'no handle secret configured', note: GATEWAY_NOTE };
+  const flowId = flowIdFor(args.flow); const t0 = Date.now();
+  const taskId = String(args.task ?? '').trim();
+  if (!taskId) return { refused: 'task is required — the taskId invoke_agent returned', note: GATEWAY_NOTE };
+  const answer = args.answer && typeof args.answer === 'object' && !Array.isArray(args.answer) ? args.answer : null;
+  if (!answer || !Object.keys(answer).length) return { refused: 'answer is required — an object keyed by the prompt\'s field names (task.prompt.fields), e.g. { "id": "…" }', note: GATEWAY_NOTE };
+  const v = await verifyHandle(env.HANDLE_SECRET, String(args.target ?? ''));
+  if (!v.ok) return { refused: v.refused, note: GATEWAY_NOTE };
+  const id = identityOf(env);
+  if ('refused' in id) return { refused: id.refused, note: GATEWAY_NOTE };
+  const c = await fetchCard(v.payload.cardUrl, fetchImpl);
+  if (!c.ok) return { refused: c.refused, note: GATEWAY_NOTE };
+  if (c.endpoint !== v.payload.endpoint) return { refused: `the card at ${v.payload.cardUrl} now names ${c.endpoint ?? 'no'} A2A endpoint, not the one this handle pinned — discover again`, note: GATEWAY_NOTE };
+  const sent = await sendMessage(id, v.payload.endpoint, String(args.note ?? '').trim(), { taskId, fetch: fetchImpl, flowId, data: answer });
+  const hop = { hop: 'gateway.continue', ms: Date.now() - t0, request: { endpoint: v.payload.endpoint, as: id.agent, taskId, fields: Object.keys(answer) } };
+  if (!sent.ok) { logHop(flowId, { ...hop, response: { refused: sent.refused } }); return { refused: sent.refused, agent: publicOf(v.payload), trace: { flowId, hops: [] }, note: GATEWAY_NOTE }; }
+  const t = translateTask(sent.task);
+  const agentTrace = lastArtifact(t.artifacts, 'trace');
+  const trace = { flowId, hops: [logHop(flowId, { ...hop, response: { taskId: t.taskId, state: t.state, artifacts: t.artifacts.map((a) => a.name ?? '?'), chars: t.text.length, ...(t.needs ? { needs: t.needs } : {}) } }), ...(agentTrace ? [{ ...agentTrace, hop: 'agent.run', ms: Number(agentTrace.ms ?? 0) }] : [])] };
+  return { agent: publicOf(v.payload), task: t, trace, note: `${GATEWAY_NOTE} The reply is the agent's own words on the continued task.` };
+}
+
 /** One A2A message to the target, as the gateway agent; the target's task translated. */
 export async function invokeAgent(env: GatewayEnv, args: { target?: string; message?: string; task?: string; context?: string; flow?: string }, fetchImpl: typeof fetch = fetch): Promise<Record<string, unknown>> {
   if (!env.HANDLE_SECRET) return { refused: 'no handle secret configured', note: GATEWAY_NOTE };
@@ -83,12 +118,13 @@ export async function invokeAgent(env: GatewayEnv, args: { target?: string; mess
   if (!c.ok) return { refused: c.refused, note: GATEWAY_NOTE };
   if (c.endpoint !== v.payload.endpoint) return { refused: `the card at ${v.payload.cardUrl} now names ${c.endpoint ?? 'no'} A2A endpoint, not the one this handle pinned — discover again`, note: GATEWAY_NOTE };
   const tCard = Date.now() - t0; const t1 = Date.now();
-  const sent = await sendMessage(id, v.payload.endpoint, text, { ...(args.task ? { taskId: args.task } : {}), ...(args.context ? { contextId: args.context } : {}), fetch: fetchImpl, flowId });
+  const referral = { registry: v.payload.registry, ...(v.payload.receipt ? { receipt: v.payload.receipt } : {}) };
+  const sent = await sendMessage(id, v.payload.endpoint, text, { ...(args.task ? { taskId: args.task } : {}), ...(args.context ? { contextId: args.context } : {}), fetch: fetchImpl, flowId, referral });
   if (!sent.ok) { logHop(flowId, { hop: 'gateway.invoke', ms: Date.now() - t1, request: { endpoint: v.payload.endpoint, chars: text.length }, response: { refused: sent.refused } }); return { refused: sent.refused, agent: publicOf(v.payload), trace: { flowId, hops: [] }, note: GATEWAY_NOTE }; }
   const t = translateTask(sent.task);
   // The target's own trace artifact (its run: playbook, planner, steps, outputs) is lifted into this trace as
   // the next hop, so one object tells the whole story; the artifact stays on the task as well.
-  const agentTrace = t.artifacts.find((a) => a.name === 'trace')?.data as Record<string, unknown> | undefined;
+  const agentTrace = lastArtifact(t.artifacts, 'trace');
   const trace = {
     flowId,
     hops: [

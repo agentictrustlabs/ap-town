@@ -6,7 +6,7 @@ import { Hono } from 'hono';
 import { MethodRegistry, RpcError, RPC_ERROR, SUPPORTED_PROTOCOL_VERSIONS, buildServerDiscover, negotiateProtocolVersion, parseJsonRpc, parseRequestMeta } from '@agenticprimitives/mcp-protocol';
 import { TOOLS, findServices, getService, listTopics } from './catalog.js';
 import { RegistryError } from './ard-client.js';
-import { discoverAgents, inspectAgent, invokeAgent, getTaskTool, type GatewayEnv } from './gateway/tools.js';
+import { discoverAgents, inspectAgent, invokeAgent, continueTask, getTaskTool, type GatewayEnv } from './gateway/tools.js';
 import { CONNECTOR } from './whitelabel.js';
 
 export interface Env extends GatewayEnv { LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> } }
@@ -34,6 +34,7 @@ function registryFor(env: Env): MethodRegistry {
         if (name === 'discover_agents') return toolResult(await discoverAgents(env, args as never));
         if (name === 'inspect_agent') return toolResult(await inspectAgent(env, args as never));
         if (name === 'invoke_agent') { const out = await invokeAgent(env, args as never); return toolResult(out, 'refused' in out); }
+        if (name === 'continue_task') { const out = await continueTask(env, args as never); return toolResult(out, 'refused' in out); }
         if (name === 'get_task') return toolResult(await getTaskTool(env, args as never));
         if (name === 'find_services') return toolResult((await findServices(env, args as never)) as unknown as Record<string, unknown>);
         if (name === 'get_service') return toolResult(await getService(env, String(args.key ?? '')));
