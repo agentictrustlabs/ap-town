@@ -17,7 +17,6 @@ export interface TopicResolution {
   shared?: string;
   publisherTerms?: Record<string, string>;
   via?: string;
-  pageUrls?: Record<string, string>;
   explanation: string;
 }
 
@@ -27,7 +26,7 @@ export function resolveTopic(word: string): TopicResolution {
   if (!hit) return { word, known: false, explanation: `“${word}” is not a topic this connector maps to a shared concept; the registry was searched on the word itself.` };
   const terms = Object.entries(hit.publisherTerms).map(([pub, term]) => `${term} (${pub})`).join(', ');
   return {
-    word, known: true, shared: hit.shared, publisherTerms: hit.publisherTerms, via: hit.via, pageUrls: hit.pageUrls,
+    word, known: true, shared: hit.shared, publisherTerms: hit.publisherTerms, via: hit.via,
     explanation: `“${word}” → ${hit.shared}${terms ? ` ← ${hit.via} ← ${terms}` : ''}`,
   };
 }

@@ -9,16 +9,16 @@ export const CONNECTOR = {
   registryLabel: 'the Global.Church discovery registry',
   /** What an assistant is told at initialize — the whole doctrine in three sentences. */
   instructions:
-    'Use this connector whenever a person asks for study material, a study plan, curricula, teaching, sermons, courses or resources on a Christian doctrine or topic (justification, sanctification, prayer, …), or asks who offers such things: call find_services FIRST with the topic (and the capability when one fits, e.g. "study plans"), then name each ministry it returns as the source, show why it matched and what was verified, and read or link the ministry\'s own website that comes back. Never invent a ministry the registry did not return. The connector finds and points only — it never reads or relays a ministry\'s content, and discovery authorizes nothing.',
+    'Use this connector whenever a person asks for study material, a study plan, curricula, teaching, sermons, courses or resources on a Christian doctrine or topic (justification, sanctification, prayer, …), or asks who offers such things. FIRST call discover_agents with the topic (and the capability when one fits, e.g. "study plans"); THEN call invoke_agent on the agent it returned with the person\'s ask in plain words (a study plan, a reading list, what it offers) — the ministry\'s own agent answers from its own catalog, and its reply carries the items with their links as a results artifact. Present that reply as the ministry\'s answer, naming the ministry as the source and keeping every link it gave; use get_task to finish a task that came back working. find_services and get_service only list who is registered and what was verified, for "who offers X" questions. Never invent a ministry the registry did not return and never supply resources of your own beside the agent\'s. The connector finds, points and relays a task — it never reads a ministry\'s content itself, and discovery authorizes nothing.',
 } as const;
 
-/** A topic the connector knows how to resolve: the shared anchor, the publisher terms that map to it, the
- *  query text the registry ranks on, and the publishers' own topic pages (pointers, never content). */
+/** A topic the connector knows how to resolve: the shared anchor, the publisher terms that map to it, and the
+ *  query text the registry ranks on. NO page pointers (spec 387 W2): content is reached only through the
+ *  publisher's own agent — discover → inspect → invoke — never by a URL this table hands out. */
 export interface TopicEntry {
   shared: string;
   publisherTerms: Record<string, string>;
   queryText: string;
-  pageUrls: Record<string, string>;
   via: 'skos:exactMatch';
 }
 
@@ -27,7 +27,6 @@ export const TOPICS: Record<string, TopicEntry> = {
     shared: 'gc:TopicJustification',
     publisherTerms: { ligonier: 'lig:justification' },
     queryText: 'justification',
-    pageUrls: { ligonier: 'https://www.ligonier.org/topics/justification' },
     via: 'skos:exactMatch',
   },
 };

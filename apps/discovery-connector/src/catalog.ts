@@ -59,7 +59,7 @@ export const TOOLS: ToolSpec[] = [
   },
   {
     name: 'list_topics', title: 'List topics',
-    description: 'The topics this connector resolves to shared concepts, with the publisher terms and pages they map to.',
+    description: 'The topics this connector resolves to shared concepts, with the publisher terms they map to.',
     inputSchema: { type: 'object', properties: {} },
     annotations: ro('List topics'),
   },
@@ -143,8 +143,8 @@ export async function getService(env: DiscoveryEnv, key: string): Promise<Record
   return { ...out, note: DISCOVERY_NOTE };
 }
 
-export function listTopics(): { topics: Array<{ topic: string; shared: string; publisherTerms: Record<string, string>; via: string; pageUrls: Record<string, string> }>; note: string } {
-  return { topics: Object.entries(TOPICS).map(([topic, t]) => ({ topic, shared: t.shared, publisherTerms: t.publisherTerms, via: t.via, pageUrls: t.pageUrls })), note: 'The mapping is cited, not restated: the concepts are published in their own vocabularies.' };
+export function listTopics(): { topics: Array<{ topic: string; shared: string; publisherTerms: Record<string, string>; via: string }>; note: string } {
+  return { topics: Object.entries(TOPICS).map(([topic, t]) => ({ topic, shared: t.shared, publisherTerms: t.publisherTerms, via: t.via })), note: 'The mapping is cited, not restated: the concepts are published in their own vocabularies.' };
 }
 
 export { resolveTopic };
