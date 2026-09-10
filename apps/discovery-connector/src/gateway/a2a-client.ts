@@ -45,11 +45,11 @@ async function signedHeaders(id: GatewayIdentity, endpoint: string, raw: string)
 
 const hex32 = (): string => `0x${[...crypto.getRandomValues(new Uint8Array(32))].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 
-export async function sendMessage(id: GatewayIdentity, endpoint: string, text: string, opts: { taskId?: string; contextId?: string; fetch?: typeof fetch; /** Spec 387 W2 — the flow id the target echoes in its `trace` artifact and its logs. */ flowId?: string; /** Spec 387 W3 — how this gateway found the target (the registry and its receipt), said to the target as evidence. */ referral?: { registry: string; receipt?: string }; /** Spec 387 W3 — a continuation's answer to the target's prompt, keyed by the prompt's field names. */ data?: Record<string, unknown> } = {}): Promise<{ ok: true; task: TaskV1 } | { ok: false; refused: string; status?: number }> {
+export async function sendMessage(id: GatewayIdentity, endpoint: string, text: string, opts: { taskId?: string; contextId?: string; fetch?: typeof fetch; /** Spec 387 W2 — the flow id the target echoes in its `trace` artifact and its logs. */ flowId?: string; /** Spec 390 W2 — W3C Trace Context for the hop: the gateway's trace, this call as the parent span. */ traceparent?: string; tracestate?: string; /** Spec 387 W3 — how this gateway found the target (the registry and its receipt), said to the target as evidence. */ referral?: { registry: string; receipt?: string }; /** Spec 387 W3 — a continuation's answer to the target's prompt, keyed by the prompt's field names. */ data?: Record<string, unknown> } = {}): Promise<{ ok: true; task: TaskV1 } | { ok: false; refused: string; status?: number }> {
   const metadata = { ...(opts.flowId ? { flowId: opts.flowId } : {}), ...(opts.referral ? { referral: opts.referral } : {}) };
   const message: MessageV1 = { messageId: hex32(), role: 'ROLE_USER', parts: [...(text ? [{ text }] : []), ...(opts.data ? [{ data: opts.data }] : [])], ...(opts.taskId ? { taskId: opts.taskId } : {}), ...(opts.contextId ? { contextId: opts.contextId } : {}), ...(Object.keys(metadata).length ? { metadata } : {}) };
   const raw = JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'SendMessage', params: { message } });
-  return rpc(id, endpoint, raw, opts.fetch ?? fetch);
+  return rpc(id, endpoint, raw, opts.fetch ?? fetch, opts.traceparent ? { traceparent: opts.traceparent, ...(opts.tracestate ? { tracestate: opts.tracestate } : {}) } : {});
 }
 
 export async function getTask(id: GatewayIdentity, endpoint: string, taskId: string, fetchImpl: typeof fetch = fetch): Promise<{ ok: true; task: TaskV1 } | { ok: false; refused: string; status?: number }> {
@@ -57,9 +57,10 @@ export async function getTask(id: GatewayIdentity, endpoint: string, taskId: str
   return rpc(id, endpoint, raw, fetchImpl);
 }
 
-async function rpc(id: GatewayIdentity, endpoint: string, raw: string, fetchImpl: typeof fetch): Promise<{ ok: true; task: TaskV1 } | { ok: false; refused: string; status?: number }> {
+async function rpc(id: GatewayIdentity, endpoint: string, raw: string, fetchImpl: typeof fetch, extra: Record<string, string> = {}): Promise<{ ok: true; task: TaskV1 } | { ok: false; refused: string; status?: number }> {
   let res: Response;
-  try { res = await fetchImpl(endpoint, { method: 'POST', headers: await signedHeaders(id, endpoint, raw), body: raw }); } catch (e) { return { ok: false, refused: `could not reach ${endpoint}: ${e instanceof Error ? e.message : String(e)}` }; }
+  // Spec 390 W2 — W3C Trace Context rides beside the signed caller assertion: correlation, never part of what is signed or admitted.
+  try { res = await fetchImpl(endpoint, { method: 'POST', headers: { ...(await signedHeaders(id, endpoint, raw)), ...extra }, body: raw }); } catch (e) { return { ok: false, refused: `could not reach ${endpoint}: ${e instanceof Error ? e.message : String(e)}` }; }
   const body = (await res.json().catch(() => null)) as { result?: { task?: TaskV1 }; error?: { code: number; message: string } } | null;
   if (!body) return { ok: false, refused: `${endpoint} answered ${res.status} with no JSON-RPC body`, status: res.status };
   if (body.error) return { ok: false, refused: `${endpoint} answered ${body.error.code}: ${body.error.message}`, status: res.status };

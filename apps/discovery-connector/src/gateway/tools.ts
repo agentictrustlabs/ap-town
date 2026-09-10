@@ -3,7 +3,7 @@
 import { findServices, type FindServicesResult } from '../catalog.js';
 import type { DiscoveryEnv } from '../ard-client.js';
 import { mintHandle, verifyHandle, type HandlePayloadV1 } from './handle.js';
-import { fetchCard, sendMessage, getTask, translateTask, type GatewayIdentity } from './a2a-client.js';
+import { fetchCard, sendMessage, getTask, translateTask, sha256Hex, type GatewayIdentity } from './a2a-client.js';
 import { DISCOVERY_NOTE } from '../whitelabel.js';
 
 export interface GatewayEnv extends DiscoveryEnv {
@@ -24,6 +24,16 @@ const FLOW_ID = /^[A-Za-z0-9_.:-]{4,64}$/;
 export function flowIdFor(said: unknown): string {
   return typeof said === 'string' && FLOW_ID.test(said) ? said : `fl-${crypto.randomUUID().slice(0, 8)}`;
 }
+/** Spec 390 W2 — THE GATEWAY'S TRACE, derived from the flow id so every hop of one flow (discover → inspect →
+ *  invoke → continue) is one W3C trace without the MCP host sending a header: the trace id is the flow's, the
+ *  parent span id is this tool call's. `tracestate` carries the flow id as this substrate's member so it
+ *  survives a foreign hop. Correlation only — the target admits on the signed caller assertion, never this. */
+async function traceFor(flowId: string, hop: string): Promise<{ traceId: string; spanId: string; traceparent: string; tracestate: string }> {
+  const traceId = (await sha256Hex(`trace:flow:${flowId}`)).slice(2, 34);
+  const spanId = (await sha256Hex(`span:flow:${flowId}:${hop}`)).slice(2, 18);
+  return { traceId, spanId, traceparent: `00-${traceId}-${spanId}-01`, tracestate: `ap=${flowId.replace(/[^\x20-\x7e]/g, '').replace(/[,=]/g, '_')}` };
+}
+
 function logHop(flowId: string, hop: FlowHop): FlowHop {
   console.log(`[flow ${flowId}] ${hop.hop} ${hop.ms}ms ${JSON.stringify({ ...(hop.request ?? {}), ...(hop.response ?? {}) }).slice(0, 400)}`);
   return hop;
@@ -94,7 +104,8 @@ export async function continueTask(env: GatewayEnv, args: { target?: string; tas
   const c = await fetchCard(v.payload.cardUrl, fetchImpl);
   if (!c.ok) return { refused: c.refused, note: GATEWAY_NOTE };
   if (c.endpoint !== v.payload.endpoint) return { refused: `the card at ${v.payload.cardUrl} now names ${c.endpoint ?? 'no'} A2A endpoint, not the one this handle pinned — discover again`, note: GATEWAY_NOTE };
-  const sent = await sendMessage(id, v.payload.endpoint, String(args.note ?? '').trim(), { taskId, fetch: fetchImpl, flowId, data: answer });
+  const tc = await traceFor(flowId, 'continue');
+  const sent = await sendMessage(id, v.payload.endpoint, String(args.note ?? '').trim(), { taskId, fetch: fetchImpl, flowId, data: answer, traceparent: tc.traceparent, tracestate: tc.tracestate });
   const hop = { hop: 'gateway.continue', ms: Date.now() - t0, request: { endpoint: v.payload.endpoint, as: id.agent, taskId, fields: Object.keys(answer) } };
   if (!sent.ok) { logHop(flowId, { ...hop, response: { refused: sent.refused } }); return { refused: sent.refused, agent: publicOf(v.payload), trace: { flowId, hops: [] }, note: GATEWAY_NOTE }; }
   const t = translateTask(sent.task);
@@ -119,7 +130,8 @@ export async function invokeAgent(env: GatewayEnv, args: { target?: string; mess
   if (c.endpoint !== v.payload.endpoint) return { refused: `the card at ${v.payload.cardUrl} now names ${c.endpoint ?? 'no'} A2A endpoint, not the one this handle pinned — discover again`, note: GATEWAY_NOTE };
   const tCard = Date.now() - t0; const t1 = Date.now();
   const referral = { registry: v.payload.registry, ...(v.payload.receipt ? { receipt: v.payload.receipt } : {}) };
-  const sent = await sendMessage(id, v.payload.endpoint, text, { ...(args.task ? { taskId: args.task } : {}), ...(args.context ? { contextId: args.context } : {}), fetch: fetchImpl, flowId, referral });
+  const tc = await traceFor(flowId, 'invoke');
+  const sent = await sendMessage(id, v.payload.endpoint, text, { ...(args.task ? { taskId: args.task } : {}), ...(args.context ? { contextId: args.context } : {}), fetch: fetchImpl, flowId, referral, traceparent: tc.traceparent, tracestate: tc.tracestate });
   if (!sent.ok) { logHop(flowId, { hop: 'gateway.invoke', ms: Date.now() - t1, request: { endpoint: v.payload.endpoint, chars: text.length }, response: { refused: sent.refused } }); return { refused: sent.refused, agent: publicOf(v.payload), trace: { flowId, hops: [] }, note: GATEWAY_NOTE }; }
   const t = translateTask(sent.task);
   // The target's own trace artifact (its run: playbook, planner, steps, outputs) is lifted into this trace as
@@ -127,6 +139,8 @@ export async function invokeAgent(env: GatewayEnv, args: { target?: string; mess
   const agentTrace = lastArtifact(t.artifacts, 'trace');
   const trace = {
     flowId,
+    // Spec 390 W2 — the W3C trace every hop of this flow rode under; the target's run echoes it (agent.run.traceId).
+    traceId: tc.traceId,
     hops: [
       logHop(flowId, { hop: 'gateway.card', ms: tCard, request: { cardUrl: v.payload.cardUrl }, response: { endpoint: c.endpoint, cardMatchesPin: c.digest === v.payload.cardDigest } }),
       logHop(flowId, { hop: 'gateway.invoke', ms: Date.now() - t1, request: { endpoint: v.payload.endpoint, as: id.agent, method: args.task ? 'SendMessage(taskId)' : 'SendMessage', chars: text.length }, response: { taskId: t.taskId, state: t.state, artifacts: t.artifacts.map((a) => a.name ?? '?'), chars: t.text.length, ...(t.needs ? { needs: t.needs } : {}) } }),
