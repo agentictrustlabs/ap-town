@@ -6,6 +6,8 @@
 // agent will parse a stated intent/mandate, expand it (skills/geo/trust), query the graph, and return the
 // best agents with an explainable evidence path. It evolves into a full-featured discovery app.
 
+import { resolveCapabilityWord, capabilityIdsInText, type CapabilityResolution } from './capability-resolution.js';
+import { CAPABILITY_SYNONYMS } from './whitelabel.js';
 import { Hono } from 'hono';
 import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike, applyRelevanceCutoff, facetsOverMatches, parseUpstreamRegistries } from './ard.js';
 import { ACP_REGISTRY_PATH, acpRegistry } from './acp.js';
@@ -681,6 +683,30 @@ app.get(ARD_WELL_KNOWN_PATH, async (c) => {
   return c.json(ardManifest([ardRegistryEntry(origin, REGISTRY_DISPLAY), ...entries]), 200, { 'cache-control': 'public, max-age=300' });
 });
 
+/** The ids the registry's agents declare right now (the /facets aggregate) — what a capability word resolves against. */
+async function declaredCapabilityIds(env: Env): Promise<string[]> {
+  const f = await mcpGet(env, '/facets').catch(() => null) as { ok?: boolean; capabilityIds?: Array<{ value: string }> } | null;
+  return f?.ok && Array.isArray(f.capabilityIds) ? f.capabilityIds.map((x) => x.value) : [];
+}
+
+/** Spec 349 §2 — a capability FILTER said in words becomes the declared id it names, or stays unmet with the reason;
+ *  a TEXT query names the ids all of whose words it contains (ranking only). Both deterministic, both on the response. */
+async function resolveCapabilities(env: Env, plan: { need: string; mandates: { requireCapabilityId?: string } }): Promise<{ resolution?: CapabilityResolution; capabilityIds: string[] }> {
+  const wantsFilter = !!plan.mandates.requireCapabilityId;
+  const wantsText = plan.need.trim().length > 0;
+  if (!wantsFilter && !wantsText) return { capabilityIds: [] };
+  const declared = await declaredCapabilityIds(env);
+  let resolution: CapabilityResolution | undefined;
+  if (wantsFilter) {
+    resolution = resolveCapabilityWord(plan.mandates.requireCapabilityId!, declared, CAPABILITY_SYNONYMS);
+    // An unresolved word stays a mandate nobody meets: the answer is empty and says why — never a widening.
+    plan.mandates.requireCapabilityId = resolution.resolvedTo ?? `unresolved:${resolution.requested}`;
+  }
+  const fromText = wantsText ? capabilityIdsInText(plan.need, declared, CAPABILITY_SYNONYMS) : [];
+  const capabilityIds = [...new Set([...(resolution?.resolvedTo ? [resolution.resolvedTo] : []), ...fromText])];
+  return { ...(resolution ? { resolution } : {}), capabilityIds };
+}
+
 app.post('/search', async (c) => {
   const body = (await c.req.json().catch(() => null)) as Parameters<typeof planArdSearch>[0] | null;
   if (!body) return c.json(ardError({ status: 400, code: 'INVALID_ARGUMENT', message: 'body must be JSON' }), 400);
@@ -695,9 +721,11 @@ app.post('/search', async (c) => {
   if (plan.federation === 'auto' && upstreams.length) {
     return c.json(ardError({ status: 400, code: 'INVALID_ARGUMENT', message: 'federation=auto (upstream merge) is not implemented by this registry; use federation=referrals to be told which registries to query, or none' }), 400);
   }
-  const run = await runDiscovery(c.env, { q: '', intent: { need: plan.need }, mandates: plan.mandates, limit: 100 });
+  const caps = await resolveCapabilities(c.env, plan);
+  const run = await runDiscovery(c.env, { q: '', intent: { need: plan.need, ...(caps.capabilityIds.length ? { capabilityIds: caps.capabilityIds } : {}) }, mandates: plan.mandates, limit: 100 });
   if (!run.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: run.error } }, 500);
-  return c.json(ardSearchResponse(run.ranked.map((m) => toRanked(m, run.candidates)), plan, { source: `${origin}/search`, referrals: upstreams }));
+  const out = ardSearchResponse(run.ranked.map((m) => toRanked(m, run.candidates)), plan, { source: `${origin}/search`, referrals: upstreams });
+  return c.json({ ...out, ...(caps.resolution ? { 'ap:capabilityResolution': caps.resolution } : {}), ...(caps.capabilityIds.length ? { 'ap:capabilityIdsFromText': caps.capabilityIds } : {}) });
 });
 
 app.post('/explore', async (c) => {
@@ -714,7 +742,8 @@ app.post('/explore', async (c) => {
     const plan = planArdSearch({ query: q });
     if ('code' in plan) return c.json(ardError(plan), plan.status);
     if (!plan.typeServable) return c.json({ resultType: 'facets', facets: {} });
-    const run = await runDiscovery(c.env, { q: '', intent: { need: plan.need }, mandates: plan.mandates, limit: 500 });
+    const caps = await resolveCapabilities(c.env, plan);
+    const run = await runDiscovery(c.env, { q: '', intent: { need: plan.need, ...(caps.capabilityIds.length ? { capabilityIds: caps.capabilityIds } : {}) }, mandates: plan.mandates, limit: 500 });
     if (!run.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: run.error } }, 500);
     // The SAME cutoff as Search — §5.3.3 requires one cutoff per registry, not one per endpoint.
     const matched = applyRelevanceCutoff(run.ranked.map((m) => toRanked(m, run.candidates)), plan.need.length > 0);
