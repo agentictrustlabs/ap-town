@@ -1,5 +1,16 @@
 # @agenticprimitives-demo/discovery-indexer
 
+## 0.0.1-alpha.11
+
+### Patch Changes
+
+- Updated dependencies
+  - @agenticprimitives/agent-naming@1.0.0-alpha.23
+  - @agenticprimitives/capability-claims@0.0.0-alpha.20
+  - @agenticprimitives/ontology@1.0.0-alpha.23
+  - @agenticprimitives/registry-kit@0.0.0-alpha.11
+  - @agenticprimitives/types@1.0.0-alpha.23
+
 ## 0.0.1-alpha.10
 
 ### Patch Changes

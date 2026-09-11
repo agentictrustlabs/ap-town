@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives-demo/discovery-mcp",
-  "version": "0.0.1-alpha.0",
+  "version": "0.0.1-alpha.1",
   "private": true,
   "description": "Discovery MCP server (demo-discovery-mcp): MCP tools (search_agents, get_agent, sparql_select) that read the discovery knowledge base (GraphDB @ agentkg.io). The discovery A2A agent calls these tools; the knowledge base is populated by agent-indexer from agent-naming + on-chain facets (spec 279).",
   "type": "module",
