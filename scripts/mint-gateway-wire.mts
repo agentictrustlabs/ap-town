@@ -7,9 +7,9 @@
  *
  * Writes GATEWAY_AGENT and GATEWAY_SESSION_WIRE (base64url JSON) into apps/demo-discovery-connector/.env.gateway.local.
  */
-import { hashDelegation, type Delegation } from '../packages/delegation/src/index.js';
-import { skillSelector } from '../packages/a2a/src/grant.js';
-import { STANDARD_SURFACE_SKILL } from '../packages/a2a/src/standard/caller.js';
+import { hashDelegation, type Delegation } from '@agenticprimitives/delegation';
+import { skillSelector } from '@agenticprimitives/a2a';
+import { STANDARD_SURFACE_SKILL } from '@agenticprimitives/a2a/standard';
 import { encodeAbiParameters, toHex, type Address, type Hex } from 'viem';
 import { readFileSync, writeFileSync } from 'node:fs';
 
