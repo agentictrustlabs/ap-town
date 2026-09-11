@@ -9,6 +9,8 @@ import { DISCOVERY_NOTE } from '../whitelabel.js';
 export interface GatewayEnv extends DiscoveryEnv {
   HANDLE_SECRET?: string;
   GATEWAY_AGENT?: string;
+  /** The gateway agent's session-wire DELEGATE key (spec 387 W2): no authority of its own. A raw Worker secret today;
+   *  audit gateway-raw-delegate-key (accepted-risk) schedules the KMS-backed signer + a re-issued wire. */
   GATEWAY_PRIVATE_KEY?: string;
   GATEWAY_SESSION_WIRE?: string;
 }
