@@ -9,7 +9,7 @@
 import { resolveCapabilityWord, capabilityIdsInText, type CapabilityResolution } from './capability-resolution.js';
 import { CAPABILITY_SYNONYMS } from './whitelabel.js';
 import { Hono } from 'hono';
-import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike, applyRelevanceCutoff, facetsOverMatches, parseUpstreamRegistries } from './ard.js';
+import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike, applyRelevanceCutoff, facetsOverMatches, parseUpstreamRegistries } from '@agenticprimitives/registry-kit/projection';
 import { ACP_REGISTRY_PATH, acpRegistry } from './acp.js';
 import { cors } from 'hono/cors';
 import { keccak_256 } from '@noble/hashes/sha3.js';
