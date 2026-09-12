@@ -1,5 +1,12 @@
 # @agenticprimitives-demo/discovery-indexer
 
+## 0.0.1-alpha.13
+
+### Patch Changes
+
+- Updated dependencies
+  - @agenticprimitives/capability-claims@0.0.0-alpha.22
+
 ## 0.0.1-alpha.12
 
 ### Patch Changes
