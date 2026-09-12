@@ -1,6 +1,6 @@
 {
   "name": "@agenticprimitives-demo/discovery-indexer",
-  "version": "0.0.1-alpha.11",
+  "version": "0.0.1-alpha.12",
   "private": true,
   "description": "Discovery indexer (demo-discovery-indexer): enumerates every Smart Agent in agent-naming and projects available on-chain facets into the discovery A-box (GraphDB @ agentkg.io), then loads the agentic-trust ontology so the KB self-describes. Demo-grade reference; a production agent-indexer graduates to an external repo (ADR-0037) when packages publish.",
   "type": "module",
