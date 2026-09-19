@@ -1,5 +1,13 @@
 # @agenticprimitives-demo/discovery-a2a
 
+## 0.0.1-alpha.4
+
+### Patch Changes
+
+- Updated dependencies [56c97c3]
+  - @agenticprimitives/registry-kit@0.0.0-alpha.14
+  - @agenticprimitives/types@1.0.0-alpha.26
+
 ## 0.0.1-alpha.3
 
 ### Patch Changes

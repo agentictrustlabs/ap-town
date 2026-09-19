@@ -1,5 +1,13 @@
 # @agenticprimitives-demo/discovery-connector
 
+## 0.0.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [56c97c3]
+  - @agenticprimitives/a2a@0.0.0-alpha.24
+  - @agenticprimitives/mcp-protocol@0.0.0-alpha.4
+
 ## 0.0.1-alpha.4
 
 ### Patch Changes

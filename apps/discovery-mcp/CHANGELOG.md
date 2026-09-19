@@ -1,5 +1,12 @@
 # @agenticprimitives-demo/discovery-mcp
 
+## 0.0.1-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [56c97c3]
+  - @agenticprimitives/capability-claims@0.0.0-alpha.24
+
 ## 0.0.1-alpha.4
 
 ### Patch Changes
