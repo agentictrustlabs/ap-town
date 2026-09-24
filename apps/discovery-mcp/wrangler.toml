@@ -18,3 +18,16 @@ name = "demo-discovery-mcp-faithnet"
 
 [env.faithnet.vars]
 GRAPHDB_QUERY_URL = "https://graphdb.agentkg.io/repositories/smart-agents-faithnet"
+
+# Spec 413 — passage retrieval over the public tier (`POST /kb/retrieve`). Workers AI embeds the query; Vectorize holds
+# the passages the INDEXER wrote (agent descriptions + released public shelf works). This Worker holds no vault binding
+# and must never gain one (`pnpm check:no-vector-over-vault`). One-time setup:
+#   wrangler vectorize create ap-public-kb-faithnet --dimensions=768 --metric=cosine
+#   wrangler vectorize create-metadata-index ap-public-kb-faithnet --property-name=kind --type=string
+# The production (Base Sepolia) env binds no index: its /kb/retrieve answers 503 "no vector index is bound", not "nothing found".
+[env.faithnet.ai]
+binding = "AI"
+
+[[env.faithnet.vectorize]]
+binding = "KB_VECTORS"
+index_name = "ap-public-kb-faithnet"

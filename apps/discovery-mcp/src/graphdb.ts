@@ -1,9 +1,10 @@
 // GraphDB (Ontotext, agentkg.io) read access for the discovery MCP. Holds creds server-side (Worker
 // secrets) and runs SPARQL SELECT over the `smart-agents` A-box that agent-indexer populates.
 
+import type { RetrieveEnv } from './retrieve.js';
 import { decodeDistribution, type AgentDistributionV1 } from './distribution.js';
 import { decideKbQuery } from './sparql-guard.js';
-export interface Env {
+export interface Env extends RetrieveEnv {
   GRAPHDB_QUERY_URL: string;
   GRAPHDB_USER?: string;
   GRAPHDB_PASSWORD?: string;
@@ -56,9 +57,12 @@ PREFIX aptrust: <https://agenticprimitives.dev/ns/trust#>
 const NULL_CONTEXT = 'http://www.openrdf.org/schema/sesame#nil';
 const ONTOLOGY_GRAPH = 'urn:ap:ontology';
 const CUSTODY_GRAPH_IRI = 'urn:ap:custody';
+/** Spec 413 — published works (public + owner-released shelf documents), projected by the indexer after it verified the
+ *  owner's signature (ADR-0040 amendment 2026-09-24). Public by construction, so it joins the public dataset. */
+const SHELF_GRAPH = 'urn:ap:shelf';
 
-/** The dataset for public reads: the A-box and the T-box. Deliberately NOT the custody graph. */
-const PUBLIC_DATASET = [NULL_CONTEXT, ONTOLOGY_GRAPH];
+/** The dataset for public reads: the A-box, the T-box and the shelf graph. Deliberately NOT the custody graph. */
+const PUBLIC_DATASET = [NULL_CONTEXT, ONTOLOGY_GRAPH, SHELF_GRAPH];
 /** The one dataset that can see custody — used only by the existence check. */
 const CUSTODY_DATASET = [CUSTODY_GRAPH_IRI];
 
