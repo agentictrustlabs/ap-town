@@ -7,6 +7,7 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { kbSchema } from './kb-schema.js';
+import { retrievePassages } from './retrieve.js';
 import { searchAgents, searchAgentsPage, lookupAgents, getAgent, getOfferings, getTrustFabric, listNames, listAgentsByContext, describeTerm, listShapes, checkCustody, runKbQuery, runKbConstruct, getFacets, SEARCH_MAX_LIMIT, type Env } from './graphdb.js';
 
 const app = new Hono<{ Bindings: Env }>();
@@ -44,6 +45,17 @@ app.post('/kb/construct', async (c) => {
   if (!body.query) return c.json({ ok: false, error: 'query required' }, 400);
   try { return c.json({ ok: true, ...(await runKbConstruct(c.env, body.query)) }); }
   catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 400); }
+});
+
+// PASSAGES — spec 413. The nearest public passages to a query (agent descriptions + released public shelf works), each
+// with its citation, above one fixed floor. Read-only; the query is embedded and discarded. A tier with no index bound
+// says so (503) rather than answering "nothing found" — "could not look" and "found nothing" are different answers.
+app.post('/kb/retrieve', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as { query?: unknown; topK?: unknown; topics?: unknown };
+  try {
+    const r = await retrievePassages(c.env, body);
+    return c.json(r, r.ok ? 200 : r.error === 'query required' ? 400 : 503);
+  } catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
 });
 
 // ── REST tool seam (what the A2A agent calls) ──

@@ -16,8 +16,11 @@
     "rebuild-custody": "tsx scripts/rebuild-custody.ts"
   },
   "dependencies": {
+    "@agenticprimitives/a2a": "workspace:*",
     "@agenticprimitives/agent-naming": "workspace:*",
     "@agenticprimitives/capability-claims": "workspace:*",
+    "@agenticprimitives/content-storage": "workspace:*",
+    "@agenticprimitives/delegation": "workspace:*",
     "@agenticprimitives/ontology": "workspace:*",
     "@agenticprimitives/registry-kit": "workspace:*",
     "@agenticprimitives/types": "workspace:*",

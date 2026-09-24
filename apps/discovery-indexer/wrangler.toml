@@ -77,6 +77,11 @@ DISCOVERY_REGISTRY_ID = "urn:ap:registry:faithnet-agents"
 RPC_URL = "https://a2a.faithnet.io/rpc"
 LOGS_RPC_URL = "https://a2a.faithnet.io/rpc"
 WATCH_MAX_BLOCKS = "20000"
+# Spec 413 — a shelf release signed under an agent's DEL-001 session leaf is verified against these (deployments-faithchain.json).
+DELEGATION_MANAGER = "0x710cb1bF08C234Df397e0910331e0A29710EF4F7"
+UNIVERSAL_SIGNATURE_VALIDATOR = "0xeDd56f500325D4701B9985A34e5Fa6EED6716137"
+TIMESTAMP_ENFORCER = "0x73A7B878168b7DE48677617179A8bE894f0Dfe96"
+LANE_ROUTES = "edge.faithnet.io=EDGE,*.faithnet.ai=A2A"
 
 [env.faithnet.triggers]
 crons = ["* * * * *"]
@@ -85,3 +90,36 @@ crons = ["* * * * *"]
 [[env.faithnet.kv_namespaces]]
 binding = "INDEXER_STATE"
 id = "573ce8cd2a8d4ea7878147c7283318ae"
+
+# ── Spec 413 — the public tier's passages (faithnet) ─────────────────────────────────────────────────────────────────
+# The indexer is the ONLY writer of the vector index, as it is of the A-box. It embeds (Workers AI) agent descriptions the
+# A-box already holds and the works owners made public AND released — verified before projection (ADR-0040 amendment
+# 2026-09-24). No vault binding here, ever (`pnpm check:no-vector-over-vault`). One-time setup:
+#   wrangler vectorize create ap-public-kb-faithnet --dimensions=768 --metric=cosine
+#   wrangler vectorize create-metadata-index ap-public-kb-faithnet --property-name=kind --type=string
+#   wrangler queues create shelf-index-faithnet
+[env.faithnet.ai]
+binding = "AI"
+
+[[env.faithnet.vectorize]]
+binding = "KB_VECTORS"
+index_name = "ap-public-kb-faithnet"
+
+# Shelf hints (`{owner, entryId}`) from demo-a2a-faithnet's Library acts. A hint names two public identifiers and no
+# content; the projector re-reads everything from the owner's public lane and the chain.
+[[env.faithnet.queues.consumers]]
+queue = "shelf-index-faithnet"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+
+# How the indexer reads an owner's public lane: a Worker cannot fetch a same-account hostname (CF-1042), so each estate
+# host is reached through its Worker's service binding, routed by host (`LANE_ROUTES` in [env.faithnet.vars]). On-chain
+# `a2aEndpoint`s point at the edge (`https://edge.faithnet.io/api/a2a/<name>`); agent hosts are `<label>.faithnet.ai`.
+[[env.faithnet.services]]
+binding = "EDGE"
+service = "demo-edge-faithnet"
+
+[[env.faithnet.services]]
+binding = "A2A"
+service = "demo-a2a-faithnet"

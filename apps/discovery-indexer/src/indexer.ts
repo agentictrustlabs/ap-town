@@ -280,11 +280,24 @@ export class DiscoveryIndexer {
     return [...sas] as Address[];
   }
 
+  /** The chain client — the shelf projector's signature checks read through it (spec 413). */
+  get chain(): PublicClient { return this.client; }
+
+  /** Spec 413 — the agent's A2A endpoint AS THE CHAIN SAYS IT (the node-keyed `a2aEndpoint` record of its reverse-resolved
+   *  name, spec 280), or null when it is unnamed or publishes none. The shelf projector reads a work ONLY from here —
+   *  never from a hint's word or a card's say-so (the spec 286 rule). */
+  async a2aEndpointOf(sa: Address): Promise<string | null> {
+    const name = ((await this.client.readContract({ address: this.cfg.resolver, abi: RESOLVER_ABI, functionName: 'reverseResolveString', args: [sa] }).catch(() => '')) as string) || null;
+    if (!name) return null;
+    const v = (await this.client.readContract({ address: this.cfg.nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getString', args: [namehash(name), keccak256(toBytes('atl:a2aEndpoint'))] }).catch(() => '')) as string;
+    return v && /^https:\/\//.test(v) ? v : null;
+  }
+
   /** Targeted projection (the on-create / auto-index trigger): project EXACTLY these named SAs into the
    *  store incrementally, skipping the full TLD enumeration. Only agents that reverse-resolve to a name
    *  reach the public KB (ADR-0040 — junk/unnamed SAs are ignored). Custody tokens are INSERTED, not
    *  full-rebuilt, so one agent's projection never disturbs the rest. Idempotent (per-subject upsert). */
-  async projectAgents(sas: Address[]): Promise<{ projected: string[]; custodyTokens: number }> {
+  async projectAgents(sas: Address[]): Promise<{ projected: string[]; custodyTokens: number; nodes: AgentNode[] }> {
     const latest = await this.client.getBlockNumber();
     const block = Number(latest);
     // G1 — the targeted path used to hand the attestation projector `new Map()` unconditionally, so
@@ -300,12 +313,12 @@ export class DiscoveryIndexer {
       if (!name) continue; // not a named agent → not in the public discovery KB
       nodes.push(await this.projectAgent(sa, name, namehash(name), block, attestations, scanned));
     }
-    if (!nodes.length) return { projected: [], custodyTokens: 0 };
+    if (!nodes.length) return { projected: [], custodyTokens: 0, nodes: [] };
     const tokens = await this.scanCustody(latest, nodes.map((n) => n.smartAgent as Address));
     await this.store.upsert(nodes);
     await this.store.addCustodyTokens(tokens);
     await this.store.flush();
-    return { projected: nodes.map((n) => n.name as string), custodyTokens: tokens.length };
+    return { projected: nodes.map((n) => n.name as string), custodyTokens: tokens.length, nodes };
   }
 
   async run(): Promise<{ count: number; registered: number; custodyTokens: number; nodes: AgentNode[] }> {

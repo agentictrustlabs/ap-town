@@ -275,6 +275,11 @@ export class SparqlGraphStore implements AboxStore {
     this.custody = null;
     this.custodyInsert = [];
   }
+  /** Spec 413 — one raw SPARQL 1.1 update (the shelf projector's graph writes), with the store's own credentials. */
+  async update(stmt: string): Promise<void> {
+    const res = await fetch(this.endpoint, { method: 'POST', headers: this.headers(), body: stmt });
+    if (!res.ok) throw new Error(`SPARQL update failed: ${res.status} ${await res.text().catch(() => '')}`);
+  }
   describe() { return `SPARQL/GraphDB → ${this.endpoint}${this.auth.user || this.auth.token || this.auth.gdbToken ? ' (authed)' : ' (no auth)'}`; }
 }
 

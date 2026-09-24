@@ -12,8 +12,11 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import type { Address } from 'viem';
 import { DiscoveryIndexer, type IndexerConfig } from './indexer.js';
-import { SparqlGraphStore } from './store.js';
+import { SparqlGraphStore, type AgentNode } from './store.js';
+import { writeAgentPassages, type VectorWriter, type WorkersAi } from './vectors.js';
+import { isShelfHint, projectShelfEntry, type ShelfDeps, type ShelfHint, type ShelfOutcome } from './shelf.js';
 
+interface Fetcher { fetch(input: Request | string, init?: RequestInit): Promise<Response> }
 interface KV { get(key: string): Promise<string | null>; put(key: string, value: string): Promise<void> }
 interface Env {
   GRAPHDB_URL: string;
@@ -37,6 +40,24 @@ interface Env {
   /** Bounded Attested-log sweep for the targeted /project path (G1). 0 disables the sweep. */
   ATTEST_LOOKBACK?: string;
   ATTEST_CHUNK?: string;
+  // ── Spec 413 — the public tier's passages. All optional: absent ⇒ the A-box projection runs exactly as before and the
+  // passage writes report `vectors: 'unbound'`. This Worker holds no vault binding (check:no-vector-over-vault).
+  /** Workers AI — embeds passages. */
+  AI?: WorkersAi;
+  /** The public-tier vector index (Vectorize). The indexer is its only writer. */
+  KB_VECTORS?: VectorWriter;
+  /** Service binding to the estate's agent Worker: how this Worker reads an owner's public lane (a same-account
+   *  hostname is unreachable by plain fetch — CF-1042). */
+  A2A?: Fetcher;
+  /** The estate's edge Worker (`edge.faithnet.io`), where on-chain `a2aEndpoint`s point. */
+  EDGE?: Fetcher;
+  /** Which binding serves which host: `edge.faithnet.io=EDGE,*.faithnet.ai=A2A`. A host with no route is external and
+   *  fetched over the network. One transport per host — routing, never a retry on another path (ADR-0013). */
+  LANE_ROUTES?: string;
+  /** The estate's delegation contracts — a release signed under an agent's session leaf is verified against them. */
+  DELEGATION_MANAGER?: string;
+  UNIVERSAL_SIGNATURE_VALIDATOR?: string;
+  TIMESTAMP_ENFORCER?: string;
 }
 
 
@@ -66,7 +87,9 @@ async function watchTick(env: Env): Promise<{ ok: true; from: string; to: string
     const max = BigInt(env.WATCH_MAX_BLOCKS ?? '20000');
     const to = from + max > latest ? latest : from + max;
     const sas = (await idx.scanEvents(from, to)).slice(0, AGENTS_MAX); // bound per-tick projection work
-    const projected = sas.length ? (await idx.projectAgents(sas)).projected : [];
+    const r = sas.length ? await idx.projectAgents(sas) : null;
+    const projected = r?.projected ?? [];
+    if (r?.nodes.length) await agentPassages(env, r.nodes);
     await env.INDEXER_STATE?.put(CURSOR_KEY, to.toString());
     return { ok: true, from: from.toString(), to: to.toString(), affected: sas.length, projected };
   } catch (e) {
@@ -102,6 +125,56 @@ function cfg(env: Env): IndexerConfig {
   };
 }
 
+/** Spec 413 — restate each projected agent's own public description as a retrieval passage. Never fatal to the
+ *  A-box projection it follows: the KB row is written either way, and a passage that failed says so. */
+async function agentPassages(env: Env, nodes: AgentNode[]): Promise<number | 'unbound' | { error: string }> {
+  if (!env.AI || !env.KB_VECTORS) return 'unbound';
+  try { return await writeAgentPassages(env.AI, env.KB_VECTORS, nodes); }
+  catch (e) { console.log('[passages]', String((e as Error).message)); return { error: String((e as Error).message) }; }
+}
+
+/** The service binding that serves `host` per `LANE_ROUTES` (exact host or `*.suffix`), or null for an external host. */
+export function laneBindingFor(env: Pick<Env, 'LANE_ROUTES' | 'A2A' | 'EDGE'>, host: string): Fetcher | null {
+  for (const route of (env.LANE_ROUTES ?? '').split(',').map((r) => r.trim()).filter(Boolean)) {
+    const [pattern, name] = route.split('=').map((x) => x.trim());
+    if (!pattern || !name) continue;
+    const hit = pattern.startsWith('*.') ? host.endsWith(pattern.slice(1)) : host === pattern;
+    if (!hit) continue;
+    const b = (env as Record<string, unknown>)[name] as Fetcher | undefined;
+    if (!b) throw new Error(`LANE_ROUTES sends ${host} to ${name}, which is not bound`);
+    return b;
+  }
+  return null;
+}
+
+function shelfDeps(env: Env): ShelfDeps | null {
+  if (!env.AI || !env.KB_VECTORS || !env.INDEXER_STATE) return null;
+  const idx = new DiscoveryIndexer(cfg(env), store(env));
+  const kv = env.INDEXER_STATE;
+  const c = env.DELEGATION_MANAGER && env.UNIVERSAL_SIGNATURE_VALIDATOR && env.TIMESTAMP_ENFORCER
+    ? { delegationManager: env.DELEGATION_MANAGER as Address, universalSignatureValidator: env.UNIVERSAL_SIGNATURE_VALIDATOR as Address, timestampEnforcer: env.TIMESTAMP_ENFORCER as Address }
+    : null;
+  return {
+    chainId: Number(env.CHAIN_ID ?? 84532),
+    a2aEndpointOf: (sa) => idx.a2aEndpointOf(sa),
+    // ONE transport per deployment: the binding where it is configured, the network where it is not (the Node CLI).
+    fetchPublic: (url, init) => { const b = laneBindingFor(env, new URL(url).hostname); return b ? b.fetch(new Request(url, init)) : fetch(url, init); },
+    client: idx.chain,
+    contracts: c,
+    ai: env.AI,
+    vectors: env.KB_VECTORS,
+    sparqlUpdate: (u) => store(env).update(u),
+    previousIds: async (key) => { try { return JSON.parse((await kv.get(key)) ?? '[]') as string[]; } catch { return []; } },
+    rememberIds: (key, ids) => kv.put(key, JSON.stringify(ids)),
+  };
+}
+
+async function shelf(env: Env, hint: ShelfHint): Promise<ShelfOutcome | { status: 'unbound'; reason: string }> {
+  const deps = shelfDeps(env);
+  if (!deps) return { status: 'unbound', reason: 'no vector index (AI + KB_VECTORS + INDEXER_STATE) on this indexer' };
+  return projectShelfEntry(deps, hint);
+}
+
 const app = new Hono<{ Bindings: Env }>();
 app.use('*', cors());
 app.get('/health', (c) => c.json({ ok: true, service: 'demo-discovery-indexer' }));
@@ -111,11 +184,20 @@ app.post('/project', async (c) => {
   const agents = Array.isArray(body.agents) ? body.agents.filter((x): x is string => typeof x === 'string').slice(0, AGENTS_MAX) : [];
   if (!agents.length) return c.json({ ok: false, error: 'agents[] required' }, 400);
   try {
-    const r = await new DiscoveryIndexer(cfg(c.env), store(c.env)).projectAgents(agents as Address[]);
-    return c.json({ ok: true, ...r });
+    const { nodes, ...r } = await new DiscoveryIndexer(cfg(c.env), store(c.env)).projectAgents(agents as Address[]);
+    return c.json({ ok: true, ...r, passages: await agentPassages(c.env, nodes) });
   } catch (e) {
     return c.json({ ok: false, error: String((e as Error).message) }, 502);
   }
+});
+
+// Spec 413 — re-observe ONE shelf document now (what the queue consumer does per hint). Open like /project: a caller can
+// at most make the public tier agree with what the owner's own public lane serves and her signature says.
+app.post('/shelf', async (c) => {
+  const body = (await c.req.json().catch(() => ({}))) as unknown;
+  if (!isShelfHint(body)) return c.json({ ok: false, error: '{owner: 0x…, entryId} required' }, 400);
+  try { return c.json({ ok: true, ...(await shelf(c.env, body)) }); }
+  catch (e) { return c.json({ ok: false, error: String((e as Error).message) }, 502); }
 });
 
 // Manual watcher trigger (same logic the cron runs) — for testing / forcing a catch-up tick.
@@ -124,8 +206,24 @@ app.post('/watch', async (c) => c.json(await watchTick(c.env)));
 app.get('/', (c) => c.json({ service: 'demo-discovery-indexer', project: 'POST /project {agents:[sa,…]}', watch: 'POST /watch (also runs on cron)' }));
 
 // fetch + scheduled (cron): the watcher reacts to on-chain naming/registry/custody events every tick.
+interface QueueMessage { body: unknown; ack(): void; retry(): void }
 export default {
   fetch: app.fetch,
+  // Spec 413 — shelf hints from the agent Worker's Library acts (`{owner, entryId}` after a publish or a visibility
+  // change). A malformed hint is acked and dropped (retrying it cannot make it well-formed); a transport failure retries.
+  async queue(batch: { messages: QueueMessage[] }, env: Env): Promise<void> {
+    for (const m of batch.messages) {
+      if (!isShelfHint(m.body)) { console.log('[shelf] dropped a malformed hint'); m.ack(); continue; }
+      try {
+        const r = await shelf(env, m.body);
+        console.log('[shelf]', JSON.stringify(r));
+        if (r.status === 'skipped' && /could not be reached/.test(r.reason)) m.retry(); else m.ack();
+      } catch (e) {
+        console.log('[shelf] failed', String((e as Error).message));
+        m.retry();
+      }
+    }
+  },
   async scheduled(_event: unknown, env: Env, ctx: { waitUntil(p: Promise<unknown>): void }): Promise<void> {
     ctx.waitUntil(watchTick(env).then((r) => console.log('[watch]', JSON.stringify(r))));
   },
