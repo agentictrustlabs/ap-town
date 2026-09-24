@@ -283,14 +283,18 @@ export class DiscoveryIndexer {
   /** The chain client — the shelf projector's signature checks read through it (spec 413). */
   get chain(): PublicClient { return this.client; }
 
-  /** Spec 413 — the agent's A2A endpoint AS THE CHAIN SAYS IT (the node-keyed `a2aEndpoint` record of its reverse-resolved
-   *  name, spec 280), or null when it is unnamed or publishes none. The shelf projector reads a work ONLY from here —
-   *  never from a hint's word or a card's say-so (the spec 286 rule). */
-  async a2aEndpointOf(sa: Address): Promise<string | null> {
-    const name = ((await this.client.readContract({ address: this.cfg.resolver, abi: RESOLVER_ABI, functionName: 'reverseResolveString', args: [sa] }).catch(() => '')) as string) || null;
+  /** Spec 413 — the records that say where the agent is reached, AS THE CHAIN SAYS THEM (the node-keyed `cardUri` and
+   *  `a2aEndpoint` of its reverse-resolved name, spec 280). `null` = unnamed. A record that is absent is `null`; a read
+   *  that FAILS throws — "could not ask the chain" is not "publishes none" (ADR-0013), and the caller retries. */
+  async laneRecordsOf(sa: Address): Promise<{ name: string; cardUri: string | null; a2aEndpoint: string | null } | null> {
+    const name = (await this.client.readContract({ address: this.cfg.resolver, abi: RESOLVER_ABI, functionName: 'reverseResolveString', args: [sa] })) as string;
     if (!name) return null;
-    const v = (await this.client.readContract({ address: this.cfg.nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getString', args: [namehash(name), keccak256(toBytes('atl:a2aEndpoint'))] }).catch(() => '')) as string;
-    return v && /^https:\/\//.test(v) ? v : null;
+    const read = async (key: string): Promise<string | null> => {
+      const v = (await this.client.readContract({ address: this.cfg.nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getString', args: [namehash(name), keccak256(toBytes(`atl:${key}`))] })) as string;
+      return v && /^https:\/\//.test(v) ? v : null;
+    };
+    const [cardUri, a2aEndpoint] = await Promise.all([read('cardUri'), read('a2aEndpoint')]);
+    return { name, cardUri, a2aEndpoint };
   }
 
   /** Targeted projection (the on-create / auto-index trigger): project EXACTLY these named SAs into the

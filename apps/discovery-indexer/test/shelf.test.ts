@@ -30,13 +30,14 @@ async function releasedFile(opts: { text?: string; commitmentOf?: string; signed
   return { id: 'art-1', name: 'on-grief.md', kind: 'md', commitment, release: { releaseId, version: '1.0.0', signed: opts.signed !== false, ...(signature ? { signature } : {}), owner: owner.address, publishedAt: new Date().toISOString() } };
 }
 
-function harness(opts: { file?: ShelfFile | null; text?: string; laneDown?: boolean; endpoint?: string | null; prev?: string[] }) {
+function harness(opts: { file?: ShelfFile | null; text?: string; laneDown?: boolean; endpoint?: string | null; records?: { cardUri: string | null; a2aEndpoint: string | null } | null; card?: unknown; prev?: string[] }) {
   const log = { upserted: [] as string[], deleted: [] as string[], updates: [] as string[], remembered: new Map<string, string[]>() };
   const text = opts.text ?? TEXT;
   const deps: ShelfDeps = {
     chainId: 34348,
-    a2aEndpointOf: async () => (opts.endpoint === undefined ? LANE : opts.endpoint),
+    laneRecordsOf: async () => (opts.records !== undefined ? opts.records : { cardUri: null, a2aEndpoint: opts.endpoint === undefined ? LANE : opts.endpoint }),
     fetchPublic: async (url, init) => {
+      if (url.endsWith('/.well-known/agent-card.json')) return opts.card === undefined ? new Response('no', { status: 404 }) : Response.json(opts.card);
       if (opts.laneDown) return new Response('down', { status: 502 });
       const data = JSON.parse(String(init?.body)).params.message.parts[0].data as { offset?: number };
       if (!opts.file) return Response.json({ result: { parts: [{ data: { read: false, refused: 'not on the shelf' } }] } });
@@ -96,12 +97,32 @@ describe('projectShelfEntry', () => {
   });
 
   it('a failure to LOOK is not a withdrawal: an unreachable lane, a non-https or absent endpoint on chain — nothing deleted', async () => {
-    for (const opts of [{ laneDown: true }, { endpoint: 'http://carol.example/a2a' }, { endpoint: null }]) {
+    for (const opts of [{ laneDown: true }, { records: null }, { endpoint: null }, { records: { cardUri: `${ORIGIN}/.well-known/agent-card.json`, a2aEndpoint: LANE } }]) {
       const { deps, log } = harness({ file: await releasedFile(), prev: ['keep'], ...opts });
       expect(await projectShelfEntry(deps, hint)).toMatchObject({ status: 'skipped' });
       expect(log.deleted).toEqual([]);
       expect(log.updates).toEqual([]);
     }
+  });
+});
+
+describe('where the lane is — by the record the chain holds', () => {
+  it('a published cardUri wins: the lane is the interface the card names, even on another host', async () => {
+    const EDGE_LANE = 'https://edge.faithnet.io/api/a2a/carol.me';
+    const seen: string[] = [];
+    const { deps } = harness({ file: await releasedFile(), records: { cardUri: `${ORIGIN}/.well-known/agent-card.json`, a2aEndpoint: 'https://carol.faithnet.ai/api/a2a' }, card: { supportedInterfaces: [{ url: EDGE_LANE, protocolBinding: 'JSONRPC' }] } });
+    const inner = deps.fetchPublic;
+    deps.fetchPublic = (url, init) => { seen.push(url); return inner(url, init); };
+    expect(await projectShelfEntry(deps, hint)).toMatchObject({ status: 'projected' });
+    expect(seen.filter((u) => !u.endsWith('agent-card.json')).every((u) => u === EDGE_LANE)).toBe(true);
+  });
+  it('an unreadable card is "could not look" — never a quiet switch to the a2aEndpoint', async () => {
+    const seen: string[] = [];
+    const { deps } = harness({ file: await releasedFile(), records: { cardUri: `${ORIGIN}/.well-known/agent-card.json`, a2aEndpoint: LANE } });
+    const inner = deps.fetchPublic;
+    deps.fetchPublic = (url, init) => { seen.push(url); return inner(url, init); };
+    expect(await projectShelfEntry(deps, hint)).toMatchObject({ status: 'skipped' });
+    expect(seen).not.toContain(LANE);
   });
 });
 

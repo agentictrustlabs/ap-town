@@ -156,7 +156,7 @@ function shelfDeps(env: Env): ShelfDeps | null {
     : null;
   return {
     chainId: Number(env.CHAIN_ID ?? 84532),
-    a2aEndpointOf: (sa) => idx.a2aEndpointOf(sa),
+    laneRecordsOf: (sa) => idx.laneRecordsOf(sa),
     // ONE transport per deployment: the binding where it is configured, the network where it is not (the Node CLI).
     fetchPublic: (url, init) => { const b = laneBindingFor(env, new URL(url).hostname); return b ? b.fetch(new Request(url, init)) : fetch(url, init); },
     client: idx.chain,

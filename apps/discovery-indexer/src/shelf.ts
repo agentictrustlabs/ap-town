@@ -5,8 +5,8 @@
 // (so `kb.question` can count and list works) and its passages in the vector index (so `kb.retrieve` can find them).
 //
 // THE INDEXER READS IT THE WAY A STRANGER WOULD, and trusts nothing it was told:
-//   • the owner's endpoint comes from the CHAIN (her name's `a2aEndpoint` record — the spec 286 rule), never from the
-//     hint that named the document nor from a card;
+//   • where to read comes from the CHAIN (her name's `cardUri`, else its `a2aEndpoint` — the spec 286 rule), never from
+//     the hint that named the document;
 //   • the document comes over the ANONYMOUS lane (`library.public.read`) — if the lane will not serve it, it is not public;
 //   • (b) the latest release must REPRODUCE from the served content core (`content-storage.computeReleaseId`) and its
 //     signature must verify against the owner Smart Agent — ERC-1271, or a DEL-001 session leaf live at `publishedAt`,
@@ -35,8 +35,8 @@ export interface ShelfFile {
 /** What the projector needs, all injected: the chain, the lane transport, the stores. */
 export interface ShelfDeps {
   chainId: number;
-  /** The owner's on-chain A2A endpoint, or null (unnamed / none published). */
-  a2aEndpointOf: (owner: Address) => Promise<string | null>;
+  /** The owner's on-chain reach records (`cardUri`, `a2aEndpoint`), or null when unnamed. Throws when the chain cannot be read. */
+  laneRecordsOf: (owner: Address) => Promise<{ cardUri: string | null; a2aEndpoint: string | null } | null>;
   /** Fetch a public URL — a service binding to the estate's agent Worker in production (CF-1042: a Worker cannot fetch a
    *  same-account hostname), the global fetch from the Node CLI. */
   fetchPublic: (url: string, init?: RequestInit) => Promise<Response>;
@@ -79,10 +79,26 @@ async function sha256Hex(text: string): Promise<string> {
   return `0x${[...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('')}`;
 }
 
-/** The owner's A2A interface IS the endpoint the chain published for her (her name's `a2aEndpoint` record — on faithnet
- *  `https://edge.faithnet.io/api/a2a/<name>`). No card is consulted: a card could name any host, the chain record is hers. */
-function laneOf(a2aEndpoint: string): string | null {
-  try { const u = new URL(a2aEndpoint); return u.protocol === 'https:' ? u.toString().replace(/\/$/, '') : null; } catch { return null; }
+/**
+ * WHERE THE OWNER'S PUBLIC LANE IS — decided by WHICH RECORD THE CHAIN HOLDS, never by trying one and then another:
+ *   `cardUri` published   → the JSON-RPC interface named by the card AT THAT URI (the owner's own record points at the card;
+ *                           the card may name an interface on another host — the estate's edge — and that is the card's
+ *                           to say, as in the spec 286 crawl). A card that cannot be fetched is "could not look".
+ *   only `a2aEndpoint`    → that endpoint IS the interface (on faithnet: `https://edge.faithnet.io/api/a2a/<name>`).
+ *   neither               → nowhere to look.
+ * Precedence, not a fallback (ADR-0013): with a `cardUri`, a failed card read never becomes a read of `a2aEndpoint`.
+ */
+async function laneOf(deps: ShelfDeps, records: { cardUri: string | null; a2aEndpoint: string | null }): Promise<{ endpoint: string } | { skipped: string }> {
+  if (records.cardUri) {
+    const res = await deps.fetchPublic(records.cardUri, { headers: { accept: 'application/json' } }).catch(() => null);
+    if (!res?.ok) return { skipped: `the owner's card (${records.cardUri}) could not be read` };
+    const card = (await res.json().catch(() => null)) as { supportedInterfaces?: Array<{ url?: string; protocolBinding?: string }>; url?: string } | null;
+    const url = card?.supportedInterfaces?.find((i) => i.protocolBinding === 'JSONRPC')?.url ?? card?.url ?? null;
+    if (!url || !/^https:\/\//.test(url)) return { skipped: 'the owner\'s card names no https JSON-RPC interface' };
+    return { endpoint: url };
+  }
+  if (records.a2aEndpoint) return { endpoint: records.a2aEndpoint.replace(/\/$/, '') };
+  return { skipped: 'the owner publishes neither a cardUri nor an a2aEndpoint on chain' };
 }
 
 async function lane(deps: ShelfDeps, endpoint: string, data: Record<string, unknown>): Promise<Record<string, unknown> | null> {
@@ -161,11 +177,12 @@ async function withdraw(deps: ShelfDeps, hint: ShelfHint, reason: string): Promi
 /** Observe one document and make the public tier agree with what its owner serves and signed, right now. */
 export async function projectShelfEntry(deps: ShelfDeps, hint: ShelfHint): Promise<ShelfOutcome> {
   const owner = hint.owner as Address;
-  const a2a = await deps.a2aEndpointOf(owner);
-  // No endpoint on chain is not evidence the work was withdrawn — we simply cannot look. Leave the tier as it is.
-  if (!a2a) return { status: 'skipped', owner: hint.owner, entryId: hint.entryId, reason: 'the owner publishes no a2aEndpoint on chain' };
-  const endpoint = laneOf(a2a);
-  if (!endpoint) return { status: 'skipped', owner: hint.owner, entryId: hint.entryId, reason: 'the owner\'s on-chain a2aEndpoint is not an https URL' };
+  const records = await deps.laneRecordsOf(owner);
+  // No place to look is not evidence the work was withdrawn — we simply cannot look. Leave the tier as it is.
+  if (!records) return { status: 'skipped', owner: hint.owner, entryId: hint.entryId, reason: 'the owner has no name on chain' };
+  const where = await laneOf(deps, records);
+  if ('skipped' in where) return { status: 'skipped', owner: hint.owner, entryId: hint.entryId, reason: where.skipped };
+  const endpoint = where.endpoint;
   const read = await readWhole(deps, endpoint, hint.entryId);
   // CRAWL FAILURE ≠ WITHDRAWN (ADR-0013, the offerings rule): an unreachable lane leaves what is indexed in place.
   if (read === 'unreachable') return { status: 'skipped', owner: hint.owner, entryId: hint.entryId, reason: 'the owner\'s public lane could not be reached' };
