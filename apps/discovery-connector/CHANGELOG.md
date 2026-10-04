@@ -1,5 +1,11 @@
 # @agenticprimitives-demo/discovery-connector
 
+## 0.0.1-alpha.6
+
+### Patch Changes
+
+- @agenticprimitives/a2a@0.0.0-alpha.25
+
 ## 0.0.1-alpha.5
 
 ### Patch Changes
