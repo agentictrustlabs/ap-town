@@ -19,7 +19,8 @@
     "conform:a2a": "ap conform a2a",
     "conform:mcp": "ap conform mcp",
     "upgrade:canary": "ap upgrade --canary",
-    "upgrade:pin": "ap upgrade --pin"
+    "upgrade:pin": "ap upgrade --pin",
+    "check:no-vector-over-vault": "tsx scripts/check-no-vector-over-vault.ts"
   },
   "devDependencies": {
     "@agenticprimitives/a2a": "0.0.0-alpha.25",
@@ -27,7 +28,8 @@
     "@agenticprimitives/evaluation": "0.0.0-alpha.5",
     "@agenticprimitives/mcp-protocol": "0.0.0-alpha.4",
     "typescript": "^5.7.3",
-    "vitest": "^4.1.8"
+    "vitest": "^4.1.8",
+    "tsx": "^4.22.4"
   },
   "pnpm": {
     "overrides": {
