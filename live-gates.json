@@ -1,0 +1,5 @@
+{
+  "$comment": "The live-gates ledger (spec 392 shape): every verify script with the authority twin it carries, run nightly by `ap test --live-gates live-gates.json` through @agenticprimitives/evaluation's runner against HOME_URL. `required` gates fail the run; the rest report; `paced` gates are spaced for a metered model plan. Add a gate = one entry.",
+  "home": "https://<shadow-home>",
+  "gates": []
+}
