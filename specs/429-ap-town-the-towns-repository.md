@@ -1,6 +1,6 @@
 # Spec 429 — ap-town: the services a chain's estates share
 
-**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. **R1 done 2026-10-05:** every moved Worker deployed from ap-town and verified live; ap-discovery archived; ap-home #5 removed `apps/rpc-gateway`. **R1b done 2026-10-05** (§5.1). **R2 done 2026-10-05**: the town agent (`town.faithnet.io`, A2A-conformant), the registry formalized (A2A card + `/a2a`, conformant; its ARD document at `discovery.faithnet.io/.well-known/ard.json`), and the naming service N1 (`names.faithnet.io`, spec 430). Next: R3 (the portal).
+**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. **R1 done 2026-10-05:** every moved Worker deployed from ap-town and verified live; ap-discovery archived; ap-home #5 removed `apps/rpc-gateway`. **R1b done 2026-10-05** (§5.1). **R2 done 2026-10-05**: the town agent (`town.faithnet.io`, A2A-conformant), the registry formalized (A2A card + `/a2a`, conformant; its ARD document at `discovery.faithnet.io/.well-known/ard.json`), and the naming service N1 (`names.faithnet.io`, spec 430). **R3 first cut 2026-10-05**: the Town portal at `town.faithnet.io` (§7.2). Remaining in R3: the camera for the town view, folding the discovery explorer into Find.
 **Owner's brief (2026-10-05):** ap-home is for the Home and the estate. ap-town is for central services that rely on a
 single chain and can have many estates running on it. Bring the service applications into ap-town, except skills.
 Skills is an external central service that is part of the town. The UX leverages the town model built for the field
@@ -290,6 +290,17 @@ If the owner wants true 3D (WebGL), PlayCanvas is already in the family and coul
 second renderer over the same scene, decided on evidence after R3, not a rewrite.
 
 ---
+
+### 7.2 As built (R3 first cut, 2026-10-05)
+
+The portal is served by the town agent's own Worker (`apps/town-agent`): the app at `/`, its read API under `/api/*`
+(`/api/town` joins the manifest, the probes and the naming service's summary; `/api/find` is the registry's search),
+the agent's A2A door at `/a2a`. One host, one Worker; there is no separate `apps/town-web`. Areas: **Overview** (the
+town drawn — each estate a district with its Home, its gate and its people's houses; the commons beside it, one
+building per service, lit when its probe answered; applications beyond), **Find** (the registry's ARD search, each
+result linking to its names and its card), **Names** and **Skills** (links to those services), **Operations** (every
+listed service with its health, the chain, the rules), and a page per service with the four signals. `packages/town-ui`
+holds what the portal and the naming app share (router, fetch hook, base styles).
 
 ## 8. Onboarding a service into the town
 

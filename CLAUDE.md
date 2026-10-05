@@ -31,7 +31,7 @@ access, and — next — naming, the town agent and the Town portal. A product r
 ## Deploy
 
 Per app, from its directory: `npx wrangler deploy --env faithnet` (the chain gateway: `WRANGLER_ENV=faithnet pnpm run deploy`;
-discovery-web and naming: `pnpm deploy:faithnet`, which builds first). After editing `towns/*/town.yaml`: `pnpm gen:town`. Never deploy a bare top-level env by accident of a missing `--env`.
+discovery-web, naming and town-agent: `pnpm deploy:faithnet`, which builds first). After editing `towns/*/town.yaml`: `pnpm gen:town`. Never deploy a bare top-level env by accident of a missing `--env`.
 
 ## Binding rules (projected)
 

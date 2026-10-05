@@ -137,4 +137,4 @@ export type SearchView = Stamp & (
 
 export interface DisplayView extends Stamp { address: Address; name: string | null }
 
-export interface ApiError { error: string; detail?: string }
+export type { ApiError } from '@ap-town/town-ui';

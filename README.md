@@ -20,7 +20,7 @@ Described in one file, [`towns/faithchain/town.yaml`](towns/faithchain/town.yaml
 | Service | Where | Host |
 | --- | --- | --- |
 | **Names** — every name on the chain, what it points at, who can change it | `apps/naming` | [`names.faithnet.io`](https://names.faithnet.io) |
-| The town's own agent — what is here and whether it is up | `apps/town-agent` | [`town.faithnet.io`](https://town.faithnet.io/town) |
+| **The Town portal** and the town's own agent | `apps/town-agent` | [`town.faithnet.io`](https://town.faithnet.io) |
 | Registry (`discovery.registry`, ARD, ACP, search) | `apps/registry` | `discovery-a2a.faithnet.io` |
 | Public graph reader | `apps/discovery-mcp` | service binding |
 | Public graph writer (the only one) | `apps/discovery-indexer` | cron |
@@ -41,6 +41,7 @@ Estates: **Faithnet** ([`ap-home`](https://github.com/agentictrustlabs/ap-home))
 | `apps/*` | the town's deployables, each with its own `wrangler.toml` |
 | `packages/town-model` | the manifest schema, validator, the four signals, the generators |
 | `packages/town-scene` | the town, drawn: the isometric SVG renderer and the people-and-places shapes |
+| `packages/town-ui` | what the town's web apps share: router, fetch hook, base styles |
 | `towns/<chain>/` | one town per chain: `town.yaml` |
 | `checks/` | `check:town`, `check:no-estate-binding`, `check:no-vector-over-vault` |
 | `specs/` | the charter (429) and the naming service (430) |

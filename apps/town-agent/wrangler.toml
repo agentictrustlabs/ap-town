@@ -1,11 +1,18 @@
-# The town agent (spec 429 §2.2). Public, read-only, keyless: it answers from the town manifest and live probes.
+# The town's own Worker (spec 429 §2.2 + §7): the Town portal at /, its read API under /api/*, the town agent's A2A
+# door at /a2a. Public, read-only, keyless: it answers from the town manifest, live probes, and two bound town services.
 name = "town-agent"
-main = "src/index.ts"
-compatibility_date = "2026-06-01"
+main = "worker/index.ts"
+compatibility_date = "2026-05-20"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*", "/a2a", "/.well-known/*"]
 
 [vars]
 TOWN = "faithchain"
-PUBLIC_ORIGIN = "http://localhost:8787"
+PUBLIC_ORIGIN = "http://localhost:8792"
 
 [env.faithnet]
 name = "faithchain-town-agent"
@@ -17,3 +24,12 @@ custom_domain = true
 [env.faithnet.vars]
 TOWN = "faithchain"
 PUBLIC_ORIGIN = "https://town.faithnet.io"
+
+# Two town services the portal reads through: the registry (Find) and the naming service (the town of names).
+[[env.faithnet.services]]
+binding = "REGISTRY"
+service = "demo-discovery-a2a-faithnet"
+
+[[env.faithnet.services]]
+binding = "NAMING"
+service = "faithchain-naming"

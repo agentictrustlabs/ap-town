@@ -13,7 +13,7 @@ migration tags exactly as they were (spec 429 D5).
 | `apps/discovery-connector` | richcanvas | `gc-discovery-connector` (separate account) | **ap-town** | 2026-10-05 | ap-discovery |
 | `apps/discovery-web` | faithnet | `demo-discovery-web-faithnet` | **ap-town** | 2026-10-05 | ap-discovery |
 | `apps/chain-gateway` | faithnet | `faithchain-rpc-gateway` | **ap-town** | 2026-10-05 | ap-home `apps/rpc-gateway` |
-| `apps/town-agent` | faithnet | `faithchain-town-agent` (`town.faithnet.io`) | **ap-town** | 2026-10-05 | new |
+| `apps/town-agent` | faithnet | `faithchain-town-agent` (`town.faithnet.io` — the portal, its API, the agent) | **ap-town** | 2026-10-05 | new |
 | `apps/naming` | faithnet | `faithchain-naming` (`names.faithnet.io`) | **ap-town** | 2026-10-05 | new |
 | `apps/registry`, `discovery-mcp`, `discovery-indexer` | default (Base Sepolia demo town) | `demo-discovery-a2a`, `-mcp`, `-indexer` | **ap-town** | 2026-10-05 | ap-discovery |
 

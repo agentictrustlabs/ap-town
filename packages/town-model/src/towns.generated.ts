@@ -159,7 +159,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "hosts": [
           "town.faithnet.io"
         ],
-        "probe": "https://town.faithnet.io/health",
+        "probe": "https://town.faithnet.io/api/health",
         "card": "https://town.faithnet.io/.well-known/agent-card.json",
         "description": "The town's own agent — what this town offers and whether each service is up. Lists; never grants."
       },

@@ -1,4 +1,4 @@
-/* The naming service. Tokens first; the scene keeps its own night ground in both themes (it is a map, not a panel). */
+/* The town's web apps. Tokens first; the scene keeps its own night ground in both themes (it is a map, not a panel). */
 :root {
   --bg: #f5f6f8; --surface: #ffffff; --ink: #101a2c; --muted: #56657c; --line: #dde2ea; --soft: #eef1f6;
   --accent: #2459c9; --accent-ink: #ffffff; --ok: #1c7f55; --ok-bg: #e4f4ec; --warn: #9a6408; --warn-bg: #fbf1dc;
@@ -165,3 +165,23 @@ main > section { margin-bottom: 30px; }
 .code { background: #0d1626; color: #dbe6f7; border-radius: 12px; padding: 14px 16px; overflow-x: auto; font: .86rem/1.5 var(--mono); margin: 8px 0; }
 .plain { margin: 0; padding-left: 1.1rem; color: var(--muted); }
 @media (prefers-reduced-motion: no-preference) { .ts-scene .ts-label { transition: opacity .12s; } }
+
+/* portal */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 12px; }
+.card { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); color: var(--ink); text-decoration: none; min-width: 0; }
+.card:hover { border-color: var(--accent); }
+.card-head { display: flex; align-items: center; gap: 10px; }
+.card-title { font-weight: 700; font-size: 1.02rem; }
+.card-sub { color: var(--muted); font-size: .9rem; }
+.card-foot { margin-top: auto; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; font-size: .84rem; color: var(--muted); }
+.dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--muted); vertical-align: middle; }
+.dot-up, .dot-self { background: var(--ok); }
+.dot-down { background: var(--bad); }
+.result { display: grid; gap: 4px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.result-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.result-name { font-weight: 700; font-family: var(--mono); }
+.result-links { display: flex; gap: 12px; flex-wrap: wrap; font-size: .9rem; }
+.kv { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; font-size: .95rem; }
+.kv dt { color: var(--muted); }
+.kv dd { margin: 0; overflow-wrap: anywhere; }
+.health { white-space: nowrap; }

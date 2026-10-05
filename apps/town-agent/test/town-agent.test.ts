@@ -1,6 +1,6 @@
 import { describe as d, expect, it } from 'vitest';
 import { TOWNS } from '@ap-town/town-model';
-import { answer, cardFor, intentOf } from '../src/index';
+import { answer, cardFor, intentOf } from '../worker/index';
 import type { MessageV1 } from '@agenticprimitives/a2a/standard';
 
 const town = TOWNS.faithchain!;
@@ -10,7 +10,7 @@ const up = async () => ({ status: 200 });
 d('town agent', () => {
   it('the card is A2A 1.0 with a JSONRPC interface and two skills', () => {
     const c = cardFor(town, 'https://town.example');
-    expect(c.supportedInterfaces[0]).toEqual({ url: 'https://town.example/', protocolBinding: 'JSONRPC', protocolVersion: '1.0' });
+    expect(c.supportedInterfaces[0]).toEqual({ url: 'https://town.example/a2a', protocolBinding: 'JSONRPC', protocolVersion: '1.0' });
     expect(c.skills.map((s) => s.id)).toEqual(['town.describe', 'town.service']);
   });
 
