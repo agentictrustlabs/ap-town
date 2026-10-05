@@ -130,7 +130,7 @@ import { laneBindingFor } from '../src/worker.js';
 describe('laneBindingFor', () => {
   const EDGE = { fetch: async () => new Response('edge') };
   const A2A = { fetch: async () => new Response('a2a') };
-  const env = { LANE_ROUTES: 'edge.faithnet.io=EDGE,*.faithnet.ai=A2A', EDGE, A2A };
+  const env = { LANE_ROUTES: 'edge.faithnet.io=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2', LANE_FAITHNET_1: EDGE, LANE_FAITHNET_2: A2A };
   it('routes each estate host to its binding and leaves external hosts to the network', () => {
     expect(laneBindingFor(env, 'edge.faithnet.io')).toBe(EDGE);
     expect(laneBindingFor(env, 'carol.faithnet.ai')).toBe(A2A);

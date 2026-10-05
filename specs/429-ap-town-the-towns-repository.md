@@ -1,6 +1,6 @@
 # Spec 429 — ap-town: the services a chain's estates share
 
-**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. **R1 done 2026-10-05:** every moved Worker deployed from ap-town and verified live; ap-discovery archived; ap-home #5 removed `apps/rpc-gateway`. Next: R1b.
+**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. **R1 done 2026-10-05:** every moved Worker deployed from ap-town and verified live; ap-discovery archived; ap-home #5 removed `apps/rpc-gateway`. **R1b done 2026-10-05** (§5.1). Next: R2.
 **Owner's brief (2026-10-05):** ap-home is for the Home and the estate. ap-town is for central services that rely on a
 single chain and can have many estates running on it. Bring the service applications into ap-town, except skills.
 Skills is an external central service that is part of the town. The UX leverages the town model built for the field
@@ -192,6 +192,23 @@ depend on any single estate, or the second estate would be a second-class reside
 
 `check:no-estate-binding` fails if an ap-town `wrangler.toml` names an estate Worker other than through the generated
 per-estate block.
+
+### 5.1 As built (R1b, 2026-10-05)
+
+- **Lanes are generated.** `pnpm gen:town` writes each estate's `lanes` from `town.yaml` into every wrangler env that
+  carries the markers: the `LANE_<ESTATE>_<n>` service bindings, `LANE_ROUTES`, and the crawl roots (`TLDS`, the union
+  of every estate's `nameRoots`). `gen:town --check` runs in CI; `check:no-estate-binding` judges the file with the
+  generated blocks removed, so an estate Worker bound by hand is refused. The indexer's code names no estate.
+- **The chain through the town's gateway.** The faithnet indexer and skills-a2a read the chain at `rpc.faithnet.io`
+  with their own read-only app tokens (`discovery-indexer-faithnet` 60 rps, `skills-a2a-production` 30 rps), held as
+  `RPC_URL` (and `LOGS_RPC_URL`) SECRETS, set atomically with the deploy (`wrangler deploy --secrets-file`). Before,
+  both rode the Faithnet runtime's `/rpc` relay, which also spent the runtime's own gateway budget.
+- **No chain default.** The indexer refuses to run without `RPC_URL`/`LOGS_RPC_URL` rather than defaulting to Base
+  Sepolia (a faithchain cursor advanced on the wrong chain is the failure this removes).
+- **skills-a2a** (its own repo, 724242a): the hard-coded `EDGE` binding and its "every workers.dev host goes to the
+  Faithnet edge" rule became `LANE_ROUTES` with the one host the town manifest declares for that edge.
+- Verified live: the indexer's cursor tracks the chain head; a targeted projection and a shelf re-verification ran
+  through the new bindings; skills-a2a resolves names on chain; the Base Sepolia indexer env runs the same code.
 
 ---
 

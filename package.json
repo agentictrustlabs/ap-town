@@ -14,7 +14,7 @@
     "test": "pnpm -r test",
     "typecheck": "pnpm -r typecheck",
     "build": "pnpm -r build",
-    "check": "pnpm typecheck && pnpm test && pnpm check:town && pnpm check:no-estate-binding && pnpm check:no-vector-over-vault && ap doctor",
+    "check": "pnpm typecheck && pnpm test && pnpm check:town && pnpm gen:town --check && pnpm check:no-estate-binding && pnpm check:no-vector-over-vault && ap doctor",
     "conform:a2a": "ap conform a2a",
     "conform:mcp": "ap conform mcp",
     "upgrade:canary": "ap upgrade --canary",
@@ -22,7 +22,8 @@
     "check:no-vector-over-vault": "tsx checks/check-no-vector-over-vault.ts",
     "check:town": "tsx checks/check-town-manifest.ts",
     "check:no-estate-binding": "tsx checks/check-no-estate-binding.ts",
-    "probe:town": "tsx checks/probe-town.ts"
+    "probe:town": "tsx checks/probe-town.ts",
+    "gen:town": "tsx checks/gen-town.ts"
   },
   "devDependencies": {
     "@agenticprimitives/a2a": "0.0.0-alpha.25",

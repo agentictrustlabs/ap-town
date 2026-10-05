@@ -14,9 +14,12 @@ estates:
     home: https://www.faithnet.me
     edge: https://edge.faithnet.io
     a2a: https://a2a.faithnet.io
-    # Same Cloudflare account as the town Workers: its public lane is reached through these Workers (CF-1042).
+    # Same Cloudflare account as the town Workers: its public lane is reached through these Workers (CF-1042: a
+    # Worker's subrequest to a same-account workers.dev host returns a 404 page). Generated into each town Worker
+    # that reads lanes (`pnpm gen:town`); the skills service copies the edge's line.
     lanes:
       edge.faithnet.io: demo-edge-faithnet
+      demo-edge-faithnet.richardpedersen3.workers.dev: demo-edge-faithnet
       "*.faithnet.ai": demo-a2a-faithnet
     nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle, impact]
     kms: { tenant: faithnet }

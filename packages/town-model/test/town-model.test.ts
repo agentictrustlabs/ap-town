@@ -63,9 +63,10 @@ describe('generators', () => {
     const { town } = parseTown(faithchain);
     expect(laneBindings(town!)).toEqual([
       { binding: 'LANE_FAITHNET_1', service: 'demo-edge-faithnet', pattern: 'edge.faithnet.io', estate: 'faithnet' },
+      { binding: 'LANE_FAITHNET_1', service: 'demo-edge-faithnet', pattern: 'demo-edge-faithnet.richardpedersen3.workers.dev', estate: 'faithnet' },
       { binding: 'LANE_FAITHNET_2', service: 'demo-a2a-faithnet', pattern: '*.faithnet.ai', estate: 'faithnet' },
     ]);
-    expect(laneRoutesVar(town!)).toBe('edge.faithnet.io=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2');
+    expect(laneRoutesVar(town!)).toBe('edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2');
   });
 
   it('authorization is never a town signal', () => {

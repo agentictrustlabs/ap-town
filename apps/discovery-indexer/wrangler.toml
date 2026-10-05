@@ -65,23 +65,21 @@ PROFILE_RESOLVER = "0xB03F7C06ad3274F584AB72794406D639c02A45e1"
 RELATIONSHIP = "0x5015bD7d422e003511246f848cDd798cb00BB968"
 ATTESTATION_REGISTRY = "0x4c94A0355380b8F5023eDd5f8A8131B020de19FA"
 REGISTRY = "0x0Be172F1b5cfD1d084CEc2cF2Af0A0cE9023Deb1"
-# Every root this deployment names agents under. The cron walks THESE and nothing else, so a root that
+# Every root the town's estates name agents under (GENERATED: towns/faithchain/town.yaml → estates[].nameRoots, `pnpm gen:town`). The cron walks THESE and nothing else, so a root that
 # is missing here has no periodic backstop — its agents are in the knowledge base only for as long as
 # something calls /project for them by hand. This said "impact" alone while the estate had already
 # migrated to typed names (spec 346): 36 of 45 indexed agents were on a root the cron never visited.
 # Legacy `impact` stays — the agents still on it are not less real for the rename.
-TLDS = "me,org,team,svc,workspace,treasury,registry,church,circle,impact"
+TLDS = "me,org,team,svc,workspace,treasury,registry,church,circle,impact"  # town:roots
 DISCOVERY_REGISTRY_ID = "urn:ap:registry:faithnet-agents"
-# RPC_URL as a VAR (the relay URL is public; a var of the same name would clobber a secret — keep ONE):
-# the worker must never fall back to its Base Sepolia default on this env.
-RPC_URL = "https://a2a.faithnet.io/rpc"
-LOGS_RPC_URL = "https://a2a.faithnet.io/rpc"
+# RPC_URL + LOGS_RPC_URL are SECRETS here: the town's chain gateway (rpc.faithnet.io) with this Worker's own app token
+# (spec 429 §5 — never the estate runtime's relay). The Worker refuses to run without them; it has no chain default.
 WATCH_MAX_BLOCKS = "20000"
 # Spec 413 — a shelf release signed under an agent's DEL-001 session leaf is verified against these (deployments-faithchain.json).
 DELEGATION_MANAGER = "0x710cb1bF08C234Df397e0910331e0A29710EF4F7"
 UNIVERSAL_SIGNATURE_VALIDATOR = "0xeDd56f500325D4701B9985A34e5Fa6EED6716137"
 TIMESTAMP_ENFORCER = "0x73A7B878168b7DE48677617179A8bE894f0Dfe96"
-LANE_ROUTES = "edge.faithnet.io=EDGE,*.faithnet.ai=A2A"
+LANE_ROUTES = "edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2"  # town:lanes
 
 [env.faithnet.triggers]
 crons = ["* * * * *"]
@@ -116,10 +114,11 @@ max_retries = 3
 # How the indexer reads an owner's public lane: a Worker cannot fetch a same-account hostname (CF-1042), so each estate
 # host is reached through its Worker's service binding, routed by host (`LANE_ROUTES` in [env.faithnet.vars]). On-chain
 # `a2aEndpoint`s point at the edge (`https://edge.faithnet.io/api/a2a/<name>`); agent hosts are `<label>.faithnet.ai`.
+# >>> town:lanes faithnet — GENERATED from towns/faithchain/town.yaml by `pnpm gen:town`; edit the manifest, never this block.
 [[env.faithnet.services]]
-binding = "EDGE"
-service = "demo-edge-faithnet"
-
+binding = "LANE_FAITHNET_1"
+service = "demo-edge-faithnet"   # estate faithnet
 [[env.faithnet.services]]
-binding = "A2A"
-service = "demo-a2a-faithnet"
+binding = "LANE_FAITHNET_2"
+service = "demo-a2a-faithnet"   # estate faithnet
+# <<< town:lanes faithnet

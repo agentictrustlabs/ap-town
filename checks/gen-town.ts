@@ -1,0 +1,64 @@
+// gen:town — write what the town manifest decides into each app's wrangler.toml (spec 429 §4–§5), so that a second
+// estate is a manifest edit and never a hand edit of a binding.
+//
+// Generated today: each estate's PUBLIC LANES, in every wrangler environment that asks for them with the markers
+//   LANE_ROUTES = "…"                      # town:lanes          (inside that env's [vars])
+//   TLDS = "…"                             # town:roots          (optional: the union of every estate's name roots)
+//   # >>> town:lanes <env>  … # <<< town:lanes <env>             (the LANE_<ESTATE>_<n> service bindings)
+// The environment's town is the town whose manifest lists that env's Worker name.
+//
+//   pnpm gen:town            rewrite
+//   pnpm gen:town --check    exit 1 if any file differs (CI)
+import { readFileSync, readdirSync, existsSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { crawlRoots, laneBindings, laneRoutesVar, type TownManifest } from '../packages/town-model/src/index';
+import { loadTowns, ROOT } from './load-towns';
+import { wranglerFacts } from './wrangler-facts';
+
+const check = process.argv.includes('--check');
+const { towns, errors } = loadTowns();
+if (errors.length) { console.error(errors.join('\n')); process.exit(1); }
+
+const townOfWorker = new Map<string, TownManifest>();
+for (const t of towns) for (const s of t.services) if (s.worker) townOfWorker.set(s.worker, t);
+
+export function renderLanes(town: TownManifest, env: string): string {
+  const head = `# >>> town:lanes ${env} — GENERATED from towns/${town.town}/town.yaml by \`pnpm gen:town\`; edit the manifest, never this block.`;
+  const blocks = [...new Map(laneBindings(town).map((l) => [l.binding, l])).values()].map((l) =>
+    `[[env.${env}.services]]\nbinding = "${l.binding}"\nservice = "${l.service}"   # estate ${l.estate}`);
+  return [head, ...blocks, `# <<< town:lanes ${env}`].join('\n');
+}
+
+let changed = 0;
+let wrote = 0;
+for (const app of readdirSync(join(ROOT, 'apps'))) {
+  const file = join(ROOT, 'apps', app, 'wrangler.toml');
+  if (!existsSync(file)) continue;
+  const before = readFileSync(file, 'utf8');
+  let after = before;
+  for (const [env, f] of wranglerFacts(file)) {
+    const region = new RegExp(`# >>> town:lanes ${env}\\b[\\s\\S]*?# <<< town:lanes ${env}`);
+    const varLine = /^LANE_ROUTES\s*=\s*"[^"]*"\s*# town:lanes$/m;
+    if (!env || !region.test(after)) continue;
+    const town = f.name ? townOfWorker.get(f.name) : undefined;
+    if (!town) { console.error(`apps/${app} [${env}]: asks for town lanes but Worker ${f.name} is in no town manifest`); process.exit(1); }
+    after = after.replace(region, renderLanes(town, env));
+    // The LANE_ROUTES var of THIS env: the first marked line after the env's [vars] header.
+    const varsHeader = after.indexOf(`[env.${env}.vars]`);
+    const rest = after.slice(varsHeader);
+    if (varsHeader < 0 || !varLine.test(rest)) { console.error(`apps/${app} [${env}]: no \`LANE_ROUTES = "…"  # town:lanes\` line in [env.${env}.vars]`); process.exit(1); }
+    after = after.slice(0, varsHeader) + rest.replace(varLine, `LANE_ROUTES = "${laneRoutesVar(town)}"  # town:lanes`);
+    // The crawl roots — every estate's name roots — where the env marks its TLDS line.
+    const rootsLine = /^TLDS\s*=\s*"[^"]*"\s*# town:roots$/m;
+    const rest2 = after.slice(varsHeader);
+    if (rootsLine.test(rest2)) after = after.slice(0, varsHeader) + rest2.replace(rootsLine, `TLDS = "${crawlRoots(town).join(',')}"  # town:roots`);
+    wrote++;
+  }
+  if (after !== before) {
+    changed++;
+    if (check) console.error(`apps/${app}/wrangler.toml is stale — run \`pnpm gen:town\``);
+    else writeFileSync(file, after);
+  }
+}
+if (check && changed) process.exit(1);
+console.log(`gen:town — ${wrote} environment(s) carry town lanes; ${check ? (changed ? `${changed} stale` : 'all current') : `${changed} file(s) rewritten`}`);

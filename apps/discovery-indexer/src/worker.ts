@@ -46,14 +46,13 @@ interface Env {
   AI?: WorkersAi;
   /** The public-tier vector index (Vectorize). The indexer is its only writer. */
   KB_VECTORS?: VectorWriter;
-  /** Service binding to the estate's agent Worker: how this Worker reads an owner's public lane (a same-account
-   *  hostname is unreachable by plain fetch — CF-1042). */
-  A2A?: Fetcher;
-  /** The estate's edge Worker (`edge.faithnet.io`), where on-chain `a2aEndpoint`s point. */
-  EDGE?: Fetcher;
-  /** Which binding serves which host: `edge.faithnet.io=EDGE,*.faithnet.ai=A2A`. A host with no route is external and
-   *  fetched over the network. One transport per host — routing, never a retry on another path (ADR-0013). */
+  /** Which binding serves which host: `edge.faithnet.io=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2`. GENERATED from
+   *  the town manifest (`towns/<chain>/town.yaml` → each estate's `lanes`, `pnpm gen:town`), with the `LANE_<ESTATE>_<n>`
+   *  service bindings beside it — how this Worker reads an owner's public lane on a same-account estate Worker
+   *  (CF-1042). A host with no route is external and fetched over the network. One transport per host — routing,
+   *  never a retry on another path (ADR-0013). No estate is named in this code (spec 429 §5). */
   LANE_ROUTES?: string;
+  [lane: `LANE_${string}`]: Fetcher | string | undefined;
   /** The estate's delegation contracts — a release signed under an agent's session leaf is verified against them. */
   DELEGATION_MANAGER?: string;
   UNIVERSAL_SIGNATURE_VALIDATOR?: string;
@@ -97,10 +96,18 @@ async function watchTick(env: Env): Promise<{ ok: true; from: string; to: string
   }
 }
 
+function required(v: string | undefined, name: string): string {
+  if (!v?.trim()) throw new Error(`${name} is not configured — refusing to index an unnamed chain`);
+  return v.trim();
+}
+
 function cfg(env: Env): IndexerConfig {
   return {
-    rpcUrl: env.RPC_URL ?? 'https://sepolia.base.org',
-    logsRpcUrl: env.LOGS_RPC_URL ?? 'https://sepolia.base.org',
+    // ONE chain per deployment, named by its own config: an unset RPC is refused, never defaulted to another chain
+    // (a faithchain indexer reading Base Sepolia would advance its cursor on the wrong chain). Both are SECRETS on the
+    // town's envs — the chain gateway URL with this Worker's own app token (spec 429 §5).
+    rpcUrl: required(env.RPC_URL, 'RPC_URL'),
+    logsRpcUrl: required(env.LOGS_RPC_URL, 'LOGS_RPC_URL'),
     chainId: Number(env.CHAIN_ID ?? 84532),
     // Defaults track packages/contracts/deployments-base-sepolia.json. They were left on a PREVIOUS
     // deployment; the wrangler vars overrode most of them, but NAME_RESOLVER had no var at all, so the
@@ -134,13 +141,13 @@ async function agentPassages(env: Env, nodes: AgentNode[]): Promise<number | 'un
 }
 
 /** The service binding that serves `host` per `LANE_ROUTES` (exact host or `*.suffix`), or null for an external host. */
-export function laneBindingFor(env: Pick<Env, 'LANE_ROUTES' | 'A2A' | 'EDGE'>, host: string): Fetcher | null {
+export function laneBindingFor(env: { LANE_ROUTES?: string }, host: string): Fetcher | null {
   for (const route of (env.LANE_ROUTES ?? '').split(',').map((r) => r.trim()).filter(Boolean)) {
     const [pattern, name] = route.split('=').map((x) => x.trim());
     if (!pattern || !name) continue;
     const hit = pattern.startsWith('*.') ? host.endsWith(pattern.slice(1)) : host === pattern;
     if (!hit) continue;
-    const b = (env as Record<string, unknown>)[name] as Fetcher | undefined;
+    const b = (env as unknown as Record<string, unknown>)[name] as Fetcher | undefined;
     if (!b) throw new Error(`LANE_ROUTES sends ${host} to ${name}, which is not bound`);
     return b;
   }
