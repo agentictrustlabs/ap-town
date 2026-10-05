@@ -29,7 +29,8 @@
     "@agenticprimitives/mcp-protocol": "0.0.0-alpha.4",
     "typescript": "^5.7.3",
     "vitest": "^4.1.8",
-    "tsx": "^4.22.4"
+    "tsx": "^4.22.4",
+    "@types/node": "^22.7.0"
   },
   "pnpm": {
     "overrides": {
