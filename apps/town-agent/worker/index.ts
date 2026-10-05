@@ -112,12 +112,31 @@ async function api(path: string, url: URL, env: Env, town: TownManifest, selfHos
     const v = (await serviceViews(town, fetchProbe, selfHost)).find((x) => x.id === m[1]);
     return v ? json(v) : json({ error: `no service "${m[1]}" in the ${town.town} town` }, 404);
   }
+  // The registry, as the portal's Find area (the discovery explorer, folded in — spec 429 §7.3). Every answer is the
+  // registry's own; the portal adds nothing to it. A listing is a fact, not a permission.
   if (path === '/find') {
-    // The registry's search, as the portal's Find area. A listing is a fact, not a permission.
     const q = (url.searchParams.get('q') ?? '').trim();
-    if (!q) return json({ error: 'say what you are looking for' }, 400);
-    const r = await ask<{ results?: unknown[] }>(env.REGISTRY, 'https://registry/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: { text: q }, limit: 24 }) });
-    return r ? json({ query: q, results: r.results ?? [] }) : json({ error: 'the registry could not be asked just now' }, 502);
+    const type = (url.searchParams.get('type') ?? '').trim();
+    const registered = url.searchParams.get('registered') === '1';
+    if (!q && !type && !registered) return json({ error: 'say what you are looking for' }, 400);
+    const mandates: Record<string, unknown> = { requireRegistered: registered };
+    if (type) { if (['person', 'org', 'service'].includes(type)) mandates.requireKind = type; else mandates.requireAgentType = type; }
+    const r = await ask<Record<string, unknown>>(env.REGISTRY, 'https://registry/discover', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...(q ? { intent: { need: q } } : {}), mandates }) });
+    return r ? json({ query: q, type, registered, ...r }) : json({ error: 'the registry could not be asked just now' }, 502);
+  }
+  if (path === '/facets') {
+    const r = await ask<unknown>(env.REGISTRY, 'https://registry/facets');
+    return r ? json(r, 200, { 'cache-control': 'public, max-age=120' }) : json({ error: 'the registry could not be asked just now' }, 502);
+  }
+  const ag = path.match(/^\/agent\/(0x[0-9a-fA-F]{40}|[a-z0-9.@-]+)$/);
+  if (ag) {
+    const key = ag[1]!;
+    const [agent, offerings] = await Promise.all([
+      ask<Record<string, unknown>>(env.REGISTRY, `https://registry/agent?key=${encodeURIComponent(key)}`),
+      ask<Record<string, unknown>>(env.REGISTRY, `https://registry/offerings?key=${encodeURIComponent(key)}`),
+    ]);
+    if (!agent) return json({ error: 'the registry could not be asked just now' }, 502);
+    return json({ key, agent, offerings });
   }
   return json({ error: 'not found' }, 404);
 }

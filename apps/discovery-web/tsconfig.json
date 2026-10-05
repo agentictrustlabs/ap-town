@@ -1,11 +1,5 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": {
-    "outDir": "./dist",
-    "jsx": "react-jsx",
-    "types": ["vite/client", "node"],
-    "noEmit": true,
-    "lib": ["ES2022", "DOM", "DOM.Iterable"]
-  },
-  "include": ["src/**/*"]
+  "compilerOptions": { "noEmit": true, "types": ["@cloudflare/workers-types"], "lib": ["ES2022"] },
+  "include": ["worker/**/*"]
 }

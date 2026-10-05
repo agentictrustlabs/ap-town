@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { Link } from '@ap-town/town-ui';
 import { townScene } from '../scenes';
 import type { TownData } from '../types';
-import { Glyph, Scene, ServiceCard } from '../ui';
+import { Glyph, Map, ServiceCard } from '../ui';
 import { isPlaceKind } from '@ap-town/town-scene';
 
 export function Overview({ t }: { t: TownData }): ReactNode {
@@ -18,7 +18,7 @@ export function Overview({ t }: { t: TownData }): ReactNode {
         <p className="lede">One chain ({t.chain.id}), the {t.estates.length === 1 ? 'estate' : `${t.estates.length} estates`} on it, and the services they share: names, the registry, the public graph, skills, key custody. Shared by all, owned by none. Nothing in a town grants anything.</p>
       </section>
       <section>
-        <Scene scene={townScene(t)} legend={`${t.estates.map((e) => `The ${e.id} estate`).join(', ')} — its Home, its gate and its people — with the commons at the end of the street and the applications beyond. Lit windows: the service answered its probe just now (${up} of ${probed}). Hover or tab to a building to read its name; press it to open it.`} />
+        <Map scene={townScene(t)} height={540} legend={`${t.estates.map((e) => `The ${e.id} estate`).join(', ')} — its Home, its gate and its people — with the commons at the end of the street and the applications beyond. Lit windows: the service answered its probe just now (${up} of ${probed}). Drag to look around and zoom in to read the names; press a building to open it.`} />
       </section>
       <section>
         <h2>Estates</h2>

@@ -148,7 +148,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "discovery.faithnet.io"
         ],
         "probe": "https://discovery.faithnet.io/",
-        "description": "The discovery explorer. Becomes the portal's Find area (R3)."
+        "description": "The explorer's old host — the registry's documents at their well-known paths, and a redirect to the portal's Find."
       },
       {
         "id": "town-agent",

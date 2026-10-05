@@ -1,6 +1,6 @@
 # Spec 429 — ap-town: the services a chain's estates share
 
-**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. **R1 done 2026-10-05:** every moved Worker deployed from ap-town and verified live; ap-discovery archived; ap-home #5 removed `apps/rpc-gateway`. **R1b done 2026-10-05** (§5.1). **R2 done 2026-10-05**: the town agent (`town.faithnet.io`, A2A-conformant), the registry formalized (A2A card + `/a2a`, conformant; its ARD document at `discovery.faithnet.io/.well-known/ard.json`), and the naming service N1 (`names.faithnet.io`, spec 430). **R3 first cut 2026-10-05**: the Town portal at `town.faithnet.io` (§7.2). Remaining in R3: the camera for the town view, folding the discovery explorer into Find.
+**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. **R1 done 2026-10-05:** every moved Worker deployed from ap-town and verified live; ap-discovery archived; ap-home #5 removed `apps/rpc-gateway`. **R1b done 2026-10-05** (§5.1). **R2 done 2026-10-05**: the town agent (`town.faithnet.io`, A2A-conformant), the registry formalized (A2A card + `/a2a`, conformant; its ARD document at `discovery.faithnet.io/.well-known/ard.json`), and the naming service N1 (`names.faithnet.io`, spec 430). **R3 done 2026-10-05**: the Town portal at `town.faithnet.io` (§7.2, §7.3). Next: R4.
 **Owner's brief (2026-10-05):** ap-home is for the Home and the estate. ap-town is for central services that rely on a
 single chain and can have many estates running on it. Bring the service applications into ap-town, except skills.
 Skills is an external central service that is part of the town. The UX leverages the town model built for the field
@@ -301,6 +301,20 @@ building per service, lit when its probe answered; applications beyond), **Find*
 result linking to its names and its card), **Names** and **Skills** (links to those services), **Operations** (every
 listed service with its health, the chain, the rules), and a page per service with the four signals. `packages/town-ui`
 holds what the portal and the naming app share (router, fetch hook, base styles).
+
+### 7.3 R3 completed (2026-10-05)
+
+- **The camera.** `packages/town-scene` `TownMap`: drag to pan, wheel or pinch to zoom, double-press to go in, fit and
+  step buttons; the camera rewrites one group's transform; labels live in screen space, most important first, the
+  ones that would overlap left out; three levels of detail (far: streets and pinned labels; mid: every label that
+  fits; close: with the second line). A press that travelled is a pan, not a visit. Used by the portal's Overview and
+  the naming service's home and root pages; `IsoScene` (fitted, no camera) stays for a lot and a glyph.
+- **The explorer, folded in.** Find now asks the registry's `/discover` with the explorer's hard filters (a kind of
+  agent, from the registry's facets; in-the-registry only) and shows each hit's ranking reasons; `/agent/<key>` shows
+  an agent's public facts from the graph, the offerings crawled from its card, and the card itself read live. The
+  explorer's app is retired: `discovery.faithnet.io` keeps the registry's documents at their well-known paths and
+  redirects everything else to `town.faithnet.io/find`, carrying the question. Worker name and host unchanged (D5).
+- Not folded: the explorer's admin-only exposure-findings view (`ap:abox:pentest`); it had no public audience.
 
 ## 8. Onboarding a service into the town
 

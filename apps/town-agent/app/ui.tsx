@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { IsoScene, type PlaceKind, type TownSceneV1 } from '@ap-town/town-scene';
+import { IsoScene, TownMap, type PlaceKind, type TownSceneV1 } from '@ap-town/town-scene';
 import { Link, useRoute } from '@ap-town/town-ui';
 import { glyphScene, lit, shapeOf } from './scenes';
 import type { ServiceView } from './types';
@@ -11,6 +11,11 @@ export function Glyph({ kind, on = true, size = 44 }: { kind: PlaceKind; on?: bo
 export function Scene({ scene, legend }: { scene: TownSceneV1; legend?: string }): ReactNode {
   const { go } = useRoute();
   return <figure className="scene"><IsoScene scene={scene} onNavigate={go} />{legend && <figcaption>{legend}</figcaption>}</figure>;
+}
+
+export function Map({ scene, legend, height }: { scene: TownSceneV1; legend?: string; height?: number }): ReactNode {
+  const { go } = useRoute();
+  return <figure className="scene"><TownMap scene={scene} onNavigate={go} height={height ?? 520} />{legend && <figcaption>{legend}</figcaption>}</figure>;
 }
 
 export const HEALTH_WORD: Record<ServiceView['signals']['healthy'], string> = { up: 'up', self: 'up (this one)', down: 'down', unobserved: 'not probed' };

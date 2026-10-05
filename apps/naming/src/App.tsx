@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { SCENE_CSS } from '@ap-town/town-scene';
+import { MAP_CSS, SCENE_CSS } from '@ap-town/town-scene';
 import { useApi } from './api';
 import { Link, Router, useRoute } from './router';
 import { SearchBox } from './ui';
@@ -28,7 +28,7 @@ function Shell(): ReactNode {
   const town = health.state === 'ready' ? health.data.town : null;
   return (
     <>
-      <style>{SCENE_CSS}</style>
+      <style>{SCENE_CSS}{MAP_CSS}</style>
       <a className="skip" href="#main">Skip to the page</a>
       <header className="top">
         <Link href="/" className="brand"><span className="brand-mark" aria-hidden="true" />Names{town && <span className="brand-town">the {town} town</span>}</Link>

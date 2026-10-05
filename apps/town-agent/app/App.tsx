@@ -1,11 +1,12 @@
 import type { ReactNode } from 'react';
-import { SCENE_CSS } from '@ap-town/town-scene';
+import { MAP_CSS, SCENE_CSS } from '@ap-town/town-scene';
 import { Link, Loading, Router, useApi, useRoute } from '@ap-town/town-ui';
 import type { TownData } from './types';
 import { Overview } from './pages/Overview';
 import { Find } from './pages/Find';
 import { Service } from './pages/Service';
 import { Operations } from './pages/Operations';
+import { AgentPage } from './pages/Agent';
 
 function Page({ t }: { t: TownData }): ReactNode {
   const { path } = useRoute();
@@ -14,6 +15,7 @@ function Page({ t }: { t: TownData }): ReactNode {
   if (path === '/find') return <Find t={t} />;
   if (path === '/operations') return <Operations t={t} />;
   if ((m = path.match(/^\/service\/([a-z0-9-]+)$/))) return <Service t={t} id={m[1]!} />;
+  if ((m = path.match(/^\/agent\/(.+)$/))) return <AgentPage key={m[1]} t={t} id={decodeURIComponent(m[1]!)} />;
   return <section><h1>Nothing here</h1><p className="lede">That page does not exist. <Link href="/">Back to the town.</Link></p></section>;
 }
 
@@ -24,7 +26,7 @@ function Shell(): ReactNode {
   const skills = town?.services.find((s) => s.id === 'skills')?.hosts[0];
   return (
     <>
-      <style>{SCENE_CSS}</style>
+      <style>{SCENE_CSS}{MAP_CSS}</style>
       <a className="skip" href="#main">Skip to the page</a>
       <header className="top">
         <Link href="/" className="brand"><span className="brand-mark" aria-hidden="true" />The town{town && <span className="brand-town">{town.town} · chain {town.chain.id}</span>}</Link>

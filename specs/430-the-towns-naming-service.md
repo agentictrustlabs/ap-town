@@ -1,6 +1,6 @@
 # Spec 430 — The town's naming service
 
-**Status:** N1 live 2026-10-05 at `names.faithnet.io` (§7.1). **Owner's brief (2026-10-05):** "The naming app should borrow a lot from ENS v2 with
+**Status:** N1 + N2 live 2026-10-05 at `names.faithnet.io` (§7.1, §7.2). **Owner's brief (2026-10-05):** "The naming app should borrow a lot from ENS v2 with
 regards to the UX and integration pieces. Look closely at what they do. There is a lot of power in our Agent Naming
 Service and I want a robust UX. It might even borrow from our town 3D UX concepts with people and places (orgs,
 workspace, services, …)."
@@ -235,8 +235,18 @@ N5 packages (1)–(3) as a small drop-in: an `<agent-name>` element and a name-o
 - Faithchain today: 12 roots, 292 names. Verified live: a name (`nathan.me`: named, typed, listed, reachable), a bare
   label across every root, an agent's host, an address with a held-but-not-presented legacy name, a free name, a
   scoped name under an unregistered context, a legacy name, and four kinds of invalid input.
-- Not in N1: the hand-off does not yet carry the label (N2); a name's DNS form is read from its records rather than
+- Not in N1: a name's DNS form is read from its records rather than
   computed, because one estate zone hosts every type and the package's per-organization rule does not describe it.
+
+### 7.2 N2 as built (2026-10-05)
+
+The hand-off carries intent. "Open your Home" on a free name goes to `<home>/naming?claim=<label>&tld=<tld>&return=<this
+page>`; on a registered name, `?name=<name>&return=…`; on a root page, `?tld=<tld>&return=…`. The Home (ap-home PR #7)
+fills the label into its claim form (the nameless claim, or claim-and-present on `ChangeNameCard`), explains in a note
+why the claim is signed there, and when it lands offers the way back to the name's page — the return address is
+honoured only for the town's naming origin (`TOWN_NAMING_ORIGIN`). The same on a persona's naming page. Per-action deep
+links (present this name, change records, renew) land on the naming page with the name named; the page's own cards
+do the rest.
 
 ## 8. Ring 0 backlog this exposes
 

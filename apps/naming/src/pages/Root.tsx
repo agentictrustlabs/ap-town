@@ -3,7 +3,7 @@ import { useApi } from '../api';
 import type { RootPage } from '../api-types';
 import { Link, nameHref, rootHref, useRoute } from '../router';
 import { rootScene } from '../scenes';
-import { Addr, AtYourHome, Chip, Glyph, Loading, Scene, Stamped } from '../ui';
+import { Addr, AtYourHome, Chip, Glyph, Loading, Map, Stamped } from '../ui';
 
 export function Root({ tld }: { tld: string }): ReactNode {
   const { search } = useRoute();
@@ -20,7 +20,7 @@ export function Root({ tld }: { tld: string }): ReactNode {
             <p className="quiet">{p.root.issuing}</p>
           </div>
         </section>
-        {p.names.length > 0 && <section><Scene scene={rootScene(p)} legend={`The .${p.root.tld} street. Each building is one registered name; hover or tab to one to read it, press to open it.`} /></section>}
+        {p.names.length > 0 && <section><Map scene={rootScene(p)} height={460} legend={`The .${p.root.tld} street. Each building is one registered name; zoom in to read them, press one to open it.`} /></section>}
         <section>
           <h2>Names{p.pages > 1 ? ` · page ${p.page} of ${p.pages}` : ''}</h2>
           {p.names.length === 0 ? <p className="quiet">No names here yet.</p> : (
@@ -41,7 +41,7 @@ export function Root({ tld }: { tld: string }): ReactNode {
             </nav>
           )}
         </section>
-        {p.root.open && <section><h2>Claim a .{p.root.tld} name</h2><AtYourHome estates={p.estates} verb={`Claiming a .${p.root.tld} name`} /></section>}
+        {p.root.open && <section><h2>Claim a .{p.root.tld} name</h2><AtYourHome estates={p.estates} verb={`Claiming a .${p.root.tld} name`} claim={{ label: '', tld: p.root.tld }} /></section>}
         <Stamped s={p} />
       </>
     )}</Loading>

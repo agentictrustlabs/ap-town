@@ -14,4 +14,15 @@ export interface TownData {
   names: NamesSummary | null;
   card: string;
 }
-export interface FindResult { results: Array<Record<string, unknown>>; query: string }
+export interface FindHit {
+  name: string | null; smartAgent: string; score: number; why: string[]; registered?: boolean; shaclConforms?: boolean;
+  agentType?: string | null; tld?: string | null; kind?: string; facets?: string[]; capabilityIds?: string[];
+  offerings?: Array<{ skillId?: string; name?: string | null }>; validAttestations?: number; activeRelationships?: number;
+}
+export interface FindResult { ok: boolean; query: string; type: string; registered: boolean; matched?: number; droppedBy?: Record<string, number>; results: FindHit[]; error?: string }
+export interface Facets { ok: boolean; agentTypes: Array<{ value: string; count: number }>; kinds: Array<{ value: string; count: number }>; capabilityIds: Array<{ value: string; count: number }>; undeclaredType?: number }
+export interface AgentDetail {
+  key: string;
+  agent: { ok: boolean; agent?: string; triples?: Array<{ p: string; o: string }>; error?: string };
+  offerings: { ok?: boolean; offerings?: Array<{ skillId: string; name: string | null; effect?: string | null; exposure?: string | null; family?: string | null; status?: string | null; source?: string | null }>; error?: string } | null;
+}

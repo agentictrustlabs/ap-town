@@ -25,7 +25,7 @@ Described in one file, [`towns/faithchain/town.yaml`](towns/faithchain/town.yaml
 | Public graph reader | `apps/discovery-mcp` | service binding |
 | Public graph writer (the only one) | `apps/discovery-indexer` | cron |
 | Connector for external assistants | `apps/discovery-connector` | `discovery-connector.faithnet.io` |
-| Discovery explorer | `apps/discovery-web` | `discovery.faithnet.io` |
+| The explorer's old host: the registry's documents, and a redirect to Find | `apps/discovery-web` | `discovery.faithnet.io` |
 | Chain access | `apps/chain-gateway` | `rpc.faithnet.io` |
 | Skills | [`skills`](https://github.com/agentictrustlabs/skills) | `skills.faithnet.io` |
 | Key custody (AKCS) | `faithkms` | `akcs-pilot.faithnet.io` |

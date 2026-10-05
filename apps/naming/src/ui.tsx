@@ -1,7 +1,7 @@
 // The pieces every page uses. Words here are deliberate (spec 430): a chip says a state, a signal says one fact,
 // and nothing on any page says or implies that a name gives anyone authority.
 import { useState, type FormEvent, type ReactNode } from 'react';
-import { IsoScene, type PlaceKind, type TownSceneV1 } from '@ap-town/town-scene';
+import { IsoScene, TownMap, type PlaceKind, type TownSceneV1 } from '@ap-town/town-scene';
 import { getJson, type Loaded } from './api';
 import type { Banner, EstateRef, SearchView, Signal, Stamp } from './api-types';
 import { Link, addressHref, nameHref, rootHref, useRoute } from './router';
@@ -31,6 +31,12 @@ export function Scene({ scene, selected, legend, small }: { scene: TownSceneV1; 
       {legend && <figcaption>{legend}</figcaption>}
     </figure>
   );
+}
+
+/** The town with a camera: drag, wheel, pinch, double-press; fit and step buttons. For the big pictures. */
+export function Map({ scene, legend, height }: { scene: TownSceneV1; legend?: string; height?: number }): ReactNode {
+  const { go } = useRoute();
+  return <figure className="scene"><TownMap scene={scene} onNavigate={go} height={height ?? 520} />{legend && <figcaption>{legend}</figcaption>}</figure>;
 }
 
 export function Copy({ value, label }: { value: string; label?: string }): ReactNode {
@@ -77,13 +83,26 @@ export function Banners({ banners }: { banners: Banner[] }): ReactNode {
   return <div className="banners">{banners.map((b) => <div key={b.title} className={`banner banner-${b.tone}`} role={b.tone === 'warn' ? 'alert' : 'note'}><strong>{b.title}.</strong> {b.body}</div>)}</div>;
 }
 
-/** Where a change happens: at the owner's Home. One estate → one button; several → the visitor picks theirs. */
-export function AtYourHome({ estates, verb }: { estates: EstateRef[]; verb: string }): ReactNode {
+/**
+ * Where a change happens: at the owner's Home, signed by the owner's own account. The link carries what the visitor
+ * was looking at (`claim` = the label and ending to claim, `name` = the name to change) and the way back here, so the
+ * Home can fill the form in and send them back when it lands (spec 430 N2). One estate → one button; several → the
+ * visitor picks theirs. This service never signs and never holds a session.
+ */
+export function AtYourHome({ estates, verb, claim, name }: { estates: EstateRef[]; verb: string; claim?: { label: string; tld: string }; name?: string }): ReactNode {
+  const back = typeof window === 'undefined' ? '' : window.location.href;
+  const href = (e: EstateRef): string => {
+    const u = new URL(e.naming);
+    if (claim) { if (claim.label) u.searchParams.set('claim', claim.label); u.searchParams.set('tld', claim.tld); }
+    if (name) u.searchParams.set('name', name);
+    if (back) u.searchParams.set('return', back);
+    return u.toString();
+  };
   return (
     <div className="home-cta">
-      <p>{verb} happens at your own Home, signed by your own account. This service only reads.</p>
+      <p>{verb} happens at your own Home, signed by your own account. This service only reads.{claim?.label ? ` Your Home will have ${claim.label}.${claim.tld} filled in and bring you back here when it lands.` : ''}</p>
       <div className="home-cta-row">
-        {estates.map((e) => <a key={e.id} className="button" href={e.naming} rel="noreferrer">{estates.length > 1 ? `Open ${e.id}` : 'Open your Home'} →</a>)}
+        {estates.map((e) => <a key={e.id} className="button" href={href(e)} rel="noreferrer">{estates.length > 1 ? `Open ${e.id}` : 'Open your Home'} →</a>)}
       </div>
     </div>
   );

@@ -3,7 +3,7 @@ import { useApi } from '../api';
 import type { TownView } from '../api-types';
 import { Link, rootHref } from '../router';
 import { townScene } from '../scenes';
-import { Glyph, Loading, Scene, SearchBox, Stamped } from '../ui';
+import { Glyph, Loading, Map, SearchBox, Stamped } from '../ui';
 
 export function Home(): ReactNode {
   const v = useApi<TownView>('/api/town');
@@ -17,7 +17,7 @@ export function Home(): ReactNode {
       <Loading v={v}>{(t) => (
         <>
           <section>
-            <Scene scene={townScene(t)} legend={`The ${t.town} town’s ${t.total} names. Each street is an ending; each building is a registered name, shaped by what its ending names. Press a street or a building.`} />
+            <Map scene={townScene(t)} height={560} legend={`The ${t.town} town’s ${t.total} names. Each street is an ending; each building is a registered name, shaped by what its ending names. Drag to look around, zoom in to read the names, press a street or a building to open it.`} />
           </section>
           <section>
             <h2>The endings</h2>

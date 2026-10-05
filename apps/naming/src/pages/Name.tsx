@@ -35,7 +35,8 @@ function Free({ v }: { v: NameView }): ReactNode {
         <section>
           <h2>Who could claim it</h2>
           <p><strong>{v.availability.by.charAt(0).toUpperCase() + v.availability.by.slice(1)}.</strong> {v.availability.rule}</p>
-          {v.status === 'available' && <AtYourHome estates={v.estates} verb="Claiming a name" />}
+          {v.status === 'available' && v.form === 'canonical' && v.tld && <AtYourHome estates={v.estates} verb="Claiming a name" claim={{ label: v.name.split('.')[0]!, tld: v.tld }} />}
+          {v.status === 'available' && v.form !== 'canonical' && <AtYourHome estates={v.estates} verb="Issuing a scoped name" />}
         </section>
       )}
       <Stamped s={v} />
@@ -173,7 +174,7 @@ export function Name({ name }: { name: string }): ReactNode {
               {tab === 'details' && <Details v={n} />}
             </div>
           </section>
-          <section><h2>Change something</h2><AtYourHome estates={n.estates} verb="Changing a record, the presented name or the owner" /></section>
+          <section><h2>Change something</h2><AtYourHome estates={n.estates} verb="Changing a record, the presented name or the owner" name={n.name} /></section>
           <Stamped s={n} />
         </>
       );
