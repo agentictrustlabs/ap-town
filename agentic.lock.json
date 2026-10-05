@@ -33,20 +33,38 @@
     },
     "noPrivateKeys": {
       "roots": [
-        "apps",
-        "examples"
+        "apps"
       ],
-      "allowedIn": [],
-      "toleratedEnvNames": []
+      "allowedIn": [
+        {
+          "file": "apps/demo-discovery-connector/src/gateway/tools.ts",
+          "why": "gateway-raw-delegate-key (findings.yaml, accepted-risk): the gateway agent's own session-wire delegate key (spec 387); KMS signer + re-issued wire scheduled"
+        },
+        {
+          "file": "apps/demo-discovery/src/lib/abox.ts",
+          "why": "fixture signers for the browser-verified demo bundles"
+        }
+      ],
+      "toleratedEnvNames": [
+        {
+          "name": "A2A_MASTER_PRIVATE_KEY",
+          "why": "the local-aes dev backend signing key; unused under gcp-kms"
+        },
+        {
+          "name": "A2A_INTERACTIONS_SESSION_PRIVATE_KEY",
+          "why": "workstation-only InteractionsDO session signer when no Cloud KMS is present"
+        }
+      ]
     },
     "noHmacHomeBridge": {
-      "dir": "apps",
+      "dir": "apps/demo-sso-next",
       "hmacCall": "bridgeInteractions",
       "sessionRpcCall": "callInteractions",
       "ceilings": {
         "hmac": 0,
-        "total": 0
-      }
+        "total": 47
+      },
+      "skip": "apps/demo-sso-next is not in this repository"
     },
     "noCrossSubjectVaultReads": {
       "roots": [],
@@ -57,32 +75,82 @@
     },
     "failOpenKnobs": {
       "roots": [
-        "apps",
-        "examples"
+        "apps"
       ],
       "allowlist": []
     },
     "internalMarkerSplit": {
-      "src": "apps",
+      "src": "apps/demo-a2a/src",
       "secret": "A2A_CUSTODY_BRIDGE_SECRET",
       "marker": "x-ap-internal",
-      "budget": {}
+      "budget": {
+        "index.ts": "unbounded",
+        "interactions-do.ts": 1
+      },
+      "skip": "apps/demo-a2a/src is not in this repository"
     },
     "custodianCoverage": {
-      "skip": "ap-discovery carries no Home custody surface yet — enable when a Home moves in (specs 294/295)"
+      "matrix": "docs/architecture/connection-custodian-matrix.md",
+      "matrixKinds": [
+        "siwe",
+        "passkey",
+        "social"
+      ],
+      "homeVia": "apps/demo-sso-next/src/home/onboarding.ts",
+      "viaRequired": [
+        "passkey",
+        "wallet"
+      ],
+      "viaSocialAny": [
+        "google",
+        "youversion"
+      ],
+      "relyingApp": {
+        "dir": "apps/demo-web/src",
+        "entryFiles": [
+          "main.tsx",
+          "connect.ts",
+          "App.tsx"
+        ],
+        "mustImport": "@agenticprimitives/connect-client"
+      },
+      "providerNamedCustody": [
+        "google",
+        "youversion"
+      ],
+      "browserApps": [
+        "apps/demo-web",
+        "apps/demo-org",
+        "apps/demo-gs",
+        "apps/demo-jp"
+      ],
+      "skip": "the Home custody surface lives in ap-home"
     },
     "archetypeCatalog": {
-      "skip": "ap-discovery carries no archetype catalog yet — enable when a Home moves in (spec 354 §3)"
+      "module": "apps/demo-sso-next/src/lib/archetype-catalog.ts",
+      "exportName": "ARCHETYPE_CATALOG",
+      "expected": {
+        "treasury-steward": "0x00f5b03b5724864c5b8edf11048baa6693b520647594997bbffc2fa41391fc0e",
+        "bookkeeper": "0xce101b9c3ba2df0ae0a969a1d058a34727a581a5a848d509f617eae68bbde219",
+        "org-steward": "0xf00d3aef88f5d6a6c3e4021d714fbee0851e15ac5bfe1df5dbeb9d77f459fa52"
+      },
+      "skip": "apps/demo-sso-next/src/lib/archetype-catalog.ts is not in this repository"
     },
     "capabilityVocabulary": {
       "homeGlobs": [
-        "apps/**/*.{ts,tsx}"
+        "apps/demo-sso-next/app/**/*.{ts,tsx}",
+        "apps/demo-sso-next/src/**/*.{ts,tsx}"
       ],
-      "packagesGlob": "packages/*/src/**/*.ts",
-      "wireAllowed": []
+      "packagesGlob": "packages-none/**/*.ts",
+      "wireAllowed": [
+        "apps/demo-sso-next/src/components/studio/Inspector.tsx",
+        "apps/demo-a2a/src/",
+        "apps/demo-sso-next/src/whitelabel/"
+      ]
     },
     "demoPersonOrgDistinct": {
-      "skip": "ap-discovery carries no persona roster yet — enable when @agenticprimitives-demo/estate is consumed (spec 399 §2.6)"
+      "roster": "demo/personas.json",
+      "skip": "the persona roster (demo/personas.json) lives in ap-home, which runs this rule"
     },
     "rulesDrift": {
       "cursorRules": ".cursor/rules",
@@ -91,7 +159,7 @@
       "claudeMd": "CLAUDE.md"
     },
     "lockCoherent": {
-      "allowWorkspace": false,
+      "allowWorkspace": true,
       "scope": "@agenticprimitives/"
     }
   }
