@@ -8,6 +8,7 @@ chain:
   generation: "1"
   rpc: https://rpc.faithnet.io
   deployment: faithchain   # @agenticprimitives/contracts/deployments — the one source of addresses
+  coin: { address: "0xa14E4a9447607c1233DcE34dB6Ead47C094f6141", symbol: SHQ, decimals: 6 }   # Sheqel — names are bought with it (spec 431)
 
 estates:
   - id: faithnet

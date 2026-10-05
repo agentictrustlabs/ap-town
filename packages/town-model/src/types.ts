@@ -15,6 +15,8 @@ export interface TownChain {
   /** The chain's deployment in `@agenticprimitives/contracts/deployments` (e.g. `faithchain`) — the ONE source of
    *  contract addresses for the town's services. Never copied into the manifest. */
   deployment: string;
+  /** The app coin names are bought with on this chain (spec 431), when any. */
+  coin?: { address: string; symbol: string; decimals: number };
 }
 
 /** An estate is a resident of the town: a Home, its edge and runtime, on this chain. It is never deployed from here. */

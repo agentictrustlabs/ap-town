@@ -1,6 +1,6 @@
 # Spec 431 — Paid names: a treasury of Sheqel per person, a price per name, and the domain rule
 
-**Status:** Draft for the owner's sign-off, 2026-10-05. Nothing built; nothing on the chain.
+**Status:** Approved 2026-10-05 ("go with your recommendations and build all the waves"; §7 decided as recommended). W1 built (spec 432, Ring 0 PR #658); W2 and W3 built; W4 pending the deployer key (runbook: `operations/runbooks/431-priced-names-cutover.md`).
 **Owner's brief (2026-10-05):** people "purchase" a name on the naming app from their Home treasury of Sheqel. Give
 each person a treasury with 1,000 SHQ. Names cost SHQ by the name: `.me` and `.org` with fewer letters are more
 expensive, everything under 50. A base name like `ibm` cannot be taken unless the person's Home holds a valid email at
@@ -146,7 +146,7 @@ W1 and W4 touch the chain and W2 mints a coin into sixty-odd treasuries; none st
 - **No email leaves the Home.** The ticket says `domain`, the contract stores nothing about it.
 - **No authority.** A purchase changes what an agent is called, not what it may do (430 D3).
 
-## 7. Open questions for the owner
+## 7. Decisions taken at approval (the recommendations)
 
 1. **The table in §2** — the bases and the length multipliers, with the 49 cap. Retune now or ship and adjust?
 2. **Who gets a treasury automatically.** Every person home at onboarding (recommended), or only on first purchase?

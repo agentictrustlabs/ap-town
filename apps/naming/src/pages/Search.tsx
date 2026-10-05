@@ -27,6 +27,7 @@ export function Search(): ReactNode {
                   <span className="row-sub">{r.names ? `${r.status === 'registered' ? 'names' : 'would name'} ${r.names}` : 'legacy root, untyped'}{r.status !== 'registered' && r.by ? ` · ${r.by}` : ''}</span>
                 </span>
                 {r.agent && <Addr address={r.agent} />}
+                {r.status !== 'registered' && r.coins !== null && <span className="price-pill">{r.coins} SHQ</span>}
                 <Chip kind={r.status} />
               </li>
             ))}

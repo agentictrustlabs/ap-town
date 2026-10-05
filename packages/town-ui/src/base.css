@@ -188,3 +188,10 @@ main > section { margin-bottom: 30px; }
 .find select { padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; }
 .find .check { display: inline-flex; align-items: center; gap: 6px; font-size: .92rem; color: var(--muted); }
 .why { margin: 0; padding-left: 1.1rem; color: var(--muted); font-size: .88rem; }
+.price { display: flex; gap: 18px; align-items: flex-start; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
+.price-tag { flex: none; display: flex; align-items: baseline; gap: 4px; padding: 6px 12px; border-radius: 12px; background: var(--free-bg); color: var(--free); }
+.price-n { font-size: 1.8rem; font-weight: 760; line-height: 1; }
+.price-coin { font-weight: 650; }
+.price-domain { background: var(--warn-bg); border-radius: 10px; padding: 8px 12px; }
+.price-pill { font-size: .8rem; font-weight: 650; padding: 2px 9px; border-radius: 999px; background: var(--free-bg); color: var(--free); }
+.price-table { max-width: 360px; margin-bottom: 14px; }

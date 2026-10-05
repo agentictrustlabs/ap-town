@@ -1,7 +1,7 @@
 // The naming service's answers (spec 430 §3–§4), assembled from chain reads. Everything here is a READ of public
 // state; nothing is stored, signed or granted. Each view states what the contracts check and no more.
 import {
-  AGENT_TLDS, LEGACY_TLDS, RESERVED_LABELS, namehash, parseAgentName,
+  AGENT_TLDS, LEGACY_TLDS, RESERVED_LABELS, namehash, parseAgentName, priceOf, pricedSubregistryAbi,
   typedNameForLabel, validateTypedClaim, type ParsedAgentName,
 } from '@agenticprimitives/agent-naming';
 import type { TownManifest } from '@ap-town/town-model';
@@ -14,6 +14,28 @@ import { ZERO, ZERO_NODE, type Chain } from './chain';
 import { NOUN, RECORD_LABEL, RULE_WORDS, kindOfTld, kindOfType, nounOfTld, typeOfTld } from './words';
 
 export const PAGE_SIZE = 48;
+
+/** Spec 431 §3 — the domain that protects `label`: the first of `<label>.com`, `<label>.org` that exists in DNS
+ *  (A, AAAA, MX or NS), read over DNS-over-HTTPS. A public fact; `unknown` when the lookup could not run. */
+export async function protectingDomain(label: string, fetchFn: typeof fetch = fetch): Promise<{ domain: string | null; unknown: boolean }> {
+  let unknown = false;
+  for (const tld of ['com', 'org']) {
+    const host = `${label}.${tld}`;
+    try {
+      let found = false;
+      for (const type of ['A', 'AAAA', 'MX', 'NS']) {
+        const r = await fetchFn(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(host)}&type=${type}`, { headers: { accept: 'application/dns-json' } });
+        if (!r.ok) { unknown = true; break; }
+        const b = (await r.json()) as { Status?: number; Answer?: unknown[] };
+        if (b.Status === 0 && Array.isArray(b.Answer) && b.Answer.length > 0) { found = true; break; }
+      }
+      if (found) return { domain: host, unknown: false };
+    } catch { unknown = true; }
+  }
+  return { domain: null, unknown };
+}
+
+const coinsOf = (units: bigint, decimals: number): number => Number(units / 10n ** BigInt(decimals));
 const CHILD_CAP = 60;
 const SAMPLE = 6;
 
@@ -57,10 +79,13 @@ async function rootViewOf(ctx: Ctx, node: Hex): Promise<RootView> {
   const { chain, town } = ctx;
   const [label, count, sub] = await Promise.all([chain.reg<string>('label', [node]), chain.reg<bigint>('childCount', [node]), chain.reg<Address>('subregistry', [node])]);
   const subregistry = nz(sub);
+  const priced = !!subregistry && chain.pricedSet.has(subregistry);
   const open = !!subregistry && chain.open.has(subregistry);
+  let baseCoins: number | null = null;
+  if (priced) { try { baseCoins = priceOf('abcdefgh', label); } catch { baseCoins = null; } }
   return {
-    tld: label, names: nounOfTld(label), kind: kindOfTld(label), legacy: !typeOfTld(label), count: Number(count),
-    issuing: issuingSentence(label, subregistry, open), subregistry, open,
+    tld: label, priced, baseCoins, names: nounOfTld(label), kind: kindOfTld(label), legacy: !typeOfTld(label), count: Number(count),
+    issuing: priced ? `Bought: a .${label} name costs Sheqel, paid from the agent's treasury — ${baseCoins ?? '?'} SHQ for eight letters or more, up to 49 for three. One per agent; never expires, never released.` : issuingSentence(label, subregistry, open), subregistry, open,
     estates: town.estates.filter((e) => e.nameRoots.includes(label)).map((e) => e.id),
   };
 }
@@ -94,7 +119,12 @@ async function rowsUnder(ctx: Ctx, parentOnChain: string, from: number, size: nu
 export async function townView(ctx: Ctx): Promise<TownView> {
   const [s, roots] = await Promise.all([stamp(ctx), rootViews(ctx)]);
   const samples = await Promise.all(roots.map((r) => (r.count ? rowsUnder(ctx, r.tld, 0, SAMPLE).then((x) => x.rows) : Promise.resolve([]))));
-  return { ...s, estates: estatesOf(ctx.town), roots: roots.map((r, i) => ({ ...r, sample: samples[i] ?? [] })), total: roots.reduce((n, r) => n + r.count, 0) };
+  let fees: TownView['fees'] = null;
+  if (ctx.chain.feeTreasury && ctx.chain.coin) {
+    const bal = await ctx.chain.client.readContract({ address: ctx.chain.coin.address, abi: [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const, functionName: 'balanceOf', args: [ctx.chain.feeTreasury] }).catch(() => 0n);
+    fees = { treasury: ctx.chain.feeTreasury, coin: ctx.chain.coin.symbol, coins: coinsOf(bal as bigint, ctx.chain.coin.decimals) };
+  }
+  return { ...s, estates: estatesOf(ctx.town), fees, roots: roots.map((r, i) => ({ ...r, sample: samples[i] ?? [] })), total: roots.reduce((n, r) => n + r.count, 0) };
 }
 
 export async function rootPage(ctx: Ctx, tld: string, page: number): Promise<RootPage | null> {
@@ -147,7 +177,7 @@ function hostsOf(town: TownManifest, records: Record<string, unknown>): Array<{ 
   return [{ estate: estate?.id ?? '', host }];
 }
 
-function capabilities(v: { name: string; tld: string | null; owner: Address | null; ownerName: string | null; agent: Address | null; presented: string | null; subregistry: Address | null; open: boolean; legacy: boolean }): CanRow[] {
+function capabilities(v: { name: string; tld: string | null; owner: Address | null; ownerName: string | null; agent: Address | null; presented: string | null; subregistry: Address | null; open: boolean; priced?: boolean; legacy: boolean }): CanRow[] {
   const rows: CanRow[] = [];
   if (v.owner) {
     rows.push({
@@ -159,8 +189,8 @@ function capabilities(v: { name: string; tld: string | null; owner: Address | nu
   }
   if (v.subregistry) {
     rows.push({
-      who: v.open ? 'The open subregistry' : 'The subregistry', address: v.subregistry,
-      note: v.open ? 'A contract with one rule: one claim per agent, three characters or more, never expires.' : 'A contract the owner handed child-issuing to.',
+      who: v.open ? 'The open subregistry' : v.priced ? 'The priced subregistry' : 'The subregistry', address: v.subregistry,
+      note: v.open ? 'A contract with one rule: one claim per agent, three characters or more, never expires.' : v.priced ? 'A contract with one rule: a name costs its price, paid by the owner’s treasury, with a ticket from the owner’s Home; one per agent; never expires.' : 'A contract the owner handed child-issuing to.',
       can: ['register names under this name, by its own rule'],
       cannot: ["touch this name's records, owner or resolver"],
     });
@@ -188,7 +218,7 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
   const blank = (over: Partial<NameView>): NameView => ({
     ...s, input: raw, status: 'invalid', name: raw.toLowerCase(), onChainName: raw.toLowerCase(), form: 'canonical', tld: null, kind: 'legacy', names: null,
     legacy: false, node: ZERO_NODE, agent: null, displayName: null, owner: null, ownerName: null, presented: null, presentsThis: false, declared: null,
-    typeCheck: null, records: [], signals: null, banners: [], can: [], children: [], childCount: 0, details: null, availability: null, estates, ...over,
+    typeCheck: null, records: [], signals: null, banners: [], can: [], children: [], childCount: 0, details: null, availability: null, price: null, purchase: null, estates, ...over,
   });
 
   let p: ParsedAgentName;
@@ -220,14 +250,26 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
     if (!parentExists) {
       return blank({ ...base, status: 'not-claimable', availability: { by: 'nobody yet', rule: p.kind === 'scoped' || p.kind === 'type-node' ? `${displayOf(parentOnChain)} is not registered, so nothing can be issued under it.` : `This town has no .${tld} root.` } });
     }
-    const parentOpen = !!nz(parentSub) && chain.open.has(nz(parentSub)!);
+    const parentSubAddr = nz(parentSub);
+    const parentOpen = !!parentSubAddr && chain.open.has(parentSubAddr);
+    const parentPriced = !!parentSubAddr && chain.pricedSet.has(parentSubAddr);
     const noun = nounOfTld(tld);
+    let price: NameView['price'] = null;
+    if (parentPriced && tld && p.kind === 'canonical' && chain.coin) {
+      const label = p.onChainName.split('.')[0]!;
+      let coins = 0;
+      try { coins = priceOf(label, tld) ?? 0; } catch { coins = 0; }
+      const prot = await protectingDomain(label);
+      price = { coins, coin: chain.coin.symbol, protectedBy: prot.domain, dnsUnknown: prot.unknown && !prot.domain };
+    }
     const availability = p.kind === 'scoped' || p.kind === 'type-node'
       ? { by: `the context, ${p.context ? `${p.context.label}.${p.context.tld}` : displayOf(parentOnChain)}`, rule: 'A scoped name is issued by its context, from that organization’s Home.' }
-      : parentOpen
-        ? { by: noun ? `${noun}’s agent` : 'an agent', rule: `Claimed from that agent’s Home in one signed operation. One name per agent under .${tld}; it never expires.${noun ? ` It reads as ${noun}’s name only while the agent’s own type record says so.` : ''}` }
-        : { by: 'whoever issues names under this root', rule: `Names under .${tld} are not open to claim.` };
-    return blank({ ...base, status: 'available', availability });
+      : parentPriced
+        ? { by: noun ? `${noun}’s agent` : 'an agent', rule: `Bought from that agent’s Home for ${price?.coins ?? '?'} ${chain.coin?.symbol ?? 'coins'}, paid by its treasury in the same signed operation that registers the name. One name per agent under .${tld}; it never expires and is never resold.${price?.protectedBy ? ` ${p.onChainName.split('.')[0]} is a domain: the buyer needs a verified email at ${price.protectedBy} on their Home.` : ''}` }
+        : parentOpen
+          ? { by: noun ? `${noun}’s agent` : 'an agent', rule: `Claimed from that agent’s Home in one signed operation. One name per agent under .${tld}; it never expires.${noun ? ` It reads as ${noun}’s name only while the agent’s own type record says so.` : ''}` }
+          : { by: 'whoever issues names under this root', rule: `Names under .${tld} are not open to claim.` };
+    return blank({ ...base, status: 'available', availability, price });
   }
 
   const agent = nz(target);
@@ -277,12 +319,22 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
   };
   const sub = nz(subRaw);
   const open = !!sub && chain.open.has(sub);
+  // Bought through the root's priced subregistry? Read what was paid and when — storage, never a log.
+  let purchase: NameView['purchase'] = null;
+  const parentPricedAddr = nz(parentSub);
+  if (parentPricedAddr && chain.pricedSet.has(parentPricedAddr) && chain.coin) {
+    const [paid, at] = await Promise.all([
+      chain.client.readContract({ address: parentPricedAddr, abi: pricedSubregistryAbi, functionName: 'paid', args: [node] }).catch(() => 0n),
+      chain.client.readContract({ address: parentPricedAddr, abi: pricedSubregistryAbi, functionName: 'paidAt', args: [node] }).catch(() => 0n),
+    ]);
+    if ((paid as bigint) > 0n) purchase = { coins: coinsOf(paid as bigint, chain.coin.decimals), coin: chain.coin.symbol, at: Number(at) };
+  }
   return blank({
     ...base, status: 'registered', agent, displayName: (records.displayName as string | undefined) ?? null, owner, ownerName, presented, presentsThis,
     declared: declared ? { agentType: declared.agentType, noun: declared.agentType ? NOUN[declared.agentType] ?? null : null, serviceRole: declared.serviceRole, agentKind: declared.agentKind, agentSubtype: declared.agentSubtype } : null,
     typeCheck, records: recordRows(records), signals, banners,
-    can: capabilities({ name: p.normalized, tld, owner, ownerName, agent, presented, subregistry: sub, open, legacy: !!p.legacy }),
-    children: kids.rows, childCount: Number(childCount), details: details(records),
+    can: capabilities({ name: p.normalized, tld, owner, ownerName, agent, presented, subregistry: sub, open, priced: !!sub && chain.pricedSet.has(sub), legacy: !!p.legacy }),
+    children: kids.rows, childCount: Number(childCount), details: details(records), purchase,
   });
 }
 
@@ -370,8 +422,10 @@ export async function searchView(ctx: Ctx, query: string): Promise<SearchView> {
   const rows: SearchRow[] = roots.map((r, i) => {
     const [exists, owner, expired, target] = facts[i]!;
     const status: SearchRow['status'] = exists ? 'registered' : nz(owner) && expired ? 'expired' : 'available';
-    const by = status === 'registered' ? '' : r.open ? `${r.names ?? 'an agent'}’s agent could claim it, from its Home` : 'not open to claim';
-    return { name: `${q}.${r.tld}`, tld: r.tld, names: r.names, kind: r.kind, status, agent: exists ? nz(target) : null, by };
+    let coins: number | null = null;
+    if (r.priced) { try { coins = priceOf(q, r.tld); } catch { coins = null; } }
+    const by = status === 'registered' ? '' : r.priced ? `${r.names ?? 'an agent'}’s agent could buy it from its Home${coins !== null ? ` for ${coins} ${chain.coin?.symbol ?? 'SHQ'}` : ''}` : r.open ? `${r.names ?? 'an agent'}’s agent could claim it, from its Home` : 'not open to claim';
+    return { name: `${q}.${r.tld}`, tld: r.tld, names: r.names, kind: r.kind, status, agent: exists ? nz(target) : null, by, coins };
   });
   return { ...s, kind: 'label', label: q, rows };
 }

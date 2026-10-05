@@ -8,10 +8,10 @@ const stamp = { town: 't', chainId: 1, block: 1 };
 describe('the town of names', () => {
   it('draws a street per root, linked to the root, with its names as linked buildings', () => {
     const t: TownView = {
-      ...stamp, estates: [], total: 3,
+      ...stamp, estates: [], fees: null, total: 3,
       roots: [
-        { tld: 'me', names: 'a person', kind: 'person', legacy: false, count: 2, issuing: '', subregistry: null, open: true, estates: [], sample: [{ name: 'a.me', label: 'a', owner: '0x1', kind: 'person' }, { name: 'b.me', label: 'b', owner: '0x2', kind: 'person' }] },
-        { tld: 'org', names: 'an organization', kind: 'org', legacy: false, count: 1, issuing: '', subregistry: null, open: true, estates: [], sample: [{ name: 'c.org', label: 'c', owner: '0x3', kind: 'org' }] },
+        { tld: 'me', priced: false, baseCoins: null, names: 'a person', kind: 'person', legacy: false, count: 2, issuing: '', subregistry: null, open: true, estates: [], sample: [{ name: 'a.me', label: 'a', owner: '0x1', kind: 'person' }, { name: 'b.me', label: 'b', owner: '0x2', kind: 'person' }] },
+        { tld: 'org', priced: false, baseCoins: null, names: 'an organization', kind: 'org', legacy: false, count: 1, issuing: '', subregistry: null, open: true, estates: [], sample: [{ name: 'c.org', label: 'c', owner: '0x3', kind: 'org' }] },
       ],
     };
     const s = townScene(t);

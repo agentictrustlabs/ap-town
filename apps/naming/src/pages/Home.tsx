@@ -37,7 +37,7 @@ export function Home(): ReactNode {
           <section className="three">
             <div><h3>The ending is the type</h3><p>.me is a person, .org an organization, .svc a service. The agent’s own record on the chain decides; a name whose ending disagrees is shown as mismatched.</p></div>
             <div><h3>One presented name, checked on chain</h3><p>An agent chooses the name it presents. It only counts when that name points back at the agent. Otherwise apps show the address.</p></div>
-            <div><h3>Claimed and changed at a Home</h3><p>This service only reads. A claim, a record change or a renewal is signed by the owner’s own account, at their Home.</p></div>
+            <div><h3>Bought and changed at a Home</h3><p>This service only reads. A name is bought from the owner’s treasury{t.fees ? ` — the town’s naming treasury holds ${t.fees.coins} ${t.fees.coin} so far` : ''}; a record change is signed by the owner’s own account, at their Home.</p></div>
           </section>
           <Stamped s={t} />
         </>

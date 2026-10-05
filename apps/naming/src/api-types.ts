@@ -17,8 +17,17 @@ export interface Banner { tone: 'warn' | 'info'; title: string; body: string }
 
 export interface EstateRef { id: string; home: string; naming: string }
 
+/** What a free name costs here (spec 431): whole coins, and the domain that protects the label, if any. */
+export interface NamePrice { coins: number; coin: string; protectedBy: string | null; dnsUnknown: boolean }
+/** What a registered name was bought for, when it was bought (read from the priced subregistry, never a log). */
+export interface Purchase { coins: number; coin: string; at: number }
+
 export interface RootView {
   tld: string;
+  /** Names under this root are purchased (a priced subregistry fronts it). */
+  priced: boolean;
+  /** The base price, in whole coins, for a label of 8+ characters — what the root page shows. */
+  baseCoins: number | null;
   /** What a name under this root is: 'a person', 'an organization', … or null for an untyped (legacy) root. */
   names: string | null;
   kind: PlaceKind;
@@ -33,6 +42,8 @@ export interface RootView {
 
 export interface TownView extends Stamp {
   estates: EstateRef[];
+  /** The town's naming treasury and what it holds (spec 431 §4) — null until names are purchased on this chain. */
+  fees: { treasury: Address; coin: string; coins: number } | null;
   roots: Array<RootView & { sample: NameRow[] }>;
   total: number;
 }
@@ -107,6 +118,10 @@ export interface NameView extends Stamp {
   } | null;
   /** For a free name: who could claim it and where. */
   availability: { by: string; rule: string } | null;
+  /** For a free name under a priced root: what it costs and whether a domain protects it. */
+  price: NamePrice | null;
+  /** For a registered name bought through the priced subregistry. */
+  purchase: Purchase | null;
   estates: EstateRef[];
 }
 
@@ -125,7 +140,7 @@ export interface AddressView extends Stamp {
   estates: EstateRef[];
 }
 
-export interface SearchRow { name: string; tld: string; names: string | null; kind: PlaceKind; status: 'registered' | 'available' | 'expired'; agent: Address | null; by: string }
+export interface SearchRow { name: string; tld: string; names: string | null; kind: PlaceKind; status: 'registered' | 'available' | 'expired'; agent: Address | null; by: string; coins: number | null }
 
 export type SearchView = Stamp & (
   | { kind: 'name'; name: string }

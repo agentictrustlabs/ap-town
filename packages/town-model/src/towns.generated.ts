@@ -61,7 +61,12 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
       "id": 34348,
       "generation": "1",
       "rpc": "https://rpc.faithnet.io",
-      "deployment": "faithchain"
+      "deployment": "faithchain",
+      "coin": {
+        "address": "0xa14E4a9447607c1233DcE34dB6Ead47C094f6141",
+        "symbol": "SHQ",
+        "decimals": 6
+      }
     },
     "estates": [
       {

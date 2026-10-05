@@ -33,7 +33,7 @@ function fakeCtx(): Ctx {
     if (fn === 'reverseResolveString') return '';
     throw new Error(`unexpected resolver read ${fn}`);
   };
-  const chain = { client: { getBlockNumber: async () => 7n }, reg, ur, sub: async () => '0x', subregistries: { me: SUB_ME }, open: new Set([SUB_ME]) } as unknown as Chain;
+  const chain = { client: { getBlockNumber: async () => 7n }, reg, ur, sub: async () => '0x', subregistries: { me: SUB_ME }, open: new Set([SUB_ME]), priced: {}, pricedSet: new Set(), coin: null, feeTreasury: null } as unknown as Chain;
   return { town: TOWNS.faithchain!, chain, listed: async () => null };
 }
 

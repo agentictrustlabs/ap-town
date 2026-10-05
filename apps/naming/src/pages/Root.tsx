@@ -41,7 +41,16 @@ export function Root({ tld }: { tld: string }): ReactNode {
             </nav>
           )}
         </section>
-        {p.root.open && <section><h2>Claim a .{p.root.tld} name</h2><AtYourHome estates={p.estates} verb={`Claiming a .${p.root.tld} name`} claim={{ label: '', tld: p.root.tld }} /></section>}
+        {p.root.priced && (
+          <section>
+            <h2>Buy a .{p.root.tld} name</h2>
+            <table className="table price-table"><thead><tr><th scope="col">Letters</th><th scope="col">Price</th></tr></thead><tbody>
+              {[['3', 4], ['4', 3], ['5', 2], ['6–7', 1.5], ['8 and up', 1]].map(([len, m]) => <tr key={String(len)}><td>{len}</td><td>{Math.min(49, Math.floor((p.root.baseCoins ?? 0) * Number(m)))} SHQ</td></tr>)}
+            </tbody></table>
+            <AtYourHome estates={p.estates} verb={`Buying a .${p.root.tld} name`} claim={{ label: '', tld: p.root.tld }} />
+          </section>
+        )}
+        {!p.root.priced && p.root.open && <section><h2>Claim a .{p.root.tld} name</h2><AtYourHome estates={p.estates} verb={`Claiming a .${p.root.tld} name`} claim={{ label: '', tld: p.root.tld }} /></section>}
         <Stamped s={p} />
       </>
     )}</Loading>

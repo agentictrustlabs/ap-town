@@ -31,11 +31,23 @@ function Free({ v }: { v: NameView }): ReactNode {
         </div>
       </section>
       <Banners banners={v.banners} />
+      {v.price && (
+        <section className="price">
+          <div className="price-tag"><span className="price-n">{v.price.coins}</span> <span className="price-coin">{v.price.coin}</span></div>
+          <div>
+            <p><strong>What it costs.</strong> Paid from the buyer’s treasury in the same signed operation that registers the name. Shorter names cost more; nothing costs 50. Once, never again: no rent, no resale.</p>
+            {v.price.protectedBy
+              ? <p className="price-domain"><strong>{v.name.split('.')[0]} is a domain.</strong> {v.price.protectedBy} exists, so this name belongs to whoever can receive mail there: the buyer’s Home must hold a verified email at {v.price.protectedBy}. Adding one is under the Home’s Security section.</p>
+              : v.price.dnsUnknown ? <p className="quiet">Whether a domain protects this label could not be checked just now; the Home checks again at purchase.</p>
+              : <p className="quiet">No domain protects this label ({v.name.split('.')[0]}.com and .org do not exist), so any agent of the right kind may buy it.</p>}
+          </div>
+        </section>
+      )}
       {v.availability && (
         <section>
-          <h2>Who could claim it</h2>
+          <h2>Who could {v.price ? 'buy' : 'claim'} it</h2>
           <p><strong>{v.availability.by.charAt(0).toUpperCase() + v.availability.by.slice(1)}.</strong> {v.availability.rule}</p>
-          {v.status === 'available' && v.form === 'canonical' && v.tld && <AtYourHome estates={v.estates} verb="Claiming a name" claim={{ label: v.name.split('.')[0]!, tld: v.tld }} />}
+          {v.status === 'available' && v.form === 'canonical' && v.tld && <AtYourHome estates={v.estates} verb={v.price ? `Buying a name for ${v.price.coins} ${v.price.coin}` : 'Claiming a name'} claim={{ label: v.name.split('.')[0]!, tld: v.tld }} />}
           {v.status === 'available' && v.form !== 'canonical' && <AtYourHome estates={v.estates} verb="Issuing a scoped name" />}
         </section>
       )}
@@ -56,6 +68,7 @@ function Profile({ v }: { v: NameView }): ReactNode {
         <dt>What it is</dt><dd>{v.declared?.agentType ? `The agent declares itself ${v.declared.noun ?? v.declared.agentType}${v.declared.serviceRole ? ` (role: ${v.declared.serviceRole})` : ''}.` : 'The agent has declared no type.'}</dd>
         {about && <><dt>About</dt><dd>{about.value}</dd></>}
         <dt>Points at</dt><dd>{v.agent ? <Addr address={v.agent} full /> : 'No agent.'}</dd>
+        {v.purchase && <><dt>Bought</dt><dd>for {v.purchase.coins} {v.purchase.coin} on {new Date(v.purchase.at * 1000).toISOString().slice(0, 10)}, from its treasury.</dd></>}
         <dt>Presented by the agent</dt><dd>{v.presentsThis ? 'Yes. This is the name the agent shows as its own.' : v.presented ? <>No. It presents <Link href={nameHref(v.presented)}>{v.presented}</Link>.</> : 'No. The agent presents no name.'}</dd>
         {endpoint && <><dt>Reach it at</dt><dd><a href={endpoint.value} rel="noreferrer" className="mono break">{endpoint.value}</a></dd></>}
         {card && <><dt>Agent card</dt><dd><a href={card.value} rel="noreferrer" className="mono break">{card.value}</a></dd></>}
