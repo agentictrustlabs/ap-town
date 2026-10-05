@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { parseTown, type TownManifest } from '../packages/town-model/src/index';
+import { parseTown, type TownManifest } from '../packages/town-model/src/core';
 
 export const ROOT = new URL('..', import.meta.url).pathname;
 

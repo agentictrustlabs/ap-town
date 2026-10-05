@@ -12,6 +12,7 @@ import { Hono } from 'hono';
 import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike, applyRelevanceCutoff, facetsOverMatches, parseUpstreamRegistries } from '@agenticprimitives/registry-kit/projection';
 import { ACP_REGISTRY_PATH, acpRegistry } from './acp.js';
 import { cors } from 'hono/cors';
+import { createStandardA2aServer, type AgentCardV1, type MessageV1, type PartV1 } from '@agenticprimitives/a2a/standard';
 import { keccak_256 } from '@noble/hashes/sha3.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
@@ -228,26 +229,68 @@ function independentEndorsementWeight(a: AgentResult, capabilityId: string, nowS
 
 app.get('/health', (c) => c.json({ ok: true, service: 'demo-discovery-a2a' }));
 
-app.get('/.well-known/agent-card.json', (c) => {
-  const origin = (c.env.A2A_PUBLIC_ORIGIN ?? new URL(c.req.url).origin).replace(/\/$/, '');
-  return c.json({
-    protocolVersion: '1.0',
-    name: 'Discovery Agent',
-    description: 'Finds the best Smart Agents for a stated need. Queries the AP discovery knowledge graph (agent-naming + on-chain facets) through the discovery MCP, ranks by relevance + verifiable trust, and returns candidates with an evidence path. Evolves into intent + mandate driven matching.',
+/** The registry's A2A card (spec 429 §6.2: the registry formalized). A2A 1.0: a version and a JSON-RPC interface at
+ *  `/a2a`, where a message is a search over this registry. The REST surface (ARD, ACP, /search, /discover) is unchanged. */
+const REGISTRY_CARD_VERSION = '1.1.0';
+function registryCard(env: Env, requestUrl: string): AgentCardV1 {
+  const origin = (env.A2A_PUBLIC_ORIGIN ?? new URL(requestUrl).origin).replace(/\/$/, '');
+  return {
+    name: env.AGENT_NAME ?? 'Discovery Agent',
+    description: 'Finds the best Smart Agents for a stated need. Queries the AP discovery knowledge graph (agent-naming + on-chain facets) through the discovery MCP, ranks by relevance + verifiable trust, and returns candidates with an evidence path. A listing is a fact, not a permission.',
+    version: REGISTRY_CARD_VERSION,
+    supportedInterfaces: [{ url: `${origin}/a2a`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' }],
     provider: { organization: 'Agentic Primitives — Discovery', url: origin },
     capabilities: { streaming: false, pushNotifications: false },
-    defaultInputModes: ['application/json'],
-    defaultOutputModes: ['application/json'],
+    defaultInputModes: ['text/plain', 'application/json'],
+    defaultOutputModes: ['text/plain', 'application/json'],
     skills: [
       {
         id: 'discover-agents',
         name: 'Discover agents',
-        description: 'Given a query (and, increasingly, an intent + mandate), return the best matching agents from the knowledge graph with relevance + trust evidence.',
+        description: 'Given a need in words, return the best matching agents from the knowledge graph with relevance + trust evidence (the ARD search, as a message).',
         tags: ['discovery', 'registry', 'intent-matching', 'knowledge-graph'],
-        examples: ['scripture provider', 'org agents in .impact', 'lbsb'],
+        examples: ['scripture provider', 'a translation service', 'field operations team'],
       },
     ],
+  };
+}
+
+app.get('/.well-known/agent-card.json', (c) => c.json(registryCard(c.env, c.req.url), 200, { 'cache-control': 'public, max-age=300', etag: `"registry-${REGISTRY_CARD_VERSION}"` }));
+app.get('/.well-known/agent.json', (c) => c.json(registryCard(c.env, c.req.url), 200, { 'cache-control': 'public, max-age=300' }));
+
+/** A message's need: a data part `{ query: { text } }` or `{ text }`, else the message's text. */
+export function needOf(message: MessageV1): string {
+  for (const p of message.parts) {
+    const d = p.data as { query?: { text?: unknown }; text?: unknown } | undefined;
+    const t = d?.query?.text ?? d?.text;
+    if (typeof t === 'string' && t.trim()) return t.trim();
+  }
+  return message.parts.map((p) => p.text ?? '').join(' ').trim();
+}
+
+// The registry over A2A: every message is a search, answered with a message (no task — nothing to follow up).
+app.post('/a2a', async (c) => {
+  const server = createStandardA2aServer({
+    card: registryCard(c.env, c.req.url),
+    canSeeTask: () => false,
+    executor: {
+      async execute(ctx) {
+        const need = needOf(ctx.message);
+        if (!need) { await ctx.reply([{ text: 'Say what you need — a topic, a capability, or both. A listing is a fact, not a permission.' }]); return; }
+        const res = await app.request('/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ query: { text: need } }) }, c.env);
+        const body = (await res.json()) as { results?: Array<Record<string, unknown>>; error?: unknown };
+        if (!res.ok) { await ctx.reply([{ text: `The search could not run: ${JSON.stringify(body.error ?? body).slice(0, 200)}` }]); return; }
+        const results = body.results ?? [];
+        const label = (r: Record<string, unknown>) => String(r.name ?? r.displayName ?? r.identifier ?? r.id ?? 'an agent');
+        const parts: PartV1[] = [
+          { text: results.length ? `${results.length} agent(s) for "${need}": ${results.slice(0, 5).map(label).join(', ')}${results.length > 5 ? ', …' : ''}. Relevance orders them; it is not trust, and a listing is not a permission.` : `No agent in this registry matches "${need}".` },
+          { data: body, mediaType: 'application/json' },
+        ];
+        await ctx.reply(parts);
+      },
+    },
   });
+  return server.handle(c.req.raw);
 });
 
 // Agentic-trust ontology IRIs (apdisc: discovery vocabulary). Results are typed as the ontology's own

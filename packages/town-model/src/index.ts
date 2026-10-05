@@ -1,3 +1,2 @@
-export * from './types';
-export * from './validate';
-export * from './generate';
+export * from './core';
+export { TOWNS } from './towns.generated';

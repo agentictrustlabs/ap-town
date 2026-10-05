@@ -7,6 +7,10 @@ chain:
   id: 34348
   generation: "1"
   rpc: https://rpc.faithnet.io
+  contracts:
+    nameRegistry: "0x60E949D52660A9D4143ecB0fdA56c0457f20aED9"
+    universalResolver: "0xF343054e046A4145ccae499ECB28197394eE0798"
+    profileResolver: "0xB03F7C06ad3274F584AB72794406D639c02A45e1"
 
 estates:
   - id: faithnet
@@ -31,6 +35,7 @@ services:
     repo: ap-town
     app: apps/registry
     worker: demo-discovery-a2a-faithnet
+    agentName: discovery.registry
     hosts: [discovery-a2a.faithnet.io]
     probe: https://discovery-a2a.faithnet.io/health
     card: https://discovery-a2a.faithnet.io/.well-known/agent-card.json
@@ -65,6 +70,15 @@ services:
     hosts: [discovery.faithnet.io]
     probe: https://discovery.faithnet.io/
     description: The discovery explorer. Becomes the portal's Find area (R3).
+  - id: town-agent
+    kind: commons
+    repo: ap-town
+    app: apps/town-agent
+    worker: faithchain-town-agent
+    hosts: [town.faithnet.io]
+    probe: https://town.faithnet.io/health
+    card: https://town.faithnet.io/.well-known/agent-card.json
+    description: The town's own agent — what this town offers and whether each service is up. Lists; never grants.
   - id: chain-gateway
     kind: commons
     repo: ap-town

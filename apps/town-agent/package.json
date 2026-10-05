@@ -1,0 +1,23 @@
+{
+  "name": "@ap-town/town-agent",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The town agent (spec 429 §2.2, R2): an A2A agent that answers \"what does this town offer, and is it healthy?\" from the town manifest and live probes — listed · healthy · compatible, never a score and never \"authorized\". Public, read-only, no key.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "deploy:faithnet": "wrangler deploy --env faithnet"
+  },
+  "dependencies": {
+    "@agenticprimitives/a2a": "0.0.0-alpha.25",
+    "@ap-town/town-model": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260605.1",
+    "typescript": "5.7.3",
+    "vitest": "4.1.8",
+    "wrangler": "4.93.0"
+  }
+}

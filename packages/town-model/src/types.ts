@@ -12,6 +12,12 @@ export interface TownChain {
   generation: string;
   /** The chain's public RPC as the town serves it (the chain gateway). */
   rpc: string;
+  /** Public contract addresses the town's services read (naming, profile). Facts anyone can read from the chain. */
+  contracts?: {
+    nameRegistry?: string;
+    universalResolver?: string;
+    profileResolver?: string;
+  };
 }
 
 /** An estate is a resident of the town: a Home, its edge and runtime, on this chain. It is never deployed from here. */
@@ -34,6 +40,8 @@ export interface TownEstate {
 
 export interface TownService {
   id: string;
+  /** The service's own agent name, when it is an agent (e.g. `discovery.registry`). Generated into its config. */
+  agentName?: string;
   kind: ServiceKind;
   /** The repository that deploys it: `ap-town` for the town's own apps, `<owner>/<repo>` otherwise. */
   repo: string;

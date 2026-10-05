@@ -6,7 +6,7 @@
 import { readdirSync, existsSync, readFileSync, writeFileSync, mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { declaredLaneWorkers } from '../packages/town-model/src/index';
+import { declaredLaneWorkers } from '../packages/town-model/src/core';
 import { loadTowns, ROOT } from './load-towns';
 import { wranglerFacts } from './wrangler-facts';
 

@@ -1,0 +1,19 @@
+# The town agent (spec 429 §2.2). Public, read-only, keyless: it answers from the town manifest and live probes.
+name = "town-agent"
+main = "src/index.ts"
+compatibility_date = "2026-06-01"
+
+[vars]
+TOWN = "faithchain"
+PUBLIC_ORIGIN = "http://localhost:8787"
+
+[env.faithnet]
+name = "faithchain-town-agent"
+
+[[env.faithnet.routes]]
+pattern = "town.faithnet.io"
+custom_domain = true
+
+[env.faithnet.vars]
+TOWN = "faithchain"
+PUBLIC_ORIGIN = "https://town.faithnet.io"
