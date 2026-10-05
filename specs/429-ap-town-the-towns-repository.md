@@ -1,6 +1,6 @@
 # Spec 429 — ap-town: the services a chain's estates share
 
-**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. R1 in progress.
+**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. **R1 done 2026-10-05:** every moved Worker deployed from ap-town and verified live; ap-discovery archived; ap-home #5 removed `apps/rpc-gateway`. Next: R1b.
 **Owner's brief (2026-10-05):** ap-home is for the Home and the estate. ap-town is for central services that rely on a
 single chain and can have many estates running on it. Bring the service applications into ap-town, except skills.
 Skills is an external central service that is part of the town. The UX leverages the town model built for the field
