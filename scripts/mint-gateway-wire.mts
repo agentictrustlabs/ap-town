@@ -5,7 +5,7 @@
  *
  *   npx tsx scripts/mint-gateway-wire.mts [days=365]     (reads demo/gateway.faithnet.json + .env.gateway.local)
  *
- * Writes GATEWAY_AGENT and GATEWAY_SESSION_WIRE (base64url JSON) into apps/demo-discovery-connector/.env.gateway.local.
+ * Writes GATEWAY_AGENT and GATEWAY_SESSION_WIRE (base64url JSON) into apps/discovery-connector/.env.gateway.local.
  */
 import { hashDelegation, type Delegation } from '@agenticprimitives/delegation';
 import { skillSelector } from '@agenticprimitives/a2a';
@@ -18,7 +18,7 @@ const CHAIN = 34348;
 const DM = '0x710cb1bF08C234Df397e0910331e0A29710EF4F7' as Address;
 const TIMESTAMP = '0x73A7B878168b7DE48677617179A8bE894f0Dfe96' as Address;
 const ALLOWED_METHODS = '0xdBb2E47793393C499efB0f3fcbf6Ca8669791a41' as Address;
-const ENV = 'apps/demo-discovery-connector/.env.gateway.local';
+const ENV = 'apps/discovery-connector/.env.gateway.local';
 const DAYS = Number(process.argv[2] ?? 365);
 const j = async (r: Response) => { const t = await r.text(); try { return JSON.parse(t); } catch { return { _raw: t.slice(0, 250) }; } };
 const note = JSON.parse(readFileSync('demo/gateway.faithnet.json', 'utf8')) as { service: { name: string; sa: Address } };

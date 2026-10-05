@@ -1,4 +1,4 @@
-# ap-discovery — agent instructions
+# ap-town — agent instructions
 
 Binding rules for every AI coding assistant working in this repository. The rules below are PROJECTED from the
 pinned source (`agentic.lock.json#rules`) by `ap doctor --rules --write`; do not edit the managed block, and do not
@@ -6,9 +6,9 @@ restate a rule in your own words (ADR-0063 §8).
 
 ## Start here
 
-1. `CLAUDE.md` — the repository guide.
+1. `CLAUDE.md` — the repository guide, and `specs/429-ap-town-the-towns-repository.md` — the charter.
 2. `DEPLOYER.md` — which repository deploys which environment; never deploy a live env this repo does not own.
-3. `agentic.lock.json` — the coherent `@agenticprimitives/*` set; change it only through `ap upgrade`.
+3. `towns/<chain>/town.yaml` — the town; `agentic.lock.json` — the coherent `@agenticprimitives/*` set.
 
 ## Always-on rules
 

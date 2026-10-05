@@ -1,40 +1,53 @@
-# ap-discovery
+# ap-town
 
-A product repository on published `@agenticprimitives/*` packages, generated from the Developer Kit's
-`product-repo` template (spec 399 §3.6, revision 2026-09-16.1) by `@agenticprimitives/create-app`
-0.0.0-alpha.9. Ring 0 (`agenticprimitives`) keeps the packages, the contracts and the kit; this repository
-owns its UX, its runtime (Workers, Durable Objects, bindings, wrangler configs, secrets), its ops scripts, its
-live gates, its product specs and its white-label config (ADR-0063 §2).
+**The services a chain's estates share.** A town is one chain, every estate on it, and the services they all use:
+the registry and the public graph, naming, chain access, and the portal that shows the town. Nothing in a town grants
+anything — a name resolves, a registry lists, the graph holds what the chain can prove — so an estate's authority
+stays in the estate. See [spec 429](specs/429-ap-town-the-towns-repository.md) and the four scales on
+[agenticprimitives.dev](https://agenticprimitives.dev/architecture/scales).
+
+| Scale | Repository |
+| --- | --- |
+| Substrate | [`agenticprimitives`](https://github.com/agentictrustlabs/agenticprimitives) — packages, contracts, the Developer Kit |
+| Estate | [`ap-home`](https://github.com/agentictrustlabs/ap-home) — the Home and Faithnet |
+| **Town** | **`ap-town`** — this repository |
+| Federation | `ap-federation` — towns on different chains (next) |
+
+## The faithchain town
+
+Described in one file, [`towns/faithchain/town.yaml`](towns/faithchain/town.yaml):
+
+| Service | Where | Host |
+| --- | --- | --- |
+| Registry (`discovery.registry`, ARD, ACP, search) | `apps/registry` | `discovery-a2a.faithnet.io` |
+| Public graph reader | `apps/discovery-mcp` | service binding |
+| Public graph writer (the only one) | `apps/discovery-indexer` | cron |
+| Connector for external assistants | `apps/discovery-connector` | `discovery-connector.faithnet.io` |
+| Discovery explorer | `apps/discovery-web` | `discovery.faithnet.io` |
+| Chain access | `apps/chain-gateway` | `rpc.faithnet.io` |
+| Skills | [`skills`](https://github.com/agentictrustlabs/skills) | `skills.faithnet.io` |
+| Key custody (AKCS) | `faithkms` | `akcs-pilot.faithnet.io` |
+| Game Night | `pokernight` | `gamenight.faithnet.io` |
+
+Estates: **Faithnet** ([`ap-home`](https://github.com/agentictrustlabs/ap-home)). The Base Sepolia demo town is in
+[`towns/base-sepolia`](towns/base-sepolia/town.yaml).
 
 ## Layout
 
-| Path | What lives there |
+| Path | What |
 | --- | --- |
-| `apps/*` | the product's deployables — each with its own `wrangler.toml` (see `wrangler.example.toml` for the env layout) |
-| `examples/*` | relying-app demonstrations of the product's ceremonies; each builds against published packages or is retired |
-| `scripts/` | ops scripts that operate THIS product's deployments (`set-cloudflare-secrets.sh`, provisioning, verify scripts) |
-| `live-gates.json` | the live-gates ledger (spec 392 shape) the nightly runs through `ap test --live-gates` |
-| `agentic.lock.json` | the coherent `@agenticprimitives/*` set, the rules-source digests, the doctor config |
-| `AGENTS.md`, `CLAUDE.md`, `.cursor/rules/` | projected from the pinned rules source — regenerate with `ap doctor --rules --write`, never edit the managed block |
-| `DEPLOYER.md` | which repository deploys which Worker, and in which environment — one line per app |
+| `apps/*` | the town's deployables, each with its own `wrangler.toml` |
+| `packages/town-model` | the manifest schema, validator, the four signals, the generators |
+| `towns/<chain>/` | one town per chain: `town.yaml` |
+| `checks/` | `check:town`, `check:no-estate-binding`, `check:no-vector-over-vault` |
+| `specs/` | the charter and the town's specs |
 
 ## Commands
 
 ```
 pnpm install
-pnpm doctor                     # ap doctor — the doctrine rules over this tree
-pnpm doctor:rules               # drift between the projected rules and the pinned source
-pnpm upgrade:canary             # newest canary of every pin, one coherent set, then doctor
-pnpm upgrade:pin 1.0.0-alpha.24 # or one named version / dist-tag
-pnpm live-gates                 # the ledger against HOME_URL (nightly in CI)
-pnpm conform:a2a https://…      # A2A 1.0 conformance of a deployment
-pnpm conform:mcp https://…      # MCP conformance of a deployment
+pnpm check            # typecheck · tests · the town checks · ap doctor
+pnpm doctor:rules     # drift between projected rules and the pinned source
 ```
 
-## Rules that bind every change
-
-- Every `@agenticprimitives/*` dependency is an exact published version; the set is coherent (`lock-coherent`).
-- Doctrine is projected, never restated: `AGENTS.md` / `CLAUDE.md` managed blocks and `.cursor/rules/*.mdc` come
-  from the pinned source by digest (`rules-drift`). A product repo may not paraphrase a rule.
-- A shadow environment (`<env>-split`) is where this repo deploys during a parallel run; the live environment
-  changes hands only at the announced cut (spec 399 §5.3). Worker names, DO bindings and migration tags never change.
+Every `@agenticprimitives/*` dependency is an exact published version (`agentic.lock.json`).

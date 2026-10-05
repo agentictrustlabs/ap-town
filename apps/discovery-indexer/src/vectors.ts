@@ -10,7 +10,7 @@
 import type { AgentNode } from './store.js';
 import { PREDICATE } from './ontology.js';
 
-/** MUST equal `demo-discovery-mcp/src/retrieve.ts` `EMBEDDING_MODEL`; each vector records it, and the reader drops any
+/** MUST equal `discovery-mcp/src/retrieve.ts` `EMBEDDING_MODEL`; each vector records it, and the reader drops any
  *  vector whose model differs rather than scoring it against a query embedded by another. */
 export const EMBEDDING_MODEL = '@cf/baai/bge-base-en-v1.5';
 export const EMBEDDING_DIMENSIONS = 768;

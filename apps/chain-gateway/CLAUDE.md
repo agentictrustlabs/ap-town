@@ -20,4 +20,4 @@ The node / VM / tunnel / access layer (the origin side), token issuance tooling,
 `scripts/deploy-cloudflare.ts` (Base Sepolia demo stack).
 
 ## Validate
-`pnpm check:chain-rpc-gateway` (typecheck + test), then `WRANGLER_ENV=<env> pnpm --filter @ap-home/rpc-gateway run deploy`.
+`pnpm --filter @ap-town/chain-gateway typecheck && … test`, then `WRANGLER_ENV=<env> pnpm --filter @ap-town/chain-gateway run deploy`.

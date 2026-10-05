@@ -1,6 +1,6 @@
 # Spec 429 — ap-town: the services a chain's estates share
 
-**Status:** Draft, 2026-10-05. Release R0 (inventory and charter). Nothing has moved yet.
+**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. R1 in progress.
 **Owner's brief (2026-10-05):** ap-home is for the Home and the estate. ap-town is for central services that rely on a
 single chain and can have many estates running on it. Bring the service applications into ap-town, except skills.
 Skills is an external central service that is part of the town. The UX leverages the town model built for the field
@@ -83,13 +83,31 @@ F4 fix.
 | Service | Repo | Why it stays out | What the manifest records |
 | --- | --- | --- | --- |
 | **Skills** (`skills-a2a`, `skills-mcp`, `skills-corpus`, `skills-ontology`, `skills-web` at `skills.faithnet.io`) | `~/skills` | Owner's decision: skills is an external central service, part of the town but deployed from its own repo. | `kind: commons`, `repo: agentictrustlabs/skills`, hosts, card, probe, the registry it operates (playbooks pinned by digest). |
-| **KMS** (AKCS, `akcs-pilot.faithnet.io`) | `~/faithkms` | A Rust service on Azure with its own posture and audit; not a Worker. | `kind: commons`, a tenant per estate, the known finding (shared caller token) carried as an open operations item. |
+| **KMS** (AKCS, `akcs-pilot.faithnet.io`) | `~/faithkms` | The custody root, kept a separate trust boundary (§2.4). | `kind: commons`, a tenant per estate, the known finding (shared caller token) carried as an open operations item. |
 | **Estates** (Faithnet; impact) | `ap-home`; `ap-demos` | They are the residents, not the town. | `estates[]`: name roots, Home, edge, a2a, KMS tenant, contract generation. |
 | **Game Night** | `~/pokernight` | An application, not an estate and not a commons service. Its house identity is custodied by a Faithnet persona. | `kind: application`, hosts (`gamenight.`, `games.`, `agents.faithnet.io`), house SA. |
 | **Field, Gather27, Coach** | `~/engage` | Applications and agent services of their own domain. | `kind: application` / `agent-service`, the domain pack they bring. |
 | `demo-publications`, `demo-resolver` | `ap-demos` | Private resolution is per organization by design (spec 338), not a town registry. | Not listed. |
 
-### 2.4 What does not move
+### 2.4 Why the KMS stays its own repository
+
+The owner asked why faithkms is not brought in. It is listed in the town and stays its own repository, for reasons
+that are about custody, not tidiness:
+
+- **Blast radius of CI.** faithkms deploys to Azure (Bicep, `deploy-azure.yml`) with an identity that can touch the
+  HSM-backed root keys. ap-town's CI deploys Cloudflare Workers that serve public data. In one repository, any town
+  PR's workflow change sits one review away from the custody deploy identity and its environment secrets.
+- **A different audit perimeter.** AKCS carries its own `SECURITY.md`, `CODEOWNERS`, `deny.toml`, cargo-audit and
+  `security.yml`. An auditor reviewing key custody should get a repository that is only key custody.
+- **A different toolchain and release cadence.** Rust + Postgres + an attested confidential VM vs TypeScript Workers on
+  npm pins. One CI would carry both, and a red in either blocks the other.
+- **It outlives one town.** AKCS is tenant-per-estate today and is designed to serve several towns. A town on Base
+  would use the same service, so it belongs beside the towns, not inside one of them.
+
+Being in the town is a manifest row (`towns/faithchain/town.yaml` → `kms`), with its probe (`/healthz`) on the
+portal. That is all the town needs from it.
+
+### 2.5 What does not move
 
 The Home, the agent runtime, the vault, the edge and Home MCP stay in ap-home. The naming *cards* inside the Home
 (`ClaimPublicNameCard`, `ChangeNameCard`, `RequiredNameGate`) stay too: they are an owner claiming a name from their own
@@ -335,7 +353,7 @@ NANDA integration comes after R5, in a sibling repo.
 | TOWN-011 | Service onboarding: `services/*.yaml`, `check:town-manifest`; list skills, KMS, Game Night, field | R3 |
 | TOWN-012 | Executors resolved through the town for Field Rails | R4 |
 
-## 12. Open questions for the owner
+## 12. Decisions taken at R0 (owner, 2026-10-05: the recommendations)
 
 1. **GitHub visibility.** ap-home is public, ap-discovery is private. Recommendation: **public**, like ap-home. The town
    serves only public data, and the site already describes it.

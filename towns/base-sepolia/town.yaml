@@ -1,0 +1,39 @@
+# The Base Sepolia demo town (spec 429 §12.3): the impact demos' estate and the discovery services' default envs.
+# The same code as faithchain, carried here so it is not copied back into ap-demos.
+town: base-sepolia
+status: demo
+chain:
+  id: 84532
+  generation: "1"
+  rpc: https://sepolia.base.org
+
+estates:
+  - id: impact
+    repo: agentictrustlabs/ap-demos
+    home: https://www.impact-agent.me
+    edge: https://edge.impact-agent.io
+    a2a: https://a2a.impact-agent.io
+    nameRoots: [impact, agent]
+
+services:
+  - id: registry
+    kind: commons
+    repo: ap-town
+    app: apps/registry
+    worker: demo-discovery-a2a
+    hosts: []
+    description: The demo town's registry (default env of apps/registry).
+  - id: discovery-mcp
+    kind: commons
+    repo: ap-town
+    app: apps/discovery-mcp
+    worker: demo-discovery-mcp
+    hosts: []
+    description: The demo town's graph reader.
+  - id: discovery-indexer
+    kind: commons
+    repo: ap-town
+    app: apps/discovery-indexer
+    worker: demo-discovery-indexer
+    hosts: []
+    description: The demo town's graph writer.

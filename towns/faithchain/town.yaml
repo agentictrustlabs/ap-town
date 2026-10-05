@@ -1,0 +1,94 @@
+# The faithchain town (spec 429). One chain; every estate on it; the services they share.
+# Every town app, check and generator reads THIS file (packages/town-model). Nothing in it grants anything (D2):
+# a row says a service is listed — whether anyone may use it is their own delegation's question.
+town: faithchain
+status: live
+chain:
+  id: 34348
+  generation: "1"
+  rpc: https://rpc.faithnet.io
+
+estates:
+  - id: faithnet
+    repo: agentictrustlabs/ap-home
+    home: https://www.faithnet.me
+    edge: https://edge.faithnet.io
+    a2a: https://a2a.faithnet.io
+    # Same Cloudflare account as the town Workers: its public lane is reached through these Workers (CF-1042).
+    lanes:
+      edge.faithnet.io: demo-edge-faithnet
+      "*.faithnet.ai": demo-a2a-faithnet
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle, impact]
+    kms: { tenant: faithnet }
+
+services:
+  # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
+  - id: registry
+    kind: commons
+    repo: ap-town
+    app: apps/registry
+    worker: demo-discovery-a2a-faithnet
+    hosts: [discovery-a2a.faithnet.io]
+    probe: https://discovery-a2a.faithnet.io/health
+    card: https://discovery-a2a.faithnet.io/.well-known/agent-card.json
+    description: The town's registry — the discovery.registry agent, its ARD document, ACP registry and search.
+  - id: discovery-mcp
+    kind: commons
+    repo: ap-town
+    app: apps/discovery-mcp
+    worker: demo-discovery-mcp-faithnet
+    hosts: []
+    description: Reads the public graph and the retrieval index for the registry. Reachable only by service binding.
+  - id: discovery-indexer
+    kind: commons
+    repo: ap-town
+    app: apps/discovery-indexer
+    worker: demo-discovery-indexer-faithnet
+    hosts: []
+    description: The only writer of the public graph and the retrieval index; crawls every estate's name roots.
+  - id: discovery-connector
+    kind: commons
+    repo: ap-town
+    app: apps/discovery-connector
+    worker: demo-discovery-connector-faithnet
+    hosts: [discovery-connector.faithnet.io]
+    probe: https://discovery-connector.faithnet.io/health
+    description: Public read-only MCP for external assistants, over the registry's search.
+  - id: discovery-web
+    kind: commons
+    repo: ap-town
+    app: apps/discovery-web
+    worker: demo-discovery-web-faithnet
+    hosts: [discovery.faithnet.io]
+    probe: https://discovery.faithnet.io/
+    description: The discovery explorer. Becomes the portal's Find area (R3).
+  - id: chain-gateway
+    kind: commons
+    repo: ap-town
+    app: apps/chain-gateway
+    worker: faithchain-rpc-gateway
+    hosts: [rpc.faithnet.io]
+    description: Chain access — per-app tokens, method allow-list, rate limits — in front of the faithchain node.
+
+  # ── Commons deployed from their own repositories ──────────────────────────────────────────────────────────
+  - id: skills
+    kind: commons
+    repo: agentictrustlabs/skills
+    hosts: [skills.faithnet.io]
+    probe: https://skills.faithnet.io/
+    description: The skills registry — SKILL.md contracts and playbooks, pinned by digest.
+  - id: kms
+    kind: commons
+    repo: agentictrustlabs/faithkms
+    hosts: [akcs-pilot.faithnet.io]
+    probe: https://akcs-pilot.faithnet.io/healthz
+    description: Key custody (AKCS) — a tenant per estate; keys are delegates, never identities.
+
+  # ── Applications ──────────────────────────────────────────────────────────────────────────────────────────
+  - id: gamenight
+    kind: application
+    repo: agentictrustlabs/pokernight
+    hosts: [gamenight.faithnet.io, games.faithnet.io, agents.faithnet.io]
+    probe: https://gamenight.faithnet.io/
+    estates: [faithnet]
+    description: Game Night — people and agents at the same tables, including Field Operations.

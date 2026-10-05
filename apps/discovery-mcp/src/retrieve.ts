@@ -21,7 +21,7 @@ export interface VectorIndex {
   query(vector: number[], opts: { topK: number; returnMetadata?: 'all' | 'indexed' | 'none'; filter?: Record<string, unknown> }): Promise<{ matches: Array<{ id: string; score: number; metadata?: Record<string, unknown> }> }>;
 }
 
-/** The embedding model the index was built with. MUST equal the indexer's (`demo-discovery-indexer/src/vectors.ts`);
+/** The embedding model the index was built with. MUST equal the indexer's (`discovery-indexer/src/vectors.ts`);
  *  every vector carries the model in its metadata, and a vector from another model is dropped and counted, never scored
  *  against a query it cannot be compared with. */
 export const EMBEDDING_MODEL = '@cf/baai/bge-base-en-v1.5';

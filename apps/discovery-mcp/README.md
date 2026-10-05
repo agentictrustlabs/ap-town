@@ -19,8 +19,8 @@ service. Admin operations route through the custodian, not ambient operator keys
 
 ## Run / deploy
 ```bash
-pnpm --filter @agenticprimitives-demo/discovery-mcp dev      # local (port 8790)
-pnpm --filter @agenticprimitives-demo/discovery-mcp deploy   # → workers.dev
+pnpm --filter @ap-town/discovery-mcp dev      # local (port 8790)
+pnpm --filter @ap-town/discovery-mcp deploy   # → workers.dev
 wrangler secret put GRAPHDB_USER ; wrangler secret put GRAPHDB_PASSWORD
 ```
 Live: https://demo-discovery-mcp.richardpedersen3.workers.dev

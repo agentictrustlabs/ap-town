@@ -1,5 +1,5 @@
 {
-  "name": "@agenticprimitives-demo/discovery-connector",
+  "name": "@ap-town/discovery-connector",
   "version": "0.0.1-alpha.6",
   "private": true,
   "description": "Discovery connector (spec 386): a thin, public, read-only Streamable HTTP MCP server that lets an external assistant find a registered ministry through the ARD registry and go to it directly. A registry client — never a runtime, never a content connector.",

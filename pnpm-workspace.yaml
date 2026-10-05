@@ -3,4 +3,5 @@
 # never a workspace alias, never a fork (ADR-0037 / ADR-0063 §2). `ap doctor` (lock-coherent) refuses otherwise.
 packages:
   - 'apps/*'
+  - 'packages/*'
   - 'examples/*'

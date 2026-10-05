@@ -21,6 +21,8 @@ jobs:
       - run: pnpm install --no-frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm test
+      - name: town checks (spec 429)
+        run: pnpm check:town && pnpm check:no-estate-binding && pnpm check:no-vector-over-vault
       - name: ap doctor
         run: pnpm exec ap doctor --json > doctor-report.json || (cat doctor-report.json; exit 1)
       - name: ap doctor --rules (projection drift)

@@ -1,8 +1,8 @@
 # Discovery A2A Architecture and Design
 
 **Status:** design guidance.
-**Scope:** `apps/demo-discovery-a2a` as the UI-facing discovery agent over `demo-discovery-mcp` and the GraphDB A-box.
-**Related:** [`README.md`](../README.md), [`demo-discovery-mcp`](../../demo-discovery-mcp/README.md), [`discovery-knowledge-graph-architecture.md`](../../../docs/architecture/discovery-knowledge-graph-architecture.md), [`spec 279`](../../../specs/279-agent-discovery-registry-kit.md).
+**Scope:** `apps/registry` as the UI-facing discovery agent over `demo-discovery-mcp` and the GraphDB A-box.
+**Related:** [`README.md`](../README.md), [`discovery-mcp`](../../discovery-mcp/README.md), [`discovery-knowledge-graph-architecture.md`](../../../docs/architecture/discovery-knowledge-graph-architecture.md), [`spec 279`](../../../specs/279-agent-discovery-registry-kit.md).
 
 ## Decision
 

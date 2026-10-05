@@ -24,8 +24,8 @@ node → upsert to the store (JSON-LD file | GraphDB SPARQL). Add a source = dro
 ## Run
 ```bash
 cp .env.example .env   # fill GRAPHDB_USER / GRAPHDB_PASSWORD (gitignored)
-pnpm --filter @agenticprimitives-demo/discovery-indexer index           # enumerate → A-box
-pnpm --filter @agenticprimitives-demo/discovery-indexer load-ontology    # load T-box + C-box into GraphDB
+pnpm --filter @ap-town/discovery-indexer index           # enumerate → A-box
+pnpm --filter @ap-town/discovery-indexer load-ontology    # load T-box + C-box into GraphDB
 ```
 Verified vs Base Sepolia + GraphDB: 16 `.impact` agents (incl. `lbsb`/`fbsb`) + the full ontology
 (94 `owl:Class`, 11 `sh:NodeShape`) in the `smart-agents` repo.

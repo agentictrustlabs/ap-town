@@ -43,8 +43,8 @@ simple = { limit = 60, period = 60 }
 # A different account: no service binding can reach the faithnet registry, so this instance reads it over its
 # public origin (the ard-client's plain-fetch path — one mechanism, no fallback). Deploy with that account's
 # API token in the environment (never the gmail OAuth login):
-#   set -a; source apps/demo-discovery-connector/.env.richcanvas.local; set +a
-#   pnpm --filter @agenticprimitives-demo/discovery-connector exec wrangler deploy --env richcanvas
+#   set -a; source apps/discovery-connector/.env.richcanvas.local; set +a
+#   pnpm --filter @ap-town/discovery-connector exec wrangler deploy --env richcanvas
 # The file holds CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID for that account and is gitignored.
 # Custom domain: add a [[env.richcanvas.routes]] entry once a zone on that account is chosen (global.church?);
 # until then the Worker answers on its workers.dev hostname.

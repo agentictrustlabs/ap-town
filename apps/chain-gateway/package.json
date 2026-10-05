@@ -1,5 +1,5 @@
 {
-  "name": "@ap-home/rpc-gateway",
+  "name": "@ap-town/chain-gateway",
   "version": "0.0.1",
   "private": true,
   "description": "Chain RPC gateway Worker: per-app tokens (Bearer or ?k=), JSON-RPC method allow-list, per-app rate limit (Durable Object), read cache, optional eth_estimateGas gas-cap injection, forward to a private origin. Deployed infra (apps/*), not a Ring-0 primitive.",

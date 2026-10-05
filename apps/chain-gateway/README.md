@@ -51,9 +51,9 @@ The bare `name` at the top of `wrangler.toml` exists for `wrangler dev` only; `p
 to run without `WRANGLER_ENV`, so a second Worker cannot be published by accident.
 
 ```bash
-pnpm --filter @ap-home/rpc-gateway typecheck
-pnpm --filter @ap-home/rpc-gateway test
-WRANGLER_ENV=<env> pnpm --filter @ap-home/rpc-gateway run deploy
+pnpm --filter @ap-town/chain-gateway typecheck
+pnpm --filter @ap-town/chain-gateway test
+WRANGLER_ENV=<env> pnpm --filter @ap-town/chain-gateway run deploy
 ```
 
 Smoke after a deploy (with an issued read token, `$GW` = the env's custom domain):

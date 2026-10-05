@@ -222,7 +222,7 @@ export async function runKbConstruct(env: Env, query: string): Promise<KbGraphRe
 // reproducible tokens — sha256(lower(credential)|lower(smartAgent)) — into a private named graph. We answer
 // "does this viewer's credential control that agent?" by recomputing the token and asking whether it EXISTS
 // (exact-match only — never an enumeration, never an agent→custodian edge). MUST hash identically to
-// demo-discovery-indexer/src/custody.ts.
+// discovery-indexer/src/custody.ts.
 const CUSTODY_GRAPH = 'urn:ap:custody';
 const CUSTODY_MEMBER_CLASS = 'https://agenticprimitives.dev/ns/core#CustodyMember';
 

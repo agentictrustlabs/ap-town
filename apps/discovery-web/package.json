@@ -1,5 +1,5 @@
 {
-  "name": "@agenticprimitives-demo/discovery",
+  "name": "@ap-town/discovery-web",
   "version": "0.0.1-alpha.15",
   "private": true,
   "description": "Discovery reference UI (demo-discovery): a fixture-driven explorer for the AP-native registry kit (spec 279). Public agent search + per-agent EVIDENCE PATH (signed-card binding, registry entry, claims, SHACL status, cited public facts) verified live in the browser with @agenticprimitives/registry-kit + agent-profile, plus an admin-only ap:abox:pentest exposure-findings view. Demo only — fixture A-box; the production explorer + GraphDB indexer live in external repos (ADR-0037).",

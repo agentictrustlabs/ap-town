@@ -1,29 +1,36 @@
-# ap-discovery — Claude guide
+# ap-town — Claude guide
 
-A product repository on published `@agenticprimitives/*` packages (ADR-0063; spec 399). Generated from the
-`product-repo` template (2026-09-16.1). This repo owns its apps, runtime, ops scripts, live gates, product
-specs and white-label config; Ring 0 owns the packages and the doctrine.
+The services every estate on ONE chain shares (spec 429): the registry and the public graph (discovery), chain
+access, and — next — naming, the town agent and the Town portal. A product repository on published
+`@agenticprimitives/*` packages (ADR-0063). The estates themselves (Home, runtime, vault, edge) live in `ap-home`
+(Faithnet) and `ap-demos` (impact); skills (`agentictrustlabs/skills`), the KMS (`faithkms`), Game Night
+(`pokernight`) and the field apps (`engage`) deploy from their own repos and are LISTED here, never moved here.
+
+## Start here
+
+- `specs/429-ap-town-the-towns-repository.md` — the charter: what is in the town, what is referenced, the releases.
+- `towns/<chain>/town.yaml` — the one description of a town; every app, check and generator reads it (`packages/town-model`).
+- `DEPLOYER.md` — which Worker this repo deploys, in which env. Worker names, hosts, DO classes and migration tags never change in a move.
 
 ## Hard rules (this repository)
 
-- **Exact pins, one coherent set.** Every `@agenticprimitives/*` dependency is an exact published version from
-  `agentic.lock.json#packages`; move them only with `ap upgrade --canary | --pin`. Never a workspace alias, never a fork.
-- **Doctrine is projected, never restated.** The managed block below and `.cursor/rules/*.mdc` are generated
-  from the pinned source; `ap doctor` (`rules-drift`) fails on any edit.
-- **No new app-resident primitive.** Anything a second product would need is a package API in Ring 0 (spec 399 §4).
-- **Shadow first.** This repo deploys `<env>-split` during the parallel run; a live env changes hands only in the
-  announced cut PR (`DEPLOYER.md`). Worker names, DO bindings and migration tags never change.
-- **Web → A2A, never MCP** (ADR-0044); **the vault is the record** (ADR-0055); **no silent fallbacks** (ADR-0013).
-
-## Ask the Developer MCP, don't guess
-
-`.mcp.json` (Claude Code) and `.cursor/mcp.json` register `ap mcp` — the READ-ONLY Developer MCP (spec 398 §10.4):
-`package_exports`, `ontology_term`, `contract_deployments`, `recipes`, `doctor`. Query it for an export name or an
-ontology IRI rather than guessing. It is not the runtime MCP and not the Home MCP; it holds no key and reads no vault.
+- **Nothing in the town grants (D2).** A name resolves, a registry lists, the graph holds what the chain proves, the
+  portal shows. No ap-town app holds a delegation, a session key or a mandate, or writes on anyone's behalf.
+- **No estate is privileged.** A town Worker binds only town Workers or an estate lane the manifest declares
+  (`pnpm check:no-estate-binding`). A second estate is a manifest edit, never a code edit.
+- **The public graph holds only chain-derivable facts** (ADR-0040); the indexer is its only writer; no Worker binds a
+  vector index beside a vault (`pnpm check:no-vector-over-vault`).
+- **Four signals, never a score (D7):** listed · healthy · compatible — and "authorized" is the caller's own delegation.
+- **Exact pins, one coherent set** (`agentic.lock.json`); doctrine is projected, never restated (`ap doctor --rules`).
 
 ## Validate
 
-`pnpm check` (typecheck + tests + `ap doctor`) · `pnpm doctor:rules` · `pnpm live-gates` (needs `HOME_URL`).
+`pnpm check` (typecheck · tests · `check:town` · `check:no-estate-binding` · `check:no-vector-over-vault` · `ap doctor`).
+
+## Deploy
+
+Per app, from its directory: `npx wrangler deploy --env faithnet` (the chain gateway: `WRANGLER_ENV=faithnet pnpm run deploy`;
+discovery-web: `pnpm deploy:faithnet`, which builds first). Never deploy a bare top-level env by accident of a missing `--env`.
 
 ## Binding rules (projected)
 

@@ -37,11 +37,11 @@
       ],
       "allowedIn": [
         {
-          "file": "apps/demo-discovery-connector/src/gateway/tools.ts",
+          "file": "apps/discovery-connector/src/gateway/tools.ts",
           "why": "gateway-raw-delegate-key (findings.yaml, accepted-risk): the gateway agent's own session-wire delegate key (spec 387); KMS signer + re-issued wire scheduled"
         },
         {
-          "file": "apps/demo-discovery/src/lib/abox.ts",
+          "file": "apps/discovery-web/src/lib/abox.ts",
           "why": "fixture signers for the browser-verified demo bundles"
         }
       ],
