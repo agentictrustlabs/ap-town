@@ -12,16 +12,16 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agenticprimitives/registry-kit": "workspace:*",
-    "@agenticprimitives/types": "workspace:*",
-    "@noble/hashes": "^2.2.0",
-    "hono": "^4.12.33",
-    "viem": "^2.52.2"
+    "@agenticprimitives/registry-kit": "0.0.0-alpha.15",
+    "@agenticprimitives/types": "1.0.0-alpha.27",
+    "@noble/hashes": "2.2.0",
+    "hono": "4.13.0",
+    "viem": "2.52.2"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240909.0",
-    "typescript": "^5.5.0",
-    "wrangler": "^3.78.0",
-    "vitest": "^4.1.8"
+    "@cloudflare/workers-types": "4.20260605.1",
+    "typescript": "5.7.3",
+    "wrangler": "3.114.17",
+    "vitest": "4.1.8"
   }
 }

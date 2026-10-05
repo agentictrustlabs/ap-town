@@ -14,21 +14,21 @@
     "deploy:faithnet": "pnpm build:faithnet && wrangler deploy --env faithnet"
   },
   "dependencies": {
-    "@agenticprimitives/types": "workspace:*",
-    "@agenticprimitives/registry-kit": "workspace:*",
-    "@agenticprimitives/agent-profile": "workspace:*",
-    "@agenticprimitives/ontology": "workspace:*",
-    "@agenticprimitives/contracts": "workspace:*",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "viem": "^2.52.2"
+    "@agenticprimitives/types": "1.0.0-alpha.27",
+    "@agenticprimitives/registry-kit": "0.0.0-alpha.15",
+    "@agenticprimitives/agent-profile": "1.0.0-alpha.27",
+    "@agenticprimitives/ontology": "1.0.0-alpha.27",
+    "@agenticprimitives/contracts": "1.0.0-alpha.27",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "viem": "2.52.2"
   },
   "devDependencies": {
-    "@types/react": "^19.2.16",
-    "@types/react-dom": "^19.2.3",
-    "@vitejs/plugin-react": "^6.0.0",
-    "typescript": "^5.5.0",
-    "vite": "^8.0.16",
-    "vitest": "^4.1.8"
+    "@types/react": "19.2.16",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "typescript": "5.7.3",
+    "vite": "8.0.16",
+    "vitest": "4.1.8"
   }
 }

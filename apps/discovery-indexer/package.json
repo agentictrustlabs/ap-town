@@ -16,22 +16,22 @@
     "rebuild-custody": "tsx scripts/rebuild-custody.ts"
   },
   "dependencies": {
-    "@agenticprimitives/a2a": "workspace:*",
-    "@agenticprimitives/agent-naming": "workspace:*",
-    "@agenticprimitives/capability-claims": "workspace:*",
-    "@agenticprimitives/content-storage": "workspace:*",
-    "@agenticprimitives/delegation": "workspace:*",
-    "@agenticprimitives/ontology": "workspace:*",
-    "@agenticprimitives/registry-kit": "workspace:*",
-    "@agenticprimitives/types": "workspace:*",
-    "hono": "^4.12.33",
-    "viem": "^2.52.2"
+    "@agenticprimitives/a2a": "0.0.0-alpha.25",
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.27",
+    "@agenticprimitives/capability-claims": "0.0.0-alpha.25",
+    "@agenticprimitives/content-storage": "1.0.0-alpha.6",
+    "@agenticprimitives/delegation": "1.0.0-alpha.27",
+    "@agenticprimitives/ontology": "1.0.0-alpha.27",
+    "@agenticprimitives/registry-kit": "0.0.0-alpha.15",
+    "@agenticprimitives/types": "1.0.0-alpha.27",
+    "hono": "4.13.0",
+    "viem": "2.52.2"
   },
   "devDependencies": {
-    "@types/node": "^22.7.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.5.0",
-    "vitest": "^4.1.8",
-    "wrangler": "^3.80.0"
+    "@types/node": "22.19.19",
+    "tsx": "4.22.4",
+    "typescript": "5.7.3",
+    "vitest": "4.1.8",
+    "wrangler": "3.114.17"
   }
 }

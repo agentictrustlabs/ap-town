@@ -12,15 +12,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agenticprimitives/capability-claims": "workspace:*",
-    "hono": "^4.12.33",
-    "sparqljs": "^3.7.4"
+    "@agenticprimitives/capability-claims": "0.0.0-alpha.25",
+    "hono": "4.13.0",
+    "sparqljs": "3.7.4"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240909.0",
-    "typescript": "^5.5.0",
-    "wrangler": "^3.78.0",
-    "@types/sparqljs": "^3.1.12",
-    "vitest": "^4.1.8"
+    "@cloudflare/workers-types": "4.20260605.1",
+    "typescript": "5.7.3",
+    "wrangler": "3.114.17",
+    "@types/sparqljs": "3.1.12",
+    "vitest": "4.1.8"
   }
 }

@@ -10,3 +10,6 @@ live-gates-report.json
 # Every *.local.json is a local secret — a roster with private keys, a service-account file. Never committed.
 *.local.json
 .vercel/
+
+# No root lock committed (as ap-home): the install resolves the pinned set fresh.
+pnpm-lock.yaml

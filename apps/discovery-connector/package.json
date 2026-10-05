@@ -12,15 +12,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agenticprimitives/mcp-protocol": "workspace:*",
-    "hono": "^4.12.33",
-    "@agenticprimitives/a2a": "workspace:*",
-    "viem": "^2.52.2"
+    "@agenticprimitives/mcp-protocol": "0.0.0-alpha.4",
+    "hono": "4.13.0",
+    "@agenticprimitives/a2a": "0.0.0-alpha.25",
+    "viem": "2.52.2"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240909.0",
-    "typescript": "^5.5.0",
-    "vitest": "^4.1.8",
-    "wrangler": "^4.0.0"
+    "@cloudflare/workers-types": "4.20260605.1",
+    "typescript": "5.7.3",
+    "vitest": "4.1.8",
+    "wrangler": "4.93.0"
   }
 }
