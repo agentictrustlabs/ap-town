@@ -25,8 +25,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - run: pnpm install --no-frozen-lockfile
       - name: live gates
         run: pnpm exec ap test --live-gates live-gates.json --json > live-gates-report.json || (cat live-gates-report.json; exit 1)
       - name: A2A conformance of the deployment
