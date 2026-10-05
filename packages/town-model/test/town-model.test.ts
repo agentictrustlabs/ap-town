@@ -5,7 +5,7 @@ import { crawlRoots, laneBindings, laneRoutesVar, parseTown, validateTown, AUTHO
 const faithchain = readFileSync(new URL('../../../towns/faithchain/town.yaml', import.meta.url), 'utf8');
 
 const base = () => ({
-  town: 't', status: 'live', chain: { id: 1, generation: '1', rpc: 'https://rpc.example' },
+  town: 't', status: 'live', chain: { id: 1, generation: '1', rpc: 'https://rpc.example', deployment: 'example' },
   estates: [{ id: 'a', repo: 'r', home: 'https://h.example', edge: 'https://e.example', a2a: 'https://x.example', nameRoots: ['me'] }],
   services: [] as unknown[],
 });

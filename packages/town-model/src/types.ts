@@ -12,12 +12,9 @@ export interface TownChain {
   generation: string;
   /** The chain's public RPC as the town serves it (the chain gateway). */
   rpc: string;
-  /** Public contract addresses the town's services read (naming, profile). Facts anyone can read from the chain. */
-  contracts?: {
-    nameRegistry?: string;
-    universalResolver?: string;
-    profileResolver?: string;
-  };
+  /** The chain's deployment in `@agenticprimitives/contracts/deployments` (e.g. `faithchain`) — the ONE source of
+   *  contract addresses for the town's services. Never copied into the manifest. */
+  deployment: string;
 }
 
 /** An estate is a resident of the town: a Home, its edge and runtime, on this chain. It is never deployed from here. */
@@ -33,6 +30,8 @@ export interface TownEstate {
    * An estate on another account is fetched over HTTPS and lists nothing here.
    */
   lanes?: Record<string, string>;
+  /** The DNS zone this estate serves agent hosts under (`<label>.<zone>`, `<label>-<type>.<zone>` — spec 346 §5). */
+  agentZone?: string;
   /** The name roots this estate names agents under; the indexer crawls the union over every estate. */
   nameRoots: string[];
   kms?: { tenant: string };

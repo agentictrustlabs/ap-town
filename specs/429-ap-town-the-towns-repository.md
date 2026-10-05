@@ -1,6 +1,6 @@
 # Spec 429 — ap-town: the services a chain's estates share
 
-**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. **R1 done 2026-10-05:** every moved Worker deployed from ap-town and verified live; ap-discovery archived; ap-home #5 removed `apps/rpc-gateway`. **R1b done 2026-10-05** (§5.1). Next: R2.
+**Status:** R0 approved 2026-10-05 (owner: "go with your recommendations, create the repo and start R1"); §12 decided as recommended. **R1 done 2026-10-05:** every moved Worker deployed from ap-town and verified live; ap-discovery archived; ap-home #5 removed `apps/rpc-gateway`. **R1b done 2026-10-05** (§5.1). **R2 done 2026-10-05**: the town agent (`town.faithnet.io`, A2A-conformant), the registry formalized (A2A card + `/a2a`, conformant; its ARD document at `discovery.faithnet.io/.well-known/ard.json`), and the naming service N1 (`names.faithnet.io`, spec 430). Next: R3 (the portal).
 **Owner's brief (2026-10-05):** ap-home is for the Home and the estate. ap-town is for central services that rely on a
 single chain and can have many estates running on it. Bring the service applications into ap-town, except skills.
 Skills is an external central service that is part of the town. The UX leverages the town model built for the field

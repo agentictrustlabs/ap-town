@@ -25,7 +25,7 @@ export function validateTown(raw: unknown): TownValidation {
   if (!c || !Number.isInteger(c.id) || c.id <= 0) errors.push('chain.id: a positive integer');
   if (!c || typeof c.generation !== 'string') errors.push('chain.generation: a string');
   if (!c || !isUrl(c.rpc)) errors.push('chain.rpc: an https URL');
-  for (const [k, v] of Object.entries(c?.contracts ?? {})) if (!/^0x[0-9a-fA-F]{40}$/.test(String(v))) errors.push(`chain.contracts.${k}: an address`);
+  if (!c || typeof c.deployment !== 'string' || !/^[a-z][a-z0-9-]*$/.test(c.deployment)) errors.push('chain.deployment: the network key in @agenticprimitives/contracts/deployments');
 
   const estates = Array.isArray(t.estates) ? t.estates : [];
   if (estates.length === 0) errors.push('estates: a town has at least one estate');

@@ -9,6 +9,7 @@ access, and — next — naming, the town agent and the Town portal. A product r
 ## Start here
 
 - `specs/429-ap-town-the-towns-repository.md` — the charter: what is in the town, what is referenced, the releases.
+- `specs/430-the-towns-naming-service.md` — the naming service (`apps/naming`): what it borrows from ENS v2, the four signals, the town of names, waves N1–N5.
 - `towns/<chain>/town.yaml` — the one description of a town; every app, check and generator reads it (`packages/town-model`).
 - `DEPLOYER.md` — which Worker this repo deploys, in which env. Worker names, hosts, DO classes and migration tags never change in a move.
 
@@ -30,7 +31,7 @@ access, and — next — naming, the town agent and the Town portal. A product r
 ## Deploy
 
 Per app, from its directory: `npx wrangler deploy --env faithnet` (the chain gateway: `WRANGLER_ENV=faithnet pnpm run deploy`;
-discovery-web: `pnpm deploy:faithnet`, which builds first). Never deploy a bare top-level env by accident of a missing `--env`.
+discovery-web and naming: `pnpm deploy:faithnet`, which builds first). After editing `towns/*/town.yaml`: `pnpm gen:town`. Never deploy a bare top-level env by accident of a missing `--env`.
 
 ## Binding rules (projected)
 

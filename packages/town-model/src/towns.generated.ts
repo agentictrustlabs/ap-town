@@ -8,7 +8,8 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
     "chain": {
       "id": 84532,
       "generation": "1",
-      "rpc": "https://sepolia.base.org"
+      "rpc": "https://sepolia.base.org",
+      "deployment": "base-sepolia"
     },
     "estates": [
       {
@@ -60,11 +61,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
       "id": 34348,
       "generation": "1",
       "rpc": "https://rpc.faithnet.io",
-      "contracts": {
-        "nameRegistry": "0x60E949D52660A9D4143ecB0fdA56c0457f20aED9",
-        "universalResolver": "0xF343054e046A4145ccae499ECB28197394eE0798",
-        "profileResolver": "0xB03F7C06ad3274F584AB72794406D639c02A45e1"
-      }
+      "deployment": "faithchain"
     },
     "estates": [
       {
@@ -73,6 +70,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "home": "https://www.faithnet.me",
         "edge": "https://edge.faithnet.io",
         "a2a": "https://a2a.faithnet.io",
+        "agentZone": "faithnet.ai",
         "lanes": {
           "edge.faithnet.io": "demo-edge-faithnet",
           "demo-edge-faithnet.richardpedersen3.workers.dev": "demo-edge-faithnet",
@@ -164,6 +162,18 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "probe": "https://town.faithnet.io/health",
         "card": "https://town.faithnet.io/.well-known/agent-card.json",
         "description": "The town's own agent — what this town offers and whether each service is up. Lists; never grants."
+      },
+      {
+        "id": "naming",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/naming",
+        "worker": "faithchain-naming",
+        "hosts": [
+          "names.faithnet.io"
+        ],
+        "probe": "https://names.faithnet.io/api/health",
+        "description": "The town's naming service — every name on the chain, what it points at, and who can change it. It reads; an owner's Home writes."
       },
       {
         "id": "chain-gateway",

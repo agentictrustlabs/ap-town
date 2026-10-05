@@ -6,6 +6,7 @@ chain:
   id: 84532
   generation: "1"
   rpc: https://sepolia.base.org
+  deployment: base-sepolia
 
 estates:
   - id: impact

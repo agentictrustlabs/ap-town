@@ -1,0 +1,37 @@
+# The town's naming service (spec 430). Public, keyless, read-only: the API under /api/*, the built app for the rest.
+# The BARE name is for `wrangler dev` only (reads `.dev.vars` for RPC_URL).
+name = "naming"
+main = "worker/index.ts"
+compatibility_date = "2026-05-20"
+
+[assets]
+directory = "./dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = ["/api/*"]
+
+[vars]
+TOWN = "faithchain"
+
+# FAITHCHAIN — names.faithnet.io. RPC_URL is a SECRET: the town's chain gateway with this Worker's own read-only app
+# token (`naming-faithnet`), set with the deploy (`wrangler deploy --env faithnet --secrets-file …`).
+[env.faithnet]
+name = "faithchain-naming"
+
+[[env.faithnet.routes]]
+pattern = "names.faithnet.io"
+custom_domain = true
+
+[env.faithnet.vars]
+TOWN = "faithchain"
+
+# The town's registry — asked only "is this agent listed?" (one of the four signals; spec 430 D5).
+[[env.faithnet.services]]
+binding = "REGISTRY"
+service = "demo-discovery-a2a-faithnet"
+
+# Edge rate limit for the public API (admission, never authority).
+[[env.faithnet.ratelimits]]
+name = "LIMITER"
+namespace_id = "2885"
+simple = { limit = 240, period = 60 }

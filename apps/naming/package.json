@@ -1,0 +1,34 @@
+{
+  "name": "@ap-town/naming",
+  "version": "0.0.1",
+  "private": true,
+  "description": "The town's naming service (spec 430): a public, keyless app for the names on one chain — search, a page per name / address / root, who can do what, the town of names — and the read API integrators use. It reads; the owner's Home writes.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.json && vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "deploy:faithnet": "pnpm build && wrangler deploy --env faithnet"
+  },
+  "dependencies": {
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.27",
+    "@agenticprimitives/contracts": "1.0.0-alpha.27",
+    "@ap-town/town-model": "workspace:*",
+    "@ap-town/town-scene": "workspace:*",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "viem": "2.52.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260605.1",
+    "@types/node": "^22.7.0",
+    "@types/react": "19.2.16",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.2",
+    "typescript": "5.7.3",
+    "vite": "8.0.16",
+    "vitest": "4.1.8",
+    "wrangler": "4.93.0"
+  }
+}
