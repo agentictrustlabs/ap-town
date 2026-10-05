@@ -41,7 +41,8 @@ export default {
       for (const c of calls) if (typeof c?.method !== 'string' || !isAllowed(c.method)) return err(c?.id ?? null, -32601, `method not permitted: ${c?.method}`, 403);
       const reads = calls.filter(c => !isWrite(c.method)).length, writes = calls.length - reads;
       const rl = env.RATE.get(env.RATE.idFromName(rec.app));
-      const ok = await rl.fetch('https://rl/take', { method: 'POST', body: JSON.stringify({ reads, writes, readRps: rec.readRps, writeRps: rec.writeRps }) }).then(r => r.json() as Promise<{ ok: boolean; retryAfter?: number }>);
+      const ok = await rl.fetch('https://rl/take', { method: 'POST', body: JSON.stringify({ reads, writes, readRps: rec.readRps, writeRps: rec.writeRps }) }).then(r => r.json() as Promise<{ ok: boolean; retryAfter?: number; denied?: 'reads' | 'writes' }>);
+      if (!ok.ok && ok.denied) return err(calls[0]?.id ?? null, -32003, `this app token may not send ${ok.denied === 'writes' ? 'transactions' : 'reads'}`, 403);
       if (!ok.ok) return err(calls[0]?.id ?? null, -32005, `rate limited (retry ~${ok.retryAfter}s)`, 429);
       if (!Array.isArray(body)) {
         const ttl = CACHE_TTL_S(body.method, body.params ?? []);
