@@ -20,7 +20,7 @@
     "@agenticprimitives/agent-naming": "1.0.0-alpha.30",
     "@agenticprimitives/capability-claims": "0.0.0-alpha.28",
     "@agenticprimitives/content-primitives": "1.0.0-alpha.31",
-    "@agenticprimitives/content-storage": "1.0.0-alpha.8",
+    "@agenticprimitives/content-storage": "1.0.0-alpha.9",
     "@agenticprimitives/delegation": "1.0.0-alpha.30",
     "@agenticprimitives/ontology": "1.0.0-alpha.30",
     "@agenticprimitives/registry-kit": "0.0.0-alpha.18",
