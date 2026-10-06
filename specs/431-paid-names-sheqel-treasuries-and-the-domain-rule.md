@@ -137,6 +137,36 @@ purchase real.
 
 W1 and W4 touch the chain and W2 mints a coin into sixty-odd treasuries; none starts without the owner's go.
 
+## 5.1 W5 — Register: connect at the naming service, then a name for yourself or for a new agent
+
+**Owner's brief (2026-10-06):** the naming service gets a *connect* capability so register is easy. Register always
+leads to connect (a nameless Home at first), and then the person sets their default name, or adds a second agent
+with a name — an organization, a service, or a second person persona like the gaming apps make — with the Home's
+part as minimal as it is for organizations and services today.
+
+**Shape.** `names.faithnet.io` becomes a **relying app of the Home** (spec 295 `connect-client`, the way Gather27 and
+the field app are): a *Connect* button, a session under the person's `ask-as-me` standing, the person's name and
+agents read through it. It still signs nothing and holds no key: every purchase and every charter is a ceremony at
+the Home, reached by a hand-off that carries the whole intent and returns.
+
+| Step | At the naming service | At the Home |
+| --- | --- | --- |
+| **Register** | One button on a free name and on the home page. Not signed in → *Connect* (the Home's front door: Google, email, passkey; a new person gets a nameless Home and comes straight back). | The front door, unchanged. |
+| **Your name** | Signed in and nameless → the chosen name is the person's own: *Buy `<label>.me` for N SHQ*. Hand-off `?claim=<label>&tld=me&return=…`. | The purchase card with the label filled in (W2); one tap, two signatures; back to the name page. |
+| **A second agent** | Signed in → *Register `<label>.<tld>` as a new agent I keep*: an organization, a service, a team, a church, a circle, a household — or a **second person** (a persona, as the gaming apps charter one). Hand-off `?charter=<kind>&claim=<label>&tld=<tld>&return=…`. | A new ceremony page: create the agent (`createAgentWithBirthrights`, its treasury born with it), fund the treasury (the person's treasury pays the fee for its new agent's name — or the new treasury's birthright does), buy and present the name, return. The Home's part is the signatures and nothing else. |
+| **Afterwards** | The name page shows the new agent; *Your agents* on the naming service lists what the connected person holds. | The agent appears under Stewardship as any managed agent does. |
+
+**Rules kept.** The suffix is the type (D4): the register button offers a kind, and the kind decides the ending —
+never a free suffix. A second person persona is a second agent the person custodies (ADR-0010: a distinct Smart
+Agent), never a second name on the same agent. The domain rule applies to the new agent's label as to any other
+(§3), proven by the custodying person's verified email. Nothing the naming service holds authorizes anything: its
+session lets it read as the person; the Home's signatures do the rest.
+
+**Waves.** W5a: `connect-client` in `apps/naming` (Connect, session, *Your agents*), the Register button with the
+kind picker, the hand-off that carries `charter`. W5b: the Home's charter-and-buy ceremony page
+(`/naming/register`), including the second-person persona. W5c: *Your agents* and *bought for* on the naming
+service read through the session.
+
 ## 6. What this does not do
 
 - **No transfer market.** A paid name is still one per agent per ending, never released, never resold.
