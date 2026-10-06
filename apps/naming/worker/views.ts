@@ -395,6 +395,14 @@ export async function displayView(ctx: Ctx, address: Address): Promise<DisplayVi
   return { ...s, address: a, name: raw ? displayOf(raw) : null };
 }
 
+/** What a treasury holds of the naming coin — the buyer's side of the price (430 N6: the register page's "paid from"). */
+export async function coinsView(ctx: Ctx, address: Address): Promise<Stamp & { address: string; coin: string | null; coins: number | null }> {
+  const s = await stamp(ctx);
+  if (!ctx.chain.coin) return { ...s, address: lower(address), coin: null, coins: null };
+  const bal = await ctx.chain.client.readContract({ address: ctx.chain.coin.address, abi: [{ type: 'function', name: 'balanceOf', stateMutability: 'view', inputs: [{ name: 'a', type: 'address' }], outputs: [{ type: 'uint256' }] }] as const, functionName: 'balanceOf', args: [address] }).catch(() => 0n);
+  return { ...s, address: lower(address), coin: ctx.chain.coin.symbol, coins: coinsOf(bal as bigint, ctx.chain.coin.decimals) };
+}
+
 /** Many agents' presented names in one read (≤ 50): what each shows as its own, or null. For a person's own list. */
 export async function displayManyView(ctx: Ctx, addresses: Address[]): Promise<Stamp & { names: Record<string, string | null> }> {
   const uniq = [...new Set(addresses.map(lower))].slice(0, 50);

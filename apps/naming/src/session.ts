@@ -318,8 +318,8 @@ export function openHomeCeremony(session: NamesSession, href: string, onProgress
       resolve(r);
     };
     const take = (data: unknown) => {
-      const d = data as { type?: string; name?: string; agent?: string | null } | null;
-      if (d && d.type === 'ap:naming:registered' && d.name) done({ name: d.name, agent: d.agent ?? null });
+      const d = data as { type?: string; name?: string; agent?: string | null; changed?: boolean } | null;
+      if (d && d.type === 'ap:naming:registered' && d.name) done({ name: d.name, agent: d.agent ?? null, ...(d.changed ? { changed: true } : {}) });
     };
     bc.onmessage = (e) => take(e.data);
     const onMessage = (e: MessageEvent) => { if (e.origin === window.location.origin) take(e.data); };

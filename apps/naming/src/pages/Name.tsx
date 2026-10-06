@@ -2,8 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { PLACE_SHAPES } from '@ap-town/town-scene';
 import { useApi } from '../api';
 import type { NameView } from '../api-types';
-import { Link, nameHref, rootHref, useRoute } from '../router';
-import { Register, Waiting, useHomeCeremony } from '../register';
+import { Link, nameHref, registerHref, rootHref, useRoute } from '../router';
+import { Waiting, useHomeCeremony } from '../register';
 import { useSession } from '../use-session';
 import { agentNamingHref, forgetJustRegistered, justRegistered } from '../session';
 import { lotScene } from '../scenes';
@@ -50,7 +50,12 @@ function Free({ v }: { v: NameView }): ReactNode {
         <section>
           <h2>Who could {v.price ? 'buy' : 'claim'} it</h2>
           <p><strong>{v.availability.by.charAt(0).toUpperCase() + v.availability.by.slice(1)}.</strong> {v.availability.rule}</p>
-          {v.status === 'available' && v.form === 'canonical' && v.tld && <Register label={v.name.split('.')[0]!} tld={v.tld} price={v.price ? { coins: v.price.coins, coin: v.price.coin } : null} />}
+          {v.status === 'available' && v.form === 'canonical' && v.tld && (
+            <div className="home-cta register">
+              <p><strong>Register {v.name}{v.price ? ` for ${v.price.coins} ${v.price.coin}` : ''}.</strong> Four short steps, then your Home signs in a window and this page shows the name as yours.</p>
+              <div className="home-cta-row"><Link href={registerHref(v.name)} className="button">Register {v.name} →</Link></div>
+            </div>
+          )}
           {v.status === 'available' && v.form !== 'canonical' && <AtYourHome estates={v.estates} verb="Issuing a scoped name" />}
         </section>
       )}

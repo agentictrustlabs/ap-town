@@ -11,6 +11,7 @@ import { AddressPage } from './pages/Address';
 import { Integrate } from './pages/Integrate';
 import { Connect } from './pages/Connect';
 import { Me } from './pages/Me';
+import { RegisterPage } from './pages/RegisterPage';
 import { SessionProvider, useSession } from './use-session';
 import { Glyph, short } from './ui';
 import { PLACE_OF_KIND } from './pages/Me';
@@ -24,6 +25,7 @@ function Page(): ReactNode {
   if (path === '/integrate') return <Integrate />;
   if (path === '/connect') return <Connect />;
   if (path === '/me') return <Me />;
+  if ((m = path.match(/^\/register\/(.+)$/))) return <RegisterPage key={m[1]} name={decodeURIComponent(m[1]!)} />;
   if ((m = path.match(/^\/name\/(.+)$/))) return <Name key={m[1] + search} name={decodeURIComponent(m[1]!)} />;
   if ((m = path.match(/^\/address\/(0x[0-9a-fA-F]{40})$/))) return <AddressPage key={m[1]} address={m[1]!} />;
   if ((m = path.match(/^\/root\/([a-z0-9-]+)$/))) return <Root key={m[1]} tld={m[1]!} />;

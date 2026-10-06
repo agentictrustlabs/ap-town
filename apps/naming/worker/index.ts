@@ -6,7 +6,7 @@ import { TOWNS, type TownManifest } from '@ap-town/town-model';
 import { isAddress } from 'viem';
 import type { Address, ApiError } from '../src/api-types';
 import { chainFor } from './chain';
-import { addressView, displayManyView, displayView, estatesOf, nameView, rootPage, searchView, townView, type Ctx } from './views';
+import { addressView, coinsView, displayManyView, displayView, estatesOf, nameView, rootPage, searchView, townView, type Ctx } from './views';
 
 interface Env {
   TOWN: string;
@@ -64,6 +64,8 @@ async function api(url: URL, env: Env): Promise<Response> {
     if (!list.length) return fail(400, 'not_an_address', 'Pass ?a=0x…,0x… (up to 50 addresses).');
     return json(await displayManyView(ctx, list), 200, 10);
   }
+  m = path.match(/^\/coins\/(0x[0-9a-fA-F]{40})$/);
+  if (m) return json(await coinsView(ctx, m[1] as Address), 200, 5);
   m = path.match(/^\/display\/(0x[0-9a-fA-F]{40})$/);
   if (m) return json(await displayView(ctx, m[1] as Address), 200, 30);
   m = path.match(/^\/(address|display)\/(.+)$/);
