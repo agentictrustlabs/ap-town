@@ -2,7 +2,7 @@
   "name": "ap-town",
   "version": "0.0.0",
   "private": true,
-  "description": "ap-town — the services every estate on one chain shares: naming, the registry, the public graph and discovery, chain access, the Town portal (spec 429). A product repository on published @agenticprimitives/* packages (ADR-0063).",
+  "description": "ap-town \u2014 the services every estate on one chain shares: naming, the registry, the public graph and discovery, chain access, the Town portal (spec 429). A product repository on published @agenticprimitives/* packages (ADR-0063).",
   "type": "module",
   "engines": {
     "node": ">=22.18",
@@ -23,7 +23,8 @@
     "check:town": "tsx checks/check-town-manifest.ts",
     "check:no-estate-binding": "tsx checks/check-no-estate-binding.ts",
     "probe:town": "tsx checks/probe-town.ts",
-    "gen:town": "tsx checks/gen-town.ts"
+    "gen:town": "tsx checks/gen-town.ts",
+    "provision:naming": "tsx scripts/provision-naming-service.mts"
   },
   "devDependencies": {
     "@agenticprimitives/a2a": "0.0.0-alpha.27",
@@ -33,7 +34,11 @@
     "typescript": "^5.7.3",
     "vitest": "^4.1.8",
     "tsx": "^4.22.4",
-    "@types/node": "^22.7.0"
+    "@types/node": "^22.7.0",
+    "@agenticprimitives/agent-account": "1.0.0-alpha.29",
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.29",
+    "@agenticprimitives/contracts": "1.0.0-alpha.28",
+    "viem": "2.52.2"
   },
   "pnpm": {
     "overrides": {

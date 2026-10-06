@@ -1,0 +1,19 @@
+{
+  "chainId": 34348,
+  "clerkCustodian": "0xBc63603855A45BaB245370CF106c6bF9328f1E79",
+  "agents": {
+    "person": {
+      "address": "0xD88C84D5f34057392CdC8254a8005A7d689374fF",
+      "name": "townclerk.me"
+    },
+    "service": {
+      "address": "0x8e6F25eb905677ee80fEc3F8742A8cd143a998e9",
+      "name": "naming.svc"
+    },
+    "treasury": {
+      "address": "0xd2e64340f93933cC160D470C8EB9042435e29809",
+      "name": "naming.treasury"
+    }
+  },
+  "provisionedAt": "2026-10-06T00:39:52.176Z"
+}

@@ -31,7 +31,7 @@ export interface Chain {
 }
 
 export function chainFor(town: TownManifest, rpcUrl: string): Chain {
-  const d = getDeployments(town.chain.deployment as Parameters<typeof getDeployments>[0]) as unknown as {
+  const d = { ...(getDeployments(town.chain.deployment as Parameters<typeof getDeployments>[0]) as object), ...(town.chain.deploymentOverlay ?? {}) } as unknown as {
     agentNameRegistry: Address; agentNameUniversalResolver: Address; agentProfileResolver: Address;
     permissionlessSubregistries?: Record<string, Address>; permissionlessSubregistry?: Address; permissionlessSubregistryDemoAgent?: Address;
     pricedSubregistries?: Record<string, Address>; namingFeeTreasury?: Address; namingCoin?: { address: Address; symbol: string; decimals: number };

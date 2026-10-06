@@ -17,6 +17,12 @@ export interface TownChain {
   deployment: string;
   /** The app coin names are bought with on this chain (spec 431), when any. */
   coin?: { address: string; symbol: string; decimals: number };
+  /**
+   * Addresses recorded on the chain AHEAD of the pinned `@agenticprimitives/contracts` release that will carry them —
+   * the same keys as the deployment document (`pricedSubregistries`, `namingFeeTreasury`, …). Merged over the
+   * package's document; removed from here once the pin catches up. A bridge, never a second source of truth.
+   */
+  deploymentOverlay?: Record<string, unknown>;
 }
 
 /** An estate is a resident of the town: a Home, its edge and runtime, on this chain. It is never deployed from here. */
