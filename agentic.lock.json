@@ -1,10 +1,18 @@
 {
   "lockVersion": 1,
   "packages": {
-    "@agenticprimitives/devkit": "0.0.0-alpha.10",
+    "@agenticprimitives/devkit": "0.0.0-alpha.12",
     "@agenticprimitives/evaluation": "0.0.0-alpha.5",
-    "@agenticprimitives/a2a": "0.0.0-alpha.25",
-    "@agenticprimitives/mcp-protocol": "0.0.0-alpha.4"
+    "@agenticprimitives/a2a": "0.0.0-alpha.27",
+    "@agenticprimitives/mcp-protocol": "0.0.0-alpha.4",
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.29",
+    "@agenticprimitives/capability-claims": "0.0.0-alpha.27",
+    "@agenticprimitives/content-storage": "1.0.0-alpha.4",
+    "@agenticprimitives/contracts": "1.0.0-alpha.28",
+    "@agenticprimitives/delegation": "1.0.0-alpha.29",
+    "@agenticprimitives/ontology": "1.0.0-alpha.29",
+    "@agenticprimitives/registry-kit": "0.0.0-alpha.16",
+    "@agenticprimitives/types": "1.0.0-alpha.29"
   },
   "rules": {
     "coordination-vs-orchestration": "sha256:f2754939240133643e020043fac5b7e97b2ca250e0824771d19ca578976defd6",

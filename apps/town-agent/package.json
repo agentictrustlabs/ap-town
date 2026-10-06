@@ -2,7 +2,7 @@
   "name": "@ap-town/town-agent",
   "version": "0.0.1",
   "private": true,
-  "description": "The town's own Worker (spec 429 \u00a72.2, \u00a77): the Town portal at /, its read API under /api/*, and the town agent \u2014 an A2A agent at /a2a that answers \"what does this town offer, and is it healthy?\" from the manifest and live probes. Listed \u00b7 healthy \u00b7 compatible, never a score and never \"authorized\". Public, read-only, no key.",
+  "description": "The town's own Worker (spec 429 §2.2, §7): the Town portal at /, its read API under /api/*, and the town agent — an A2A agent at /a2a that answers \"what does this town offer, and is it healthy?\" from the manifest and live probes. Listed · healthy · compatible, never a score and never \"authorized\". Public, read-only, no key.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -12,7 +12,7 @@
     "deploy:faithnet": "pnpm build && wrangler deploy --env faithnet"
   },
   "dependencies": {
-    "@agenticprimitives/a2a": "0.0.0-alpha.25",
+    "@agenticprimitives/a2a": "0.0.0-alpha.27",
     "@ap-town/town-model": "workspace:*",
     "@ap-town/town-scene": "workspace:*",
     "@ap-town/town-ui": "workspace:*",

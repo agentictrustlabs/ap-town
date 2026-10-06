@@ -2,7 +2,7 @@
   "name": "ap-town",
   "version": "0.0.0",
   "private": true,
-  "description": "ap-town \u2014 the services every estate on one chain shares: naming, the registry, the public graph and discovery, chain access, the Town portal (spec 429). A product repository on published @agenticprimitives/* packages (ADR-0063).",
+  "description": "ap-town — the services every estate on one chain shares: naming, the registry, the public graph and discovery, chain access, the Town portal (spec 429). A product repository on published @agenticprimitives/* packages (ADR-0063).",
   "type": "module",
   "engines": {
     "node": ">=22.18",
@@ -26,8 +26,8 @@
     "gen:town": "tsx checks/gen-town.ts"
   },
   "devDependencies": {
-    "@agenticprimitives/a2a": "0.0.0-alpha.25",
-    "@agenticprimitives/devkit": "0.0.0-alpha.10",
+    "@agenticprimitives/a2a": "0.0.0-alpha.27",
+    "@agenticprimitives/devkit": "0.0.0-alpha.12",
     "@agenticprimitives/evaluation": "0.0.0-alpha.5",
     "@agenticprimitives/mcp-protocol": "0.0.0-alpha.4",
     "typescript": "^5.7.3",
