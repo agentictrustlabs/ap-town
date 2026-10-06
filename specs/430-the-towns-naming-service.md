@@ -63,6 +63,32 @@ burn-once fuses to revocable roles (Enhanced Access Control), and to a resolver 
 
 ---
 
+### 1.3 app.ens.domains and ENSv2, feature by feature (owner, 2026-10-06: "follow the capability and flow of app.ens.domains and v2")
+
+What the ENS Manager app does today, what the v2 app adds, what this app has, and where the rest lands. "Home" means
+the person's Home opened in the popup that comes back here (spec 431 §5.1): the flow is the ENS app's — the signing
+surface is the person's own.
+
+| app.ens.domains / ENSv2 | Here today | Gap → wave |
+| --- | --- | --- |
+| **Search**: one box for a name or an address; availability chips | ✓ (§3.1) | — |
+| **Register flow**: pick → price (ETH + USD) → duration → *set up your profile* (records at registration) → payment → "set as primary" → done | Pick → price in SHQ → Connect → Home popup → done, presented (431 W5). No duration: a name is bought once (§1.2). | **N6a** — profile at registration: the register form takes *what it is called* and *about* and carries them in the hand-off; the Home writes `displayName` / `description` in the same ceremony. |
+| **Stablecoin / one-click (Smart Sessions)** payment | SHQ from the person's treasury, two signatures at the Home. | One-tap under an `act-as-me` standing wire is spec 397 §11's shape; not scheduled. |
+| **My names dashboard**: primary name card, every name owned, expiry, filters (owner/manager/expiring), sort, search | `/me`: your own name, the names your agent holds, *Your agents* through your Home (431 W5c); the *Yours* strip on every page | **N6b** — filter by kind, sort by name / kind, search within; an unnamed agent's *Name it* leads to the Home popup. |
+| **Profile tab**: avatar, header, bio, socials, addresses | Profile: display name, type, about, the agent it points at, reach it at, card (§3.2) | Avatars/socials are not in the record set (§1.2); `cardUri` is the richer thing. — |
+| **Edit profile** (gasless avatar, records editor) | Records are changed at the Home (`AgentNamingEditor`), reached by the "Change something" link | **N6c** — *Edit at your Home* opens the agent's own naming page in the popup (`/as/<agent>/naming` for a managed agent, `/naming` for the person) and this page re-reads on return. |
+| **Records tab**: text, addresses, content hash, ABI | Records tab, typed by the ontology; everything public | — |
+| **Ownership tab**: owner · manager · ETH record · expiry; *Send* (transfer), *Extend*, *Sync manager* | "Who can do what", computed from chain state; no expiry on a root claim | *Transfer owner* needs a client method (§8.3) → **N7**; *Extend* does not apply and the page says so. |
+| **Subnames tab**: list; *New subname*; v2 per-name registries and registrar roles | "Names under it"; subregistries and scoped names exist on chain; no issuer in any app | **N3** (needs §8.4 — the issuance writer). |
+| **Permissions**: fuses (v1) → roles with Enhanced Access Control (v2) | Who-can-do-what, one sentence per contract (§3.3) | The roles are the contracts'; nothing to add until §8 gives an owner a lever. |
+| **Primary name** toggle | Always presented at purchase; *present another* from the Home | — |
+| **Settings**: notifications, DNS import | DNS form derived (`<label>-<type>.<zone>`); nothing to import | — |
+| **Explorer** (v2): registrations, ownership history, inspect on-chain state | Details tab (node, subregistry, registered-at, raw records) | **N4** — history from the town's public graph. |
+| **Grace period, renewal, premium decay** | No expiry on a purchased name (431 §6) | — (stated on the page) |
+
+Built 2026-10-06 ahead of this table: the popup hop (431 W5), *Your agents* (W5c), the *Yours* strip, the kinds-and-counts
+home picture (owner: "the home page shows agent types and counts, not specific agents").
+
 ## 2. What the naming service can already do (and the app must show)
 
 From `@agenticprimitives/agent-naming` and the naming contracts (`AgentNameRegistry`, `AgentNameUniversalResolver`,
@@ -221,6 +247,8 @@ N5 packages (1)–(3) as a small drop-in: an `<agent-name>` element and a name-o
 | **N3** | Scoped names and contextual issuance: an organization's lot, issuing `x.t@c.u`, the subregistry manager | An organization issues and lists a scoped service name from its Home, visible here (needs §8) |
 | **N4** | History per name and per agent, and expiry reminders, from the town's public graph | The name page shows registered / changed / presented events with their transactions |
 | **N5** | The integration kit as a package and elements; ap-home and the portal adopt it | Home shows names through the kit, with no local display logic |
+| **N6** | The manager flow (§1.3): a · profile at registration, b · the dashboard's filters, sort and *Name it*, c · *Edit at your Home* in the popup | A person registers with an about line, finds a name among thirty by kind, and changes a record without leaving this app's flow |
+| **N7** | Transfer a name's owner (needs §8.3) | An organization hands a name to its successor from its Home, visible here |
 
 ### 7.1 N1 as built (2026-10-05)
 
