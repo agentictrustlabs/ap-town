@@ -9,21 +9,6 @@ chain:
   rpc: https://rpc.faithnet.io
   deployment: faithchain   # @agenticprimitives/contracts/deployments — the one source of addresses
   coin: { address: "0xa14E4a9447607c1233DcE34dB6Ead47C094f6141", symbol: SHQ, decimals: 6 }   # Sheqel — names are bought with it (spec 431)
-  # Spec 431 W4 (2026-10-06): on the chain now; in @agenticprimitives/contracts from the next release, then delete.
-  deploymentOverlay:
-    pricedSubregistries:
-      me: "0xFEe352298dD12554928c8de2bdA5cf7bbeD9C184"
-      org: "0x2cf2eA7D2302b3390FA3596acbd8821193f296D4"
-      team: "0x5D95fBb3a5B97fF4967aC5587c607B1d9D7DE216"
-      svc: "0x7976bcE1BE0184A738BecF42AF7428065229a42F"
-      workspace: "0x7e1639F35192aab59E1Bc349cD333139BFdA0C86"
-      treasury: "0xb7b6E31D17bBbC7E71741DAbB7d062A26f776902"
-      registry: "0x62e65f085aBEf2cdF9Cf63bf854a363aF75a3F28"
-      church: "0x2404f292187faeCaeD7ceED9F0954Cc3311AB250"
-      circle: "0x15D890374B5BD6D41ADF062Ec25953c7E236c463"
-      household: "0x938eD1296Da9A092A55AEC4F478B667C5b14d09d"
-    namingServiceAgent: "0x8e6F25eb905677ee80fEc3F8742A8cd143a998e9"
-    namingFeeTreasury: "0xd2e64340f93933cC160D470C8EB9042435e29809"
 
 estates:
   - id: faithnet

@@ -14,7 +14,7 @@
   "dependencies": {
     "@agenticprimitives/mcp-protocol": "0.0.0-alpha.4",
     "hono": "4.13.0",
-    "@agenticprimitives/a2a": "0.0.0-alpha.27",
+    "@agenticprimitives/a2a": "0.0.0-alpha.28",
     "viem": "2.52.2"
   },
   "devDependencies": {

@@ -12,7 +12,7 @@
     "deploy:faithnet": "pnpm build && wrangler deploy --env faithnet"
   },
   "dependencies": {
-    "@agenticprimitives/a2a": "0.0.0-alpha.27",
+    "@agenticprimitives/a2a": "0.0.0-alpha.28",
     "@ap-town/town-model": "workspace:*",
     "@ap-town/town-scene": "workspace:*",
     "@ap-town/town-ui": "workspace:*",

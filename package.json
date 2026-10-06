@@ -2,7 +2,7 @@
   "name": "ap-town",
   "version": "0.0.0",
   "private": true,
-  "description": "ap-town \u2014 the services every estate on one chain shares: naming, the registry, the public graph and discovery, chain access, the Town portal (spec 429). A product repository on published @agenticprimitives/* packages (ADR-0063).",
+  "description": "ap-town — the services every estate on one chain shares: naming, the registry, the public graph and discovery, chain access, the Town portal (spec 429). A product repository on published @agenticprimitives/* packages (ADR-0063).",
   "type": "module",
   "engines": {
     "node": ">=22.18",
@@ -27,19 +27,19 @@
     "provision:naming": "tsx scripts/provision-naming-service.mts"
   },
   "devDependencies": {
-    "@agenticprimitives/a2a": "0.0.0-alpha.27",
-    "@agenticprimitives/devkit": "0.0.0-alpha.12",
+    "@agenticprimitives/a2a": "0.0.0-alpha.28",
+    "@agenticprimitives/devkit": "0.0.0-alpha.13",
     "@agenticprimitives/evaluation": "0.0.0-alpha.5",
     "@agenticprimitives/mcp-protocol": "0.0.0-alpha.4",
     "typescript": "^5.7.3",
     "vitest": "^4.1.8",
     "tsx": "^4.22.4",
     "@types/node": "^22.7.0",
-    "@agenticprimitives/agent-account": "1.0.0-alpha.29",
-    "@agenticprimitives/agent-naming": "1.0.0-alpha.29",
-    "@agenticprimitives/contracts": "1.0.0-alpha.29",
+    "@agenticprimitives/agent-account": "1.0.0-alpha.30",
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.30",
+    "@agenticprimitives/contracts": "1.0.0-alpha.30",
     "viem": "2.52.2",
-    "@agenticprimitives/types": "1.0.0-alpha.29"
+    "@agenticprimitives/types": "1.0.0-alpha.30"
   },
   "pnpm": {
     "overrides": {
