@@ -345,8 +345,15 @@ function safeHost(url: string): string { try { return new URL(url).host; } catch
 export async function addressView(ctx: Ctx, address: Address): Promise<AddressView> {
   const { chain } = ctx;
   const a = lower(address);
-  // Every root's open subregistry records one claim per agent: ask each what this address claimed.
-  const subs = (await rootViews(ctx)).filter((r) => r.open && r.subregistry).map((r) => [r.tld, r.subregistry!] as const);
+  // Every subregistry that ever fronted a root records one claim per agent: the root's current one (priced or open)
+  // and the open ones from before the switch (spec 431 W4) — a name claimed then is still held now.
+  const roots = await rootViews(ctx);
+  const subs: Array<readonly [string, Address]> = [];
+  const seenSub = new Set<string>();
+  const add = (tld: string, a: Address | null | undefined) => { if (a && !seenSub.has(a.toLowerCase())) { seenSub.add(a.toLowerCase()); subs.push([tld, a.toLowerCase() as Address]); } };
+  for (const r of roots) add(r.tld, r.subregistry);
+  for (const [tld, a] of Object.entries(chain.subregistries)) add(tld, a);
+  for (const a of chain.open) add('', a);
   const [s, code, presentedRaw, primaryNode, declared, claims] = await Promise.all([
     stamp(ctx), chain.client.getCode({ address: a }), chain.ur<string>('reverseResolveString', [a]), chain.reg<Hex>('primaryName', [a]),
     chain.naming.readDerivedType(a), Promise.all(subs.map(([, sub]) => chain.sub<Hex>(sub, 'claimedBy', [a]))),
