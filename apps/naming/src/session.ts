@@ -287,10 +287,15 @@ function ceremonyUrl(session: NamesSession, href: string): string {
 }
 
 /**
- * Open the Home ceremony in a popup and wait for its result. `null` = the person closed it without finishing;
- * `'blocked'` = no popup could open (the caller navigates instead).
+ * Open the Home ceremony in a popup and wait for its result. `null` = cancelled (the caller's `cancel`, or the
+ * ceremony timed out); `'blocked'` = no popup could open (the caller navigates instead).
+ *
+ * `popup.closed` is deliberately NOT watched: the Home sends `Cross-Origin-Opener-Policy`, so the moment the popup
+ * lands there the opener's handle reports closed although the window is open — treating that as "the person closed
+ * it" ended every ceremony at its first step. The result comes over the BroadcastChannel (which survives the severed
+ * opener); a person who really closes the window uses the page's Cancel.
  */
-export function openHomeCeremony(session: NamesSession, href: string, onProgress?: (msg: string) => void): Promise<HomeResult | null | 'blocked'> {
+export function openHomeCeremony(session: NamesSession, href: string, onProgress?: (msg: string) => void, cancel?: AbortSignal): Promise<HomeResult | null | 'blocked'> {
   const url = ceremonyUrl(session, href);
   const w = 560, h = 840;
   const left = Math.max(0, Math.round(window.screenX + (window.outerWidth - w) / 2));
@@ -304,7 +309,7 @@ export function openHomeCeremony(session: NamesSession, href: string, onProgress
     const done = (r: HomeResult | null) => {
       if (settled) return;
       settled = true;
-      bc.close(); window.removeEventListener('message', onMessage); clearInterval(poll);
+      bc.close(); window.removeEventListener('message', onMessage); window.clearTimeout(timer); cancel?.removeEventListener('abort', onCancel);
       if (r) rememberJustRegistered(r);
       resolve(r);
     };
@@ -315,7 +320,9 @@ export function openHomeCeremony(session: NamesSession, href: string, onProgress
     bc.onmessage = (e) => take(e.data);
     const onMessage = (e: MessageEvent) => { if (e.origin === window.location.origin) take(e.data); };
     window.addEventListener('message', onMessage);
-    const poll = window.setInterval(() => { if (popup.closed) window.setTimeout(() => done(null), 400); }, 500);
+    const onCancel = () => { try { if (!popup.closed) popup.close(); } catch { /* severed */ } done(null); };
+    cancel?.addEventListener('abort', onCancel);
+    const timer = window.setTimeout(() => done(null), 20 * 60_000);
   });
 }
 

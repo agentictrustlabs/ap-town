@@ -227,3 +227,4 @@ main > section { margin-bottom: 30px; }
 .filters input { flex: 1 1 160px; min-width: 0; }
 .words { display: grid; gap: 8px; margin: 8px 0 10px; }
 .words input { padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: inherit; }
+.waiting .linkish { margin-left: 6px; }

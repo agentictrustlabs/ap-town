@@ -17,30 +17,39 @@ export const KIND_OF_TLD: Record<string, PlaceKind> = { me: 'person', org: 'org'
 export function connectHref(then: string): string { return `/connect?then=${encodeURIComponent(then)}`; }
 
 /** Runs one Home ceremony from a button: popup first, full page when blocked; lands on the new name. */
-export function useHomeCeremony(): { run: (href: string) => Promise<void>; busy: string | null; error: string | null } {
+export function useHomeCeremony(): { run: (href: string) => Promise<void>; cancel: () => void; busy: string | null; error: string | null } {
   const { session, refreshAgents } = useSession();
   const { go } = useRoute();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [aborter, setAborter] = useState<AbortController | null>(null);
   const run = async (href: string) => {
     if (!session) return;
-    setError(null); setBusy('Opening your Home…');
+    const ac = new AbortController();
+    setAborter(ac); setError(null); setBusy('Opening your Home…');
     try {
-      const r = await openHomeCeremony(session, href, setBusy);
+      const r = await openHomeCeremony(session, href, setBusy, ac.signal);
       if (r === 'blocked') { navigateToHomeCeremony(href); return; }
       if (r) { refreshAgents(); go(`${nameHref(r.name)}?just=${Date.now()}`); }
-      else setError('Your Home closed before the name landed. Nothing was bought.');
+      else setError('Nothing landed from your Home. If you closed its window, nothing was bought; try again when you like.');
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
-    finally { setBusy(null); }
+    finally { setBusy(null); setAborter(null); }
   };
-  return { run, busy, error };
+  const cancel = () => aborter?.abort();
+  return { run, cancel, busy, error };
+}
+
+/** The line shown while the Home is open: what to do, and a way out. */
+export function Waiting({ busy, cancel }: { busy: string | null; cancel: () => void }): ReactNode {
+  if (!busy) return null;
+  return <p className="loading waiting" role="status">{busy} <button type="button" className="linkish" onClick={cancel}>Cancel</button></p>;
 }
 
 /** A register button for a name (label + ending known) or for an ending (label chosen at the Home). */
 export function Register({ label, tld, price }: { label: string; tld: string; price?: { coins: number; coin: string } | null }): ReactNode {
   const { session } = useSession();
   const { path } = useRoute();
-  const { run, busy, error } = useHomeCeremony();
+  const { run, cancel, busy, error } = useHomeCeremony();
   const [open, setOpen] = useState(false);
   const [words, setWords] = useState(false);
   const [displayName, setDisplayName] = useState('');
@@ -64,14 +73,16 @@ export function Register({ label, tld, price }: { label: string; tld: string; pr
       {own && (
         <>
           <p><strong>Make {name} your own name{cost}.</strong> You are connected as <span className="mono">{session.address.slice(0, 6)}…{session.address.slice(-4)}</span> and present no name yet. Your Home opens with it filled in; two taps there, and this page shows the name as yours.</p>
-          <div className="home-cta-row"><button type="button" className="button" disabled={!!busy} onClick={() => void run(handoffHref(estate, { claim: label, tld, ...profile }))}>{busy ?? `Buy ${name} at your Home →`}</button></div>
+          <div className="home-cta-row"><button type="button" className="button" disabled={!!busy} onClick={() => void run(handoffHref(estate, { claim: label, tld, ...profile }))}>{`Buy ${name} at your Home →`}</button></div>
+          <Waiting busy={busy} cancel={cancel} />
         </>
       )}
       {!own && kinds.length > 0 && (
         <>
           <p><strong>Register {name}{cost} as a new agent you keep.</strong> {session.name ? <>You are connected as <strong>{session.name}</strong>. </> : null}The ending decides what it is: {kinds.map((k) => k.label.toLowerCase()).join(' or ')}. Your Home opens, creates the agent with its own treasury, buys the name, and this page shows it.</p>
           <div className="home-cta-row">
-            {kinds.map((k) => <button key={k.kind} type="button" className="button" disabled={!!busy} onClick={() => void run(handoffHref(estate, { charter: k.kind, claim: label, tld, ...profile }))}><Glyph kind={KIND_OF_TLD[tld] ?? 'service'} size={22} /> {busy ?? `${k.label} named ${label || `….${tld}`} →`}</button>)}
+            {kinds.map((k) => <button key={k.kind} type="button" className="button" disabled={!!busy} onClick={() => void run(handoffHref(estate, { charter: k.kind, claim: label, tld, ...profile }))}><Glyph kind={KIND_OF_TLD[tld] ?? 'service'} size={22} /> {`${k.label} named ${label || `….${tld}`} →`}</button>)}
+            <Waiting busy={busy} cancel={cancel} />
             {tld === 'me' && session.name && <span className="quiet">Your own name is <Link href={nameHref(session.name)}>{session.name}</Link>; a second .me is a persona — another name of yours with its own agent.</span>}
           </div>
         </>
@@ -101,11 +112,11 @@ export function Register({ label, tld, price }: { label: string; tld: string; pr
 /** Every kind a connected person may charter, each opening the Home with the ending chosen and the label blank. */
 export function KindPicker({ label = '' }: { label?: string }): ReactNode {
   const { session } = useSession();
-  const { run, busy, error } = useHomeCeremony();
+  const { run, cancel, busy, error } = useHomeCeremony();
   if (!session) return null;
   return (
     <>
-      {busy && <p className="loading" role="status">{busy}</p>}
+      <Waiting busy={busy} cancel={cancel} />
       {error && <p className="search-problem" role="alert">{error}</p>}
       <ul className="kinds" aria-busy={!!busy}>
         {CHARTER_KINDS.map((k) => (

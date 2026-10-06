@@ -2,7 +2,7 @@ import { useState, type FormEvent, type ReactNode } from 'react';
 import type { PlaceKind } from '@ap-town/town-scene';
 import { useApi } from '../api';
 import type { AddressView } from '../api-types';
-import { KindPicker, useHomeCeremony } from '../register';
+import { KindPicker, Waiting, useHomeCeremony } from '../register';
 import { Link, addressHref, nameHref, useRoute } from '../router';
 import { addressScene } from '../scenes';
 import { agentNamingHref, handoffHref, justRegistered } from '../session';
@@ -23,7 +23,7 @@ const TLD_OF_KIND: Record<string, string> = { person: 'me', org: 'org', team: 't
  */
 function YourAgents(): ReactNode {
   const { agents, agentsError, session } = useSession();
-  const { run, busy, error } = useHomeCeremony();
+  const { run, cancel, busy, error } = useHomeCeremony();
   const [q, setQ] = useState('');
   const [kind, setKind] = useState('all');
   const [sort, setSort] = useState<'name' | 'kind'>('kind');
@@ -45,6 +45,7 @@ function YourAgents(): ReactNode {
         <select value={sort} onChange={(e) => setSort(e.target.value as 'name' | 'kind')} aria-label="Sort"><option value="kind">By kind</option><option value="name">By name</option></select>
         {unnamed > 0 && <span className="quiet">{unnamed} unnamed</span>}
       </div>
+      <Waiting busy={busy} cancel={cancel} />
       {error && <p className="search-problem" role="alert">{error}</p>}
       {rows.length === 0 ? <p className="quiet">Nothing matches.</p> : (
         <ul className="rows">
@@ -56,7 +57,7 @@ function YourAgents(): ReactNode {
                 <span className="row-sub">{KIND_WORD[a.kind] ?? a.kind}{a.label && a.label !== a.name ? ` · ${a.label}` : ''}{a.name ? '' : ' · unnamed'}</span>
               </span>
               {a.relationship === 'self' && <Chip kind="persona" />}
-              {!a.name && session && TLD_OF_KIND[a.kind] && <button type="button" className="button button-quiet" disabled={!!busy} onClick={() => void run(agentNamingHref(session.estate, a.agent, { tld: TLD_OF_KIND[a.kind]! }))}>{busy ?? 'Name it'}</button>}
+              {!a.name && session && TLD_OF_KIND[a.kind] && <button type="button" className="button button-quiet" disabled={!!busy} onClick={() => void run(agentNamingHref(session.estate, a.agent, { tld: TLD_OF_KIND[a.kind]! }))}>Name it</button>}
             </li>
           ))}
         </ul>
@@ -73,7 +74,7 @@ function YourAgents(): ReactNode {
 export function Me(): ReactNode {
   const { session, leave } = useSession();
   const { go } = useRoute();
-  const { run, busy, error } = useHomeCeremony();
+  const { run, cancel, busy, error } = useHomeCeremony();
   const just = justRegistered();
   const v = useApi<AddressView>(session ? `/api/address/${session.address}?t=${just?.name ?? ''}` : null);
   const [label, setLabel] = useState('');
@@ -110,7 +111,8 @@ export function Me(): ReactNode {
             <span className="search-suffix mono">.me</span>
             <button type="submit" className="button">Check and buy →</button>
           </form>
-          <p className="quiet">Three letters or more; shorter costs more; nothing costs 50. Or <button type="button" className="linkish" disabled={!!busy} onClick={() => void run(handoffHref(estate, { tld: 'me' }))}>{busy ?? 'pick it at your Home'}</button>.{error ? ` ${error}` : ''}</p>
+          <p className="quiet">Three letters or more; shorter costs more; nothing costs 50. Or <button type="button" className="linkish" disabled={!!busy} onClick={() => void run(handoffHref(estate, { tld: 'me' }))}>pick it at your Home</button>.{error ? ` ${error}` : ''}</p>
+          <Waiting busy={busy} cancel={cancel} />
         </section>
       )}
       <Loading v={v}>{(a) => (

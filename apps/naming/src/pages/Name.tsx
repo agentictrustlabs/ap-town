@@ -3,7 +3,7 @@ import { PLACE_SHAPES } from '@ap-town/town-scene';
 import { useApi } from '../api';
 import type { NameView } from '../api-types';
 import { Link, nameHref, rootHref, useRoute } from '../router';
-import { Register, useHomeCeremony } from '../register';
+import { Register, Waiting, useHomeCeremony } from '../register';
 import { useSession } from '../use-session';
 import { agentNamingHref, forgetJustRegistered, justRegistered } from '../session';
 import { lotScene } from '../scenes';
@@ -163,12 +163,13 @@ function Details({ v }: { v: NameView }): ReactNode {
 /** The owner's lever (430 N6c): for a name the connected person keeps, the Home's naming page in the popup; else the link. */
 function EditAtHome({ v, mine, own }: { v: NameView; mine: boolean; own: boolean }): ReactNode {
   const { session } = useSession();
-  const { run, busy, error } = useHomeCeremony();
+  const { run, cancel, busy, error } = useHomeCeremony();
   if (!session || !mine || !v.agent) return <AtYourHome estates={v.estates} verb="Changing a record, the presented name or the owner" name={v.name} />;
   return (
     <div className="home-cta">
       <p><strong>This name is yours.</strong> Records, the presented name and the agent's card are changed at your Home, signed by the agent's own account; this page shows the result when you come back.</p>
-      <div className="home-cta-row"><button type="button" className="button" disabled={!!busy} onClick={() => void run(agentNamingHref(session.estate, v.agent!, { name: v.name }, own))}>{busy ?? 'Edit at your Home →'}</button></div>
+      <div className="home-cta-row"><button type="button" className="button" disabled={!!busy} onClick={() => void run(agentNamingHref(session.estate, v.agent!, { name: v.name }, own))}>Edit at your Home →</button></div>
+      <Waiting busy={busy} cancel={cancel} />
       {error && <p className="search-problem" role="alert">{error}</p>}
     </div>
   );
