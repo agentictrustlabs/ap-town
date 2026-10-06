@@ -237,11 +237,15 @@ export const CHARTER_KINDS: ReadonlyArray<{ kind: string; tld: string; label: st
 
 /**
  * A managed agent's own naming page at the Home (430 N6b/N6c): *Name it* for an unnamed agent of the person's, *Edit at
- * your Home* for a name they keep. The person's own agent has `/naming`; any other agent of theirs `/as/<agent>/naming`.
+ * your Home* for a name they keep. The Home keeps one naming page per CLASS of agent: the person's own at `/naming`, a
+ * second person of theirs at `/as/<agent>/naming`, an organization-class agent (org, team, church, circle, household)
+ * at `/org/<agent>/naming`, a service-class one (service, workspace, a treasury, a registry) at `/service/<agent>/naming`.
  */
-export function agentNamingHref(estate: EstateRef, agent: string, p: { tld?: string; claim?: string; name?: string; return?: string }, own = false): string {
+export function agentNamingHref(estate: EstateRef, agent: string, p: { tld?: string; claim?: string; name?: string; return?: string }, who: 'own' | string): string {
   const home = estate.home.replace(/\/$/, '');
-  const u = new URL(own ? `${home}/naming` : `${home}/as/${agent}/naming`);
+  const ORG = new Set(['org', 'team', 'church', 'circle', 'household']);
+  const page = who === 'own' ? `${home}/naming` : who === 'person' ? `${home}/as/${agent}/naming` : ORG.has(who) ? `${home}/org/${agent}/naming` : `${home}/service/${agent}/naming`;
+  const u = new URL(page);
   if (p.claim) u.searchParams.set('claim', p.claim);
   if (p.tld) u.searchParams.set('tld', p.tld);
   if (p.name) u.searchParams.set('name', p.name);

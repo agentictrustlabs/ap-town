@@ -57,7 +57,7 @@ function YourAgents(): ReactNode {
                 <span className="row-sub">{KIND_WORD[a.kind] ?? a.kind}{a.label && a.label !== a.name ? ` · ${a.label}` : ''}{a.name ? '' : ' · unnamed'}</span>
               </span>
               {a.relationship === 'self' && <Chip kind="persona" />}
-              {!a.name && session && TLD_OF_KIND[a.kind] && <button type="button" className="button button-quiet" disabled={!!busy} onClick={() => void run(agentNamingHref(session.estate, a.agent, { tld: TLD_OF_KIND[a.kind]! }))}>Name it</button>}
+              {!a.name && session && TLD_OF_KIND[a.kind] && <button type="button" className="button button-quiet" disabled={!!busy} onClick={() => void run(agentNamingHref(session.estate, a.agent, { tld: TLD_OF_KIND[a.kind]! }, a.kind))}>Name it</button>}
             </li>
           ))}
         </ul>

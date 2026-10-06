@@ -162,13 +162,14 @@ function Details({ v }: { v: NameView }): ReactNode {
 
 /** The owner's lever (430 N6c): for a name the connected person keeps, the Home's naming page in the popup; else the link. */
 function EditAtHome({ v, mine, own }: { v: NameView; mine: boolean; own: boolean }): ReactNode {
-  const { session } = useSession();
+  const { session, agents } = useSession();
   const { run, cancel, busy, error } = useHomeCeremony();
   if (!session || !mine || !v.agent) return <AtYourHome estates={v.estates} verb="Changing a record, the presented name or the owner" name={v.name} />;
+  const who = own ? 'own' : (agents ?? []).find((a) => a.agent === v.agent!.toLowerCase())?.kind ?? 'org';
   return (
     <div className="home-cta">
       <p><strong>This name is yours.</strong> Records, the presented name and the agent's card are changed at your Home, signed by the agent's own account; this page shows the result when you come back.</p>
-      <div className="home-cta-row"><button type="button" className="button" disabled={!!busy} onClick={() => void run(agentNamingHref(session.estate, v.agent!, { name: v.name }, own))}>Edit at your Home →</button></div>
+      <div className="home-cta-row"><button type="button" className="button" disabled={!!busy} onClick={() => void run(agentNamingHref(session.estate, v.agent!, { name: v.name }, who))}>Edit at your Home →</button></div>
       <Waiting busy={busy} cancel={cancel} />
       {error && <p className="search-problem" role="alert">{error}</p>}
     </div>
