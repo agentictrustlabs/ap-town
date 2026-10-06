@@ -222,3 +222,8 @@ main > section { margin-bottom: 30px; }
 .yours-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; }
 .yours-chip:hover { border-color: var(--accent); }
 .yours-more { background: transparent; border-style: dashed; color: var(--accent); }
+.filters { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 0 0 12px; }
+.filters input, .filters select { padding: 8px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); font: inherit; font-size: .92rem; }
+.filters input { flex: 1 1 160px; min-width: 0; }
+.words { display: grid; gap: 8px; margin: 8px 0 10px; }
+.words input { padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: inherit; }

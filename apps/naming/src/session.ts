@@ -236,16 +236,32 @@ export const CHARTER_KINDS: ReadonlyArray<{ kind: string; tld: string; label: st
 ];
 
 /**
+ * A managed agent's own naming page at the Home (430 N6b/N6c): *Name it* for an unnamed agent of the person's, *Edit at
+ * your Home* for a name they keep. The person's own agent has `/naming`; any other agent of theirs `/as/<agent>/naming`.
+ */
+export function agentNamingHref(estate: EstateRef, agent: string, p: { tld?: string; claim?: string; name?: string; return?: string }, own = false): string {
+  const home = estate.home.replace(/\/$/, '');
+  const u = new URL(own ? `${home}/naming` : `${home}/as/${agent}/naming`);
+  if (p.claim) u.searchParams.set('claim', p.claim);
+  if (p.tld) u.searchParams.set('tld', p.tld);
+  if (p.name) u.searchParams.set('name', p.name);
+  u.searchParams.set('return', p.return ?? (typeof window === 'undefined' ? '' : window.location.href));
+  return u.toString();
+}
+
+/**
  * The hand-off to the Home (430 N2 + 431 §5.1): `claim`/`tld` prefill the purchase card for the person's own name;
  * `charter=<kind>` opens the charter-and-buy ceremony for a new agent the person will custody. `return` brings them
  * back to the name page when it lands.
  */
-export function handoffHref(estate: EstateRef, p: { claim?: string; tld: string; charter?: string; return?: string }): string {
+export function handoffHref(estate: EstateRef, p: { claim?: string; tld: string; charter?: string; return?: string; displayName?: string; about?: string }): string {
   const home = estate.home.replace(/\/$/, '');
   const u = new URL(p.charter ? `${home}/naming/register` : `${home}/naming`);
   if (p.charter) u.searchParams.set('charter', p.charter);
   if (p.claim) u.searchParams.set('claim', p.claim);
   u.searchParams.set('tld', p.tld);
+  if (p.displayName?.trim()) u.searchParams.set('displayName', p.displayName.trim().slice(0, 80));
+  if (p.about?.trim()) u.searchParams.set('about', p.about.trim().slice(0, 280));
   u.searchParams.set('return', p.return ?? (typeof window === 'undefined' ? '' : window.location.href));
   return u.toString();
 }
@@ -259,7 +275,7 @@ export function handoffHref(estate: EstateRef, p: { claim?: string; tld: string;
 export const HOME_RELAY_CHANNEL = 'naming-app-home-relay';
 const JUST_KEY = 'names.justRegistered';
 
-export interface HomeResult { readonly name: string; readonly agent: string | null }
+export interface HomeResult { readonly name: string; readonly agent: string | null; /** A record or presentation change, not a registration (430 N6c). */ readonly changed?: boolean }
 
 /** The ceremony URL as a popup: `popup=1`, the way back to `/me`, and a demo person's Home session in the fragment. */
 function ceremonyUrl(session: NamesSession, href: string): string {
@@ -315,9 +331,9 @@ export function navigateToHomeCeremony(href: string): void {
  * page show the new name. Returns the result when this window should go on to render it, else null (closing).
  */
 export function takeHomeReturn(search: URLSearchParams): HomeResult | null {
-  const name = search.get('registered');
+  const name = search.get('registered') ?? search.get('changed');
   if (!name) return null;
-  const result: HomeResult = { name, agent: search.get('agent') };
+  const result: HomeResult = { name, agent: search.get('agent'), ...(search.get('changed') ? { changed: true } : {}) };
   rememberJustRegistered(result);
   if (search.get('popup') !== '1') window.history.replaceState({}, '', `/name/${encodeURIComponent(name)}?just=1`);
   if (search.get('popup') === '1') {
@@ -337,7 +353,7 @@ export function justRegistered(): HomeResult | null {
     const raw = sessionStorage.getItem(JUST_KEY);
     if (!raw) return null;
     const r = JSON.parse(raw) as HomeResult & { at: number };
-    return Date.now() - r.at < 10 * 60_000 ? { name: r.name, agent: r.agent } : null;
+    return Date.now() - r.at < 10 * 60_000 ? { name: r.name, agent: r.agent, ...(r.changed ? { changed: true } : {}) } : null;
   } catch { return null; }
 }
 export function forgetJustRegistered(): void { try { sessionStorage.removeItem(JUST_KEY); } catch { /* nothing */ } }

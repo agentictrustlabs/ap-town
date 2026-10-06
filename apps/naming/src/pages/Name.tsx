@@ -3,8 +3,9 @@ import { PLACE_SHAPES } from '@ap-town/town-scene';
 import { useApi } from '../api';
 import type { NameView } from '../api-types';
 import { Link, nameHref, rootHref, useRoute } from '../router';
-import { Register } from '../register';
-import { forgetJustRegistered, justRegistered } from '../session';
+import { Register, useHomeCeremony } from '../register';
+import { useSession } from '../use-session';
+import { agentNamingHref, forgetJustRegistered, justRegistered } from '../session';
 import { lotScene } from '../scenes';
 import { Addr, AtYourHome, Banners, Chip, Copy, Glyph, Loading, Scene, Signals, Stamped, Tabs } from '../ui';
 
@@ -159,6 +160,20 @@ function Details({ v }: { v: NameView }): ReactNode {
   );
 }
 
+/** The owner's lever (430 N6c): for a name the connected person keeps, the Home's naming page in the popup; else the link. */
+function EditAtHome({ v, mine, own }: { v: NameView; mine: boolean; own: boolean }): ReactNode {
+  const { session } = useSession();
+  const { run, busy, error } = useHomeCeremony();
+  if (!session || !mine || !v.agent) return <AtYourHome estates={v.estates} verb="Changing a record, the presented name or the owner" name={v.name} />;
+  return (
+    <div className="home-cta">
+      <p><strong>This name is yours.</strong> Records, the presented name and the agent's card are changed at your Home, signed by the agent's own account; this page shows the result when you come back.</p>
+      <div className="home-cta-row"><button type="button" className="button" disabled={!!busy} onClick={() => void run(agentNamingHref(session.estate, v.agent!, { name: v.name }, own))}>{busy ?? 'Edit at your Home →'}</button></div>
+      {error && <p className="search-problem" role="alert">{error}</p>}
+    </div>
+  );
+}
+
 export function Name({ name }: { name: string }): ReactNode {
   const { search } = useRoute();
   const [tab, setTab] = useState('profile');
@@ -168,18 +183,20 @@ export function Name({ name }: { name: string }): ReactNode {
   // marker because the buyer was usually ALREADY on this page: a same-path navigation does not remount it.
   // Decided once, at mount: a later render must not flip the read back to the cached path after the fresh read
   // showed the name registered (that is how a buyer once saw "available" AFTER the chain had answered).
-  const [freshAt] = useState(() => (new URLSearchParams(search).get('just') === '1' && justRegistered()?.name === name ? Date.now() : 0));
+  const [freshAt] = useState(() => (new URLSearchParams(search).has('just') && justRegistered()?.name === name ? Date.now() : 0));
+  const [changed] = useState(() => !!justRegistered()?.changed);
   const fresh = freshAt > 0;
+  const { session, agents } = useSession();
   const [tick, setTick] = useState(0);
   const [shown, setShown] = useState(false);
   const v = useApi<NameView>(`/api/name/${encodeURIComponent(name)}${fresh ? `?fresh=${freshAt}-${tick}` : ''}`);
   useEffect(() => {
     if (!fresh || v.state !== 'ready') return;
-    if (v.data.status === 'registered') { if (!shown) { setShown(true); forgetJustRegistered(); } return; }
+    if (v.data.status === 'registered' || changed) { if (!shown) { setShown(true); forgetJustRegistered(); } return; }
     if (tick >= 14) return;
     const t = window.setTimeout(() => setTick((n) => n + 1), 2500);
     return () => window.clearTimeout(t);
-  }, [fresh, v, tick, shown]);
+  }, [fresh, v, tick, shown, changed]);
   return (
     <Loading v={v}>{(n) => {
       if (n.status === 'invalid') return <Invalid v={n} />;
@@ -196,7 +213,7 @@ export function Name({ name }: { name: string }): ReactNode {
               {n.agent && <p className="title-addr"><span className="quiet">points at</span> <Addr address={n.agent} full /></p>}
             </div>
           </section>
-          {shown && <div className="banner banner-ok" role="status"><strong>Yours.</strong> Registered just now, signed at your Home; this service only read it back from the chain.</div>}
+          {shown && <div className="banner banner-ok" role="status"><strong>{changed ? 'Updated.' : 'Yours.'}</strong> {changed ? 'Changed just now at your Home; this page read it back from the chain.' : 'Registered just now, signed at your Home; this service only read it back from the chain.'}</div>}
           <Banners banners={n.banners} />
           {n.signals && <section aria-label="Signals"><Signals signals={n.signals} /></section>}
           <section>
@@ -209,7 +226,7 @@ export function Name({ name }: { name: string }): ReactNode {
               {tab === 'details' && <Details v={n} />}
             </div>
           </section>
-          <section><h2>Change something</h2><AtYourHome estates={n.estates} verb="Changing a record, the presented name or the owner" name={n.name} /></section>
+          <section><h2>Change something</h2><EditAtHome v={n} mine={!!session && !!n.agent && (n.agent.toLowerCase() === session.address.toLowerCase() || (agents ?? []).some((a) => a.agent === n.agent!.toLowerCase()))} own={!!session && !!n.agent && n.agent.toLowerCase() === session.address.toLowerCase()} /></section>
           <Stamped s={n} />
         </>
       );

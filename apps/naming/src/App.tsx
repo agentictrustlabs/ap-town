@@ -17,14 +17,14 @@ import { PLACE_OF_KIND } from './pages/Me';
 import { nameHref } from './router';
 
 function Page(): ReactNode {
-  const { path } = useRoute();
+  const { path, search } = useRoute();
   let m: RegExpMatchArray | null;
   if (path === '/' || path === '') return <Home />;
   if (path === '/search') return <Search />;
   if (path === '/integrate') return <Integrate />;
   if (path === '/connect') return <Connect />;
   if (path === '/me') return <Me />;
-  if ((m = path.match(/^\/name\/(.+)$/))) return <Name key={m[1]} name={decodeURIComponent(m[1]!)} />;
+  if ((m = path.match(/^\/name\/(.+)$/))) return <Name key={m[1] + search} name={decodeURIComponent(m[1]!)} />;
   if ((m = path.match(/^\/address\/(0x[0-9a-fA-F]{40})$/))) return <AddressPage key={m[1]} address={m[1]!} />;
   if ((m = path.match(/^\/root\/([a-z0-9-]+)$/))) return <Root key={m[1]} tld={m[1]!} />;
   return <section><h1>Nothing here</h1><p className="lede">That page does not exist. Try the search box.</p></section>;
