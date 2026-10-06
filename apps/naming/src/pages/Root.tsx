@@ -2,9 +2,9 @@ import type { ReactNode } from 'react';
 import { useApi } from '../api';
 import type { RootPage } from '../api-types';
 import { Link, nameHref, rootHref, useRoute } from '../router';
-import { Register } from '../register';
+import { FindName } from '../find-name';
 import { rootScene } from '../scenes';
-import { Addr, Chip, Glyph, Loading, Map, Stamped } from '../ui';
+import { Addr, Chip, Glyph, Loading, Scene, Stamped } from '../ui';
 
 export function Root({ tld }: { tld: string }): ReactNode {
   const { search } = useRoute();
@@ -21,7 +21,14 @@ export function Root({ tld }: { tld: string }): ReactNode {
             <p className="quiet">{p.root.issuing}</p>
           </div>
         </section>
-        {p.names.length > 0 && <section><Map scene={rootScene(p)} height={460} legend={`The .${p.root.tld} street. Each building is one registered name; zoom in to read them, press one to open it.`} /></section>}
+        {(p.root.priced || p.root.open) && (
+          <section className="find-section">
+            <h2>{p.root.priced ? 'Find your .' + p.root.tld + ' name' : 'Claim a .' + p.root.tld + ' name'}</h2>
+            <FindName tld={p.root.tld} names={p.root.names} />
+            {p.root.priced && <p className="quiet">{[['3 letters', 4], ['4', 3], ['5', 2], ['6–7', 1.5], ['8 and up', 1]].map(([len, m]) => `${len}: ${Math.min(49, Math.floor((p.root.baseCoins ?? 0) * Number(m)))} SHQ`).join(' · ')}. Once, never again — no rent, no resale.</p>}
+          </section>
+        )}
+        {p.names.length > 0 && <section><Scene scene={rootScene(p)} legend={`The .${p.root.tld} street: this page of its names, each drawn as ${p.root.names ?? 'an agent'}. Press one to open it.`} /></section>}
         <section>
           <h2>Names{p.pages > 1 ? ` · page ${p.page} of ${p.pages}` : ''}</h2>
           {p.names.length === 0 ? <p className="quiet">No names here yet.</p> : (
@@ -42,16 +49,6 @@ export function Root({ tld }: { tld: string }): ReactNode {
             </nav>
           )}
         </section>
-        {p.root.priced && (
-          <section>
-            <h2>Buy a .{p.root.tld} name</h2>
-            <table className="table price-table"><thead><tr><th scope="col">Letters</th><th scope="col">Price</th></tr></thead><tbody>
-              {[['3', 4], ['4', 3], ['5', 2], ['6–7', 1.5], ['8 and up', 1]].map(([len, m]) => <tr key={String(len)}><td>{len}</td><td>{Math.min(49, Math.floor((p.root.baseCoins ?? 0) * Number(m)))} SHQ</td></tr>)}
-            </tbody></table>
-            <Register label="" tld={p.root.tld} />
-          </section>
-        )}
-        {!p.root.priced && p.root.open && <section><h2>Claim a .{p.root.tld} name</h2><Register label="" tld={p.root.tld} /></section>}
         <Stamped s={p} />
       </>
     )}</Loading>

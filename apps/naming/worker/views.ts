@@ -93,10 +93,15 @@ async function rootViewOf(ctx: Ctx, node: Hex): Promise<RootView> {
 const ROOT_ORDER = [...AGENT_TLDS, ...LEGACY_TLDS] as readonly string[];
 const rootRank = (tld: string) => { const i = ROOT_ORDER.indexOf(tld); return i < 0 ? 999 : i; };
 
+/**
+ * The town's roots as shown: the TYPED ones. The legacy roots (`.impact`, `.agent`) are closed and say nothing about
+ * what an agent is, so they are not viewed (owner, 2026-10-06) — not on the home page, the search, or as root pages. A
+ * legacy NAME still answers on its own page, because it resolves, with its banner; an agent's held names still list it.
+ */
 export async function rootViews(ctx: Ctx): Promise<RootView[]> {
   const nodes = await ctx.chain.reg<Hex[]>('getRoots');
   const views = await Promise.all(nodes.map((n) => rootViewOf(ctx, n)));
-  return views.sort((a, b) => rootRank(a.tld) - rootRank(b.tld) || a.tld.localeCompare(b.tld));
+  return views.filter((v) => !v.legacy).sort((a, b) => rootRank(a.tld) - rootRank(b.tld) || a.tld.localeCompare(b.tld));
 }
 
 /** Names directly under `parentOnChain`, in the chain's own order (registration order), a slice at a time. */
@@ -134,6 +139,7 @@ export async function rootPage(ctx: Ctx, tld: string, page: number): Promise<Roo
   if (node === ZERO_NODE) return null;
   const p = Math.max(1, Math.floor(page) || 1);
   const [s, root, list] = await Promise.all([stamp(ctx), rootViewOf(ctx, node), rowsUnder(ctx, t, (p - 1) * PAGE_SIZE, PAGE_SIZE)]);
+  if (root.legacy) return null; // not viewed (see rootViews)
   return { ...s, root, page: p, pages: Math.max(1, Math.ceil(list.total / PAGE_SIZE)), pageSize: PAGE_SIZE, names: list.rows, estates: estatesOf(ctx.town) };
 }
 
@@ -274,8 +280,10 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
 
   const agent = nz(target);
   const [records, declared, presentedRaw, ownerNameRaw, kids, listed] = await Promise.all([
-    chain.naming.getRecords(p.onChainName) as Promise<Record<string, unknown>>,
-    agent ? chain.naming.readDerivedType(agent) : Promise.resolve(null),
+    // A name just claimed and not yet presented has a resolver and no records; the package's reader throws on the
+    // empty answer. That is "no records", not an error — the page must show the fresh name, not a crash.
+    (chain.naming.getRecords(p.onChainName) as Promise<Record<string, unknown>>).catch(() => ({} as Record<string, unknown>)),
+    agent ? chain.naming.readDerivedType(agent).catch(() => null) : Promise.resolve(null),
     agent ? chain.ur<string>('reverseResolveString', [agent]) : Promise.resolve(''),
     owner && owner !== agent ? chain.ur<string>('reverseResolveString', [owner]) : Promise.resolve(null),
     Number(childCount) ? rowsUnder(ctx, p.onChainName, 0, CHILD_CAP) : Promise.resolve({ rows: [], total: 0 }),

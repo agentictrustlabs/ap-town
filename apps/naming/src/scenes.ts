@@ -6,23 +6,39 @@ import { nameHref, rootHref } from './router';
 
 const place = (r: NameRow, over: Partial<PlaceInput> = {}): PlaceInput => ({ id: r.name, kind: r.kind, label: r.name, href: nameHref(r.name), lit: true, ...over });
 
+/** The three classes every agent is one of (ADR-0046), as the town's districts. */
+const DISTRICTS: ReadonlyArray<{ id: string; label: string; kinds: PlaceKind[] }> = [
+  { id: 'people', label: 'People', kinds: ['person'] },
+  { id: 'organizations', label: 'Organizations', kinds: ['org', 'team', 'church', 'circle', 'household'] },
+  { id: 'services', label: 'Services', kinds: ['service', 'workspace', 'treasury', 'registry'] },
+];
+
 /**
- * The whole town at the level of KINDS (owner, 2026-10-06: the home page shows agent types and counts, never
- * particular agents): one landmark per ending, drawn as the kind it names and sized by how many names stand
- * under it; its label is the ending and its count. Each leads to that ending's street, where the names are.
+ * The whole town at the level of KINDS, in three districts (owner, 2026-10-06: a 3D picture with the CONTEXT of
+ * person, organization or service; agent types and counts, never particular agents; not a zoomable map). One
+ * landmark per ending, drawn as the kind it names and sized by how many names stand under it, its pill saying the
+ * ending and the count; the district plate says which class those kinds are. Each landmark leads to its street.
  */
 export function townScene(t: TownView): TownSceneV1 {
-  const perRow = 3;
   const scaleOf = (n: number): number => (n >= 100 ? 1.9 : n >= 30 ? 1.6 : n >= 10 ? 1.35 : n > 0 ? 1.15 : 0.9);
-  const blockW = LOT + 2.4; const blockD = LOT + 2.6; const gap = 1.4;
-  const parts = t.roots.map((r, i) => {
-    const ox = (i % perRow) * (blockW + gap); const oy = Math.floor(i / perRow) * (blockD + gap);
-    // The ending and its count sit on the lot's plate (the label that is always drawn); the building carries no
-    // label of its own so twelve landmarks never fight for the same pixels on a phone.
-    const b = placeOnLot({ id: r.tld, kind: r.kind, href: rootHref(r.tld), lit: r.count > 0, pinned: true, scale: scaleOf(r.count) }, ox + 1.2, oy + 0.6);
-    return { plates: [{ id: `p-${r.tld}`, x: ox, y: oy, w: blockW, d: blockD, tone: PLACE_SHAPES[r.kind].tone, label: `.${r.tld} · ${r.count}`, href: rootHref(r.tld) }], buildings: [b], trees: [{ x: ox + 0.5, y: oy + blockD - 0.6, s: 0.7 }, { x: ox + blockW - 0.5, y: oy + 0.5, s: 0.6 }], w: blockW, d: blockD };
-  });
-  return town(parts, `The ${t.town} town by kind: ${t.roots.map((r) => `${r.count} under .${r.tld}`).join(', ')}.`);
+  const slot = LOT + 1.4; const depth = LOT + 2.2; const gap = 1.6;
+  // Two rows, so the picture is a block and not a ribbon: people and services across the top, organizations — the
+  // widest district — along the bottom.
+  const district = (d: typeof DISTRICTS[number], ox: number, oy: number) => {
+    const roots = t.roots.filter((r) => d.kinds.includes(r.kind)).sort((a, b) => d.kinds.indexOf(a.kind) - d.kinds.indexOf(b.kind));
+    if (!roots.length) return null;
+    const w = Math.max(2, roots.length) * slot + 0.8;
+    const total = roots.reduce((n, r) => n + r.count, 0);
+    const tone = PLACE_SHAPES[d.kinds[0]!].tone;
+    const buildings = roots.map((r, i) => placeOnLot({ id: r.tld, kind: r.kind, label: `.${r.tld}`, sub: `${r.count} ${r.count === 1 ? 'name' : 'names'}`, href: rootHref(r.tld), lit: r.count > 0, pinned: true, scale: scaleOf(r.count) }, ox + 0.4 + i * slot + (roots.length === 1 ? slot / 2 : 0), oy + 0.9));
+    const trees = [{ x: ox + 0.5, y: oy + depth - 0.5, s: 0.7 }, { x: ox + w - 0.5, y: oy + 0.5, s: 0.6 }, { x: ox + w - 0.6, y: oy + depth - 0.7, s: 0.8 }];
+    return { plates: [{ id: `d-${d.id}`, x: ox, y: oy, w, d: depth, tone, label: `${d.label} · ${total}` }], buildings, trees, w: ox + w, d: oy + depth };
+  };
+  const people = district(DISTRICTS[0]!, 0, 0);
+  const services = district(DISTRICTS[2]!, (people?.w ?? 0) + gap, 0);
+  const organizations = district(DISTRICTS[1]!, slot, depth + 3.6); // a row's label sits at its front edge: leave it room, and step the front row aside
+  const parts = [people, services, organizations].filter((x): x is NonNullable<typeof x> => !!x);
+  return town(parts, `The ${t.town} town by kind: ${DISTRICTS.map((d) => `${d.label.toLowerCase()} ${t.roots.filter((r) => d.kinds.includes(r.kind)).map((r) => `.${r.tld} (${r.count})`).join(', ')}`).join('; ')}.`);
 }
 
 /** One root's street: this page of its names. */

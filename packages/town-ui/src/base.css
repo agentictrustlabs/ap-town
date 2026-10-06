@@ -228,3 +228,8 @@ main > section { margin-bottom: 30px; }
 .words { display: grid; gap: 8px; margin: 8px 0 10px; }
 .words input { padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--ink); font: inherit; }
 .waiting .linkish { margin-left: 6px; }
+.find-section { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px 12px; }
+.find-section h2 { margin-top: 0; }
+.find .search-big { margin-top: 6px; }
+.find-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--bg); }
+.find-row .row-main { flex: 1 1 200px; min-width: 0; display: flex; flex-direction: column; }

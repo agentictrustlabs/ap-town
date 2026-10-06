@@ -2,9 +2,9 @@ import type { ReactNode } from 'react';
 import { useApi } from '../api';
 import type { TownView } from '../api-types';
 import { Link, rootHref } from '../router';
-import { Register } from '../register';
+import { FindName } from '../find-name';
 import { townScene } from '../scenes';
-import { Glyph, Loading, Map, SearchBox, Stamped } from '../ui';
+import { Glyph, Loading, Scene, SearchBox, Stamped } from '../ui';
 
 export function Home(): ReactNode {
   const v = useApi<TownView>('/api/town');
@@ -18,7 +18,12 @@ export function Home(): ReactNode {
       <Loading v={v}>{(t) => (
         <>
           <section>
-            <Map scene={townScene(t)} height={420} legend={`The ${t.town} town’s ${t.total} names, by kind. Each landmark is an ending — a kind of agent — sized by how many names stand under it. Press one to open its street and see the names.`} />
+            <Scene scene={townScene(t)} legend={`The ${t.town} town’s ${t.total} names, by kind: people, organizations and services. Each landmark is an ending — a kind of agent — sized by how many names stand under it. Press one to open its street and see the names.`} />
+          </section>
+          <section className="find-section">
+            <h2>Find your name</h2>
+            <p className="quiet">A person's name ends in .me. For an organization, a service or another kind, open its ending below.</p>
+            <FindName tld="me" names="a person" />
           </section>
           <section>
             <h2>The endings</h2>
@@ -34,10 +39,6 @@ export function Home(): ReactNode {
                 </Link>
               ))}
             </div>
-          </section>
-          <section>
-            <h2>Register a name</h2>
-            <Register label="" tld="me" />
           </section>
           <section className="three">
             <div><h3>The ending is the type</h3><p>.me is a person, .org an organization, .svc a service. The agent’s own record on the chain decides; a name whose ending disagrees is shown as mismatched.</p></div>
