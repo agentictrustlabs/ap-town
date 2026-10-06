@@ -300,7 +300,8 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
   if ((p.kind === 'canonical' || p.kind === 'scoped') && !p.legacy && tld) {
     if (!agent || !declared) typeCheck = { ok: false, reason: 'no_agent', detail: 'The name points at no agent.' };
     else {
-      const v = validateTypedClaim({ name: p, subject: { agentType: declared.agentType, serviceRole: declared.serviceRole, nameKind: (records.agentKind as never) ?? null, agentSubtype: declared.agentSubtype } }).filter((x) => x.code !== 'label_reads_as_type');
+      let v: ReturnType<typeof validateTypedClaim> = [];
+      try { v = validateTypedClaim({ name: p, subject: { agentType: declared.agentType, serviceRole: declared.serviceRole, nameKind: (records.agentKind as never) ?? null, agentSubtype: declared.agentSubtype } }).filter((x) => x.code !== 'label_reads_as_type'); } catch (e) { v = [{ code: 'type_undeclared', detail: String((e as Error).message ?? e) } as never]; }
       typeCheck = v.length ? { ok: false, reason: v[0]!.code, detail: VIOLATION_WORDS(v[0]!, tld) } : { ok: true };
     }
     if (!typeCheck.ok) banners.push({ tone: 'warn', title: typeCheck.reason === 'type_undeclared' ? 'Type not declared' : 'Type mismatch', body: `${typeCheck.detail} Until the agent’s own record agrees, this is not a valid .${tld} name and apps that check types will not accept it. The agent fixes this from its Home.` });

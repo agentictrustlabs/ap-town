@@ -198,12 +198,14 @@ export function Name({ name }: { name: string }): ReactNode {
   const [shown, setShown] = useState(false);
   const v = useApi<NameView>(`/api/name/${encodeURIComponent(name)}${fresh ? `?fresh=${freshAt}-${tick}` : ''}`);
   useEffect(() => {
-    if (!fresh || v.state !== 'ready') return;
-    if (v.data.status === 'registered' || changed) { if (!shown) { setShown(true); forgetJustRegistered(); } return; }
+    if (!fresh || v.state === 'loading') return;
+    if (v.state === 'ready' && (v.data.status === 'registered' || changed)) { if (!shown) { setShown(true); forgetJustRegistered(); } return; }
+    // Not there yet, or a read that failed mid-ceremony: try again, a bounded number of times.
     if (tick >= 14) return;
     const t = window.setTimeout(() => setTick((n) => n + 1), 2500);
     return () => window.clearTimeout(t);
   }, [fresh, v, tick, shown, changed]);
+  if (fresh && v.state === 'error' && tick < 14) return <section><h1>{name}</h1><p className="loading" role="status">Registered at your Home a moment ago — waiting for the chain to show it…</p></section>;
   return (
     <Loading v={v}>{(n) => {
       if (n.status === 'invalid') return <Invalid v={n} />;

@@ -56,7 +56,12 @@ async function api(url: URL, env: Env): Promise<Response> {
   if (path === '/town') return json(await townView(ctx), 200, 60);
   if (path === '/search') return json(await searchView(ctx, url.searchParams.get('q') ?? ''), 200, 15);
   let m = path.match(/^\/name\/(.+)$/);
-  if (m) return json(await nameView(ctx, m[1]!), 200, 20);
+  if (m) {
+    // A name mid-ceremony (claimed, not yet presented) has met readers that throw on empty answers; say what failed,
+    // as JSON, rather than let the platform's error page stand in — the page retries a fresh read.
+    try { return json(await nameView(ctx, m[1]!), 200, 20); }
+    catch (e) { console.error('nameView', m[1], e instanceof Error ? e.stack ?? e.message : String(e)); return fail(502, 'read_failed', `The chain read failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`); }
+  }
   m = path.match(/^\/address\/(0x[0-9a-fA-F]{40})$/);
   if (m) return json(await addressView(ctx, m[1] as Address), 200, 20);
   if (path === '/display') {

@@ -4,7 +4,7 @@ import type { TownView } from '../api-types';
 import { Link, rootHref } from '../router';
 import { FindName } from '../find-name';
 import { townScene } from '../scenes';
-import { Glyph, Loading, Scene, SearchBox, Stamped } from '../ui';
+import { Glyph, Loading, Scene, Stamped } from '../ui';
 
 export function Home(): ReactNode {
   const v = useApi<TownView>('/api/town');
@@ -13,17 +13,14 @@ export function Home(): ReactNode {
       <section className="hero">
         <h1>Every name in the town.</h1>
         <p className="lede">A name is an address card for an agent. Its ending says what the agent is: a person, an organization, a service. A name gives nobody authority.</p>
-        <SearchBox big />
+        {/* Find and register, first (owner, 2026-10-06): a person's name ends in .me; the other endings are below. */}
+        <FindName tld="me" names="a person" />
+        <p className="quiet">For an organization, a service or another kind, open its ending below. Looking something up? The box in the header takes a name, a label or an address.</p>
       </section>
       <Loading v={v}>{(t) => (
         <>
           <section>
             <Scene scene={townScene(t)} legend={`The ${t.town} town’s ${t.total} names, by kind: people, organizations and services. Each landmark is an ending — a kind of agent — sized by how many names stand under it. Press one to open its street and see the names.`} />
-          </section>
-          <section className="find-section">
-            <h2>Find your name</h2>
-            <p className="quiet">A person's name ends in .me. For an organization, a service or another kind, open its ending below.</p>
-            <FindName tld="me" names="a person" />
           </section>
           <section>
             <h2>The endings</h2>

@@ -75,7 +75,7 @@ function Shell(): ReactNode {
       <a className="skip" href="#main">Skip to the page</a>
       <header className="top">
         <Link href="/" className="brand"><span className="brand-mark" aria-hidden="true" />Names{town && <span className="brand-town">the {town} town</span>}</Link>
-        {path !== '/' && <SearchBox />}
+        <SearchBox />
         <nav aria-label="Sections"><Link href="/">Places</Link><Link href="/integrate">Integrate</Link><a href="https://town.faithnet.io/town" rel="noreferrer">The town</a><Who /></nav>
       </header>
       <Yours />
