@@ -37,8 +37,9 @@
     "@types/node": "^22.7.0",
     "@agenticprimitives/agent-account": "1.0.0-alpha.29",
     "@agenticprimitives/agent-naming": "1.0.0-alpha.29",
-    "@agenticprimitives/contracts": "1.0.0-alpha.28",
-    "viem": "2.52.2"
+    "@agenticprimitives/contracts": "1.0.0-alpha.29",
+    "viem": "2.52.2",
+    "@agenticprimitives/types": "1.0.0-alpha.29"
   },
   "pnpm": {
     "overrides": {

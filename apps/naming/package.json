@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@agenticprimitives/agent-naming": "1.0.0-alpha.29",
-    "@agenticprimitives/contracts": "1.0.0-alpha.28",
+    "@agenticprimitives/contracts": "1.0.0-alpha.29",
     "@ap-town/town-model": "workspace:*",
     "@ap-town/town-scene": "workspace:*",
     "react": "19.2.7",
