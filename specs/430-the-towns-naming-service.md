@@ -92,6 +92,11 @@ Built 2026-10-06: the popup hop (431 W5), *Your agents* (W5c), the *Yours* strip
 it*, *Edit at your Home* in the popup with `changed=` on the way back. A finding worth keeping: the Home's
 `Cross-Origin-Opener-Policy` makes the opener's `popup.closed` true the moment the popup lands there, so the ceremony's
 result travels only over a BroadcastChannel and the page offers Cancel — never "closed ⇒ cancelled".
+Later the same day: the legacy roots are not viewed; the home picture is a static 3D view in three districts (people ·
+organizations · services) with the find-and-register box above it; each ending's page opens with *Find your .x name*
+(the ENS search: type, Available, Register); **`/register/<name>`** is the step page the ENS register screen became here
+(what it is · the price and who pays, with the treasury's balance from `/api/coins` · a few words · presented as its name ·
+one button). No zoomable map remains on the naming service.
 
 ## 2. What the naming service can already do (and the app must show)
 
