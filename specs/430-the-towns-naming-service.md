@@ -86,8 +86,12 @@ surface is the person's own.
 | **Explorer** (v2): registrations, ownership history, inspect on-chain state | Details tab (node, subregistry, registered-at, raw records) | **N4** — history from the town's public graph. |
 | **Grace period, renewal, premium decay** | No expiry on a purchased name (431 §6) | — (stated on the page) |
 
-Built 2026-10-06 ahead of this table: the popup hop (431 W5), *Your agents* (W5c), the *Yours* strip, the kinds-and-counts
-home picture (owner: "the home page shows agent types and counts, not specific agents").
+Built 2026-10-06: the popup hop (431 W5), *Your agents* (W5c), the *Yours* strip, the kinds-and-counts home picture
+(owner: "the home page shows agent types and counts, not specific agents"), and **N6a/b/c** — profile at registration
+(`displayName`/`about` through the hand-off; the Home writes them with the name), the dashboard's filters, sort and *Name
+it*, *Edit at your Home* in the popup with `changed=` on the way back. A finding worth keeping: the Home's
+`Cross-Origin-Opener-Policy` makes the opener's `popup.closed` true the moment the popup lands there, so the ceremony's
+result travels only over a BroadcastChannel and the page offers Cancel — never "closed ⇒ cancelled".
 
 ## 2. What the naming service can already do (and the app must show)
 
