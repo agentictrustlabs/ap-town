@@ -18,7 +18,7 @@ export function Home(): ReactNode {
       <Loading v={v}>{(t) => (
         <>
           <section>
-            <Map scene={townScene(t)} height={560} legend={`The ${t.town} town’s ${t.total} names. Each street is an ending; each building is a registered name, shaped by what its ending names. Drag to look around, zoom in to read the names, press a street or a building to open it.`} />
+            <Map scene={townScene(t)} height={420} legend={`The ${t.town} town’s ${t.total} names, by kind. Each landmark is an ending — a kind of agent — sized by how many names stand under it. Press one to open its street and see the names.`} />
           </section>
           <section>
             <h2>The endings</h2>

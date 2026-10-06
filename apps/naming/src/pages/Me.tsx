@@ -1,40 +1,32 @@
-import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { useState, type FormEvent, type ReactNode } from 'react';
 import type { PlaceKind } from '@ap-town/town-scene';
 import { useApi } from '../api';
 import type { AddressView } from '../api-types';
 import { KindPicker, useHomeCeremony } from '../register';
 import { Link, addressHref, nameHref, useRoute } from '../router';
 import { addressScene } from '../scenes';
-import { handoffHref, justRegistered, listYourAgents, type YourAgent } from '../session';
+import { handoffHref, justRegistered } from '../session';
 import { Banners, Chip, Copy, Glyph, Loading, Scene, short } from '../ui';
 import { useSession } from '../use-session';
 
 /** The Home's agent kinds, drawn as the town draws them. */
-const PLACE_OF_KIND: Record<string, PlaceKind> = { person: 'person', org: 'org', team: 'team', service: 'service', workspace: 'workspace', 'person-treasury': 'treasury', 'org-treasury': 'treasury', church: 'church', circle: 'circle', household: 'household' };
+export const PLACE_OF_KIND: Record<string, PlaceKind> = { person: 'person', org: 'org', team: 'team', service: 'service', workspace: 'workspace', 'person-treasury': 'treasury', 'org-treasury': 'treasury', church: 'church', circle: 'circle', household: 'household' };
 const KIND_WORD: Record<string, string> = { person: 'another person of yours', org: 'an organization', team: 'a team', service: 'a service', workspace: 'a workspace', 'person-treasury': 'your treasury', 'org-treasury': 'a treasury', church: 'a church', circle: 'a circle', household: 'a household' };
 
-/** The agents the connected person keeps, through their Home (W5c). Re-read when a ceremony lands. */
-function YourAgents({ refreshKey }: { refreshKey: string }): ReactNode {
-  const { session } = useSession();
-  const [v, setV] = useState<{ state: 'loading' } | { state: 'ready'; data: YourAgent[] } | { state: 'error'; error: string }>({ state: 'loading' });
-  useEffect(() => {
-    if (!session) return;
-    let live = true;
-    setV({ state: 'loading' });
-    listYourAgents(session).then((data) => { if (live) setV({ state: 'ready', data }); }, (e: unknown) => { if (live) setV({ state: 'error', error: e instanceof Error ? e.message : String(e) }); });
-    return () => { live = false; };
-  }, [session, refreshKey]);
-  if (v.state === 'loading') return <p className="loading" role="status">Asking your Home…</p>;
-  if (v.state === 'error') return <p className="quiet">{v.error}</p>;
-  if (v.data.length === 0) return <p className="quiet">None yet. Register one below.</p>;
+/** The agents the connected person keeps, through their Home (W5c) — the session's shared read. */
+function YourAgents(): ReactNode {
+  const { agents, agentsError } = useSession();
+  if (agents === null) return <p className="loading" role="status">Asking your Home…</p>;
+  if (agentsError) return <p className="quiet">{agentsError}</p>;
+  if (agents.length === 0) return <p className="quiet">None yet. Register one below.</p>;
   return (
     <ul className="rows">
-      {v.data.map((a) => (
+      {agents.map((a) => (
         <li key={a.agent} className="row">
           <Glyph kind={PLACE_OF_KIND[a.kind] ?? 'service'} lit={!!a.name} />
           <span className="row-main">
             {a.name ? <Link href={nameHref(a.name)} className="row-name">{a.name}</Link> : <Link href={addressHref(a.agent)} className="row-name mono">{short(a.agent)}</Link>}
-            <span className="row-sub">{KIND_WORD[a.kind] ?? a.kind}{a.name ? '' : ' · unnamed'}</span>
+            <span className="row-sub">{KIND_WORD[a.kind] ?? a.kind}{a.label && a.label !== a.name ? ` · ${a.label}` : ''}{a.name ? '' : ' · unnamed'}</span>
           </span>
           {a.relationship === 'self' && <Chip kind="persona" />}
         </li>
@@ -71,7 +63,7 @@ export function Me(): ReactNode {
       <section className="title">
         <Glyph kind="person" lit={!!session.name} size={72} />
         <div>
-          <h1>{session.name ?? 'You, nameless so far'}</h1>
+          <h1>{session.name ?? (session.label ? `${session.label}, nameless so far` : 'You, nameless so far')}</h1>
           <p className="title-addr"><span className="mono break">{session.address}</span> <Copy value={session.address} label="address" /></p>
           <p className="lede">{session.name ? `Connected through ${new URL(estate.home).host} as ${session.name}.` : `Connected through ${new URL(estate.home).host}. Your agent presents no name yet — pick one below and your Home will buy it.`}</p>
           <p className="quiet"><button type="button" className="linkish" onClick={() => leave()}>Disconnect here</button> · <button type="button" className="linkish" onClick={() => leave(true)}>Sign out of your Home too</button> · <Link href={addressHref(session.address)}>Public view</Link></p>
@@ -116,7 +108,7 @@ export function Me(): ReactNode {
       <section>
         <h2>Your agents</h2>
         <p className="quiet">What you keep, as your Home lists it: a second person of yours, organizations, teams, services, treasuries. Read as you; nothing here can act for any of them.</p>
-        <YourAgents refreshKey={just?.name ?? ''} />
+        <YourAgents />
       </section>
       <section>
         <h2>Register a new agent under a name</h2>

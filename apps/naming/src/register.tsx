@@ -18,7 +18,7 @@ export function connectHref(then: string): string { return `/connect?then=${enco
 
 /** Runs one Home ceremony from a button: popup first, full page when blocked; lands on the new name. */
 export function useHomeCeremony(): { run: (href: string) => Promise<void>; busy: string | null; error: string | null } {
-  const { session } = useSession();
+  const { session, refreshAgents } = useSession();
   const { go } = useRoute();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +28,7 @@ export function useHomeCeremony(): { run: (href: string) => Promise<void>; busy:
     try {
       const r = await openHomeCeremony(session, href, setBusy);
       if (r === 'blocked') { navigateToHomeCeremony(href); return; }
-      if (r) go(nameHref(r.name));
+      if (r) { refreshAgents(); go(`${nameHref(r.name)}?just=1`); }
       else setError('Your Home closed before the name landed. Nothing was bought.');
     } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
     finally { setBusy(null); }

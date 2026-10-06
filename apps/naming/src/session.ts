@@ -21,8 +21,10 @@ const ERROR_KEY = 'names.connect.error';
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
 export interface NamesSession {
-  /** The name the Home presented, or `null` when the person is nameless — the register flow's first state. */
+  /** The name the agent PRESENTS on the chain (`/api/display`), or `null` when nameless — the register flow's first state. */
   readonly name: string | null;
+  /** What the Home calls the person (the id_token's `agent_name`), shown when there is no chain name. */
+  readonly label: string | null;
   readonly address: string;
   /** The Home id_token: the envelope of every read made as the person. */
   readonly token: string;
@@ -57,6 +59,22 @@ const client = (estate: EstateRef, estates: EstateRef[]) =>
     resolveAuthOrigin: () => estate.home.replace(/\/$/, ''),
     isAllowedIssuerOrigin: isAllowedIssuerOrigin(estates),
   });
+
+/** The name the agent presents, read from the chain through this service — never the Home's word for it. */
+async function withChainName(session: NamesSession): Promise<NamesSession> {
+  try {
+    const r = await fetch(`/api/display/${session.address}?t=${Date.now()}`, { headers: { accept: 'application/json' } });
+    const b = (await r.json()) as { name?: string | null };
+    return { ...session, name: r.ok && b.name ? b.name : null };
+  } catch { return session; }
+}
+
+/** Re-read the presented name (after the person bought their own). */
+export async function refreshSessionName(session: NamesSession): Promise<NamesSession> {
+  const next = await withChainName(session);
+  persist(next);
+  return next;
+}
 
 function persist(session: NamesSession): void {
   try { sessionStorage.setItem(KEY, JSON.stringify(session)); } catch { /* a private window still gets this page's session */ }
@@ -96,7 +114,7 @@ async function finishFromIdToken(c: ReturnType<typeof createConnectClient>, esta
   const claims = await c.verifyIdToken(authOrigin, idToken, nonce);
   const address = c.personAddressFromIdToken(idToken);
   const claimed = String((claims as { agent_name?: string }).agent_name ?? '').trim();
-  const session: NamesSession = { name: claimed && !ADDRESS_RE.test(claimed) ? claimed : null, address, token: idToken, estate, via: 'home' };
+  const session = await withChainName({ name: null, label: claimed && !ADDRESS_RE.test(claimed) ? claimed : null, address, token: idToken, estate, via: 'home' });
   persist(session);
   return session;
 }
@@ -156,7 +174,7 @@ export async function connectAsPersona(estate: EstateRef, handle: string): Promi
   if (!token) throw new Error('the Home returned no id_token for that person');
   const address = /0x[0-9a-fA-F]{40}/.exec(String(s.sub ?? ''))?.[0] ?? '';
   const claimed = String(s.agentName ?? '').trim();
-  const session: NamesSession = { name: claimed && !ADDRESS_RE.test(claimed) ? claimed : null, address, token, estate, via: 'quick-connect', ...(s.homeSession ? { homeSession: s.homeSession } : {}) };
+  const session = await withChainName({ name: null, label: claimed && !ADDRESS_RE.test(claimed) ? claimed : null, address, token, estate, via: 'quick-connect', ...(s.homeSession ? { homeSession: s.homeSession } : {}) });
   persist(session);
   return session;
 }
@@ -301,9 +319,7 @@ export function takeHomeReturn(search: URLSearchParams): HomeResult | null {
   if (!name) return null;
   const result: HomeResult = { name, agent: search.get('agent') };
   rememberJustRegistered(result);
-  const clean = new URL(window.location.href);
-  clean.searchParams.delete('registered'); clean.searchParams.delete('agent'); clean.searchParams.delete('popup');
-  window.history.replaceState({}, '', clean.toString());
+  if (search.get('popup') !== '1') window.history.replaceState({}, '', `/name/${encodeURIComponent(name)}?just=1`);
   if (search.get('popup') === '1') {
     try { new BroadcastChannel(HOME_RELAY_CHANNEL).postMessage({ type: 'ap:naming:registered', ...result }); } catch { /* the page below still shows it */ }
     try { window.opener?.postMessage({ type: 'ap:naming:registered', ...result }, window.location.origin); } catch { /* severed opener — the channel carried it */ }
@@ -328,20 +344,39 @@ export function forgetJustRegistered(): void { try { sessionStorage.removeItem(J
 
 // ── Your agents (W5c) ─────────────────────────────────────────────────────────────────────────────────────────────
 
-export interface YourAgent { readonly agent: string; readonly name: string | null; readonly kind: string; readonly relationship: string }
+export interface YourAgent {
+  readonly agent: string;
+  /** The name the agent PRESENTS on the chain, read through this service; null when it has none. */
+  readonly name: string | null;
+  /** What the person's Home calls it (a common name, or the chain name again). */
+  readonly label: string | null;
+  readonly kind: string;
+  readonly relationship: string;
+}
 
 /**
  * The agents the connected person keeps, read from their Home with the session this site holds — the same list
  * their Stewardship page shows: a second person of theirs, organizations, teams, services, treasuries. Links where
  * they are only a member are not theirs and are left out. The Home answers a registered relying app's token with
- * the person's own view; nothing here can act on any of them.
+ * the person's own view; the NAMES come from the chain, through this service, never from the Home's word. Nothing
+ * here can act on any of them.
  */
 export async function listYourAgents(session: NamesSession): Promise<YourAgent[]> {
   const home = session.estate.home.replace(/\/$/, '');
   const res = await fetch(`${home}/connect/related-orgs`, { headers: { authorization: `Bearer ${session.token}`, accept: 'application/json' } });
   if (!res.ok) throw new Error(`your Home would not list your agents (${res.status})`);
   const body = (await res.json().catch(() => ({}))) as { orgs?: Array<{ orgAgent?: string; orgName?: string; kind?: string; relationship?: string }> };
-  return (body.orgs ?? [])
-    .filter((o) => o.orgAgent && ((o.relationship ?? 'steward') === 'steward' || o.relationship === 'self'))
-    .map((o) => ({ agent: String(o.orgAgent).toLowerCase(), name: o.orgName && !ADDRESS_RE.test(o.orgName) ? o.orgName : null, kind: String(o.kind ?? 'org'), relationship: String(o.relationship ?? 'steward') }));
+  const mine = (body.orgs ?? []).filter((o) => o.orgAgent && ((o.relationship ?? 'steward') === 'steward' || o.relationship === 'self'));
+  const addresses = mine.map((o) => String(o.orgAgent).toLowerCase());
+  const names: Record<string, string | null> = {};
+  for (let i = 0; i < addresses.length; i += 50) {
+    const r = await fetch(`/api/display?a=${addresses.slice(i, i + 50).join(',')}&t=${Date.now()}`, { headers: { accept: 'application/json' } });
+    const b = (await r.json().catch(() => ({}))) as { names?: Record<string, string | null> };
+    Object.assign(names, b.names ?? {});
+  }
+  return mine.map((o) => {
+    const agent = String(o.orgAgent).toLowerCase();
+    const label = o.orgName && !ADDRESS_RE.test(o.orgName) ? o.orgName : null;
+    return { agent, name: names[agent] ?? null, label, kind: String(o.kind ?? 'org'), relationship: String(o.relationship ?? 'steward') };
+  });
 }

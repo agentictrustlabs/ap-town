@@ -387,6 +387,15 @@ export async function displayView(ctx: Ctx, address: Address): Promise<DisplayVi
   return { ...s, address: a, name: raw ? displayOf(raw) : null };
 }
 
+/** Many agents' presented names in one read (≤ 50): what each shows as its own, or null. For a person's own list. */
+export async function displayManyView(ctx: Ctx, addresses: Address[]): Promise<Stamp & { names: Record<string, string | null> }> {
+  const uniq = [...new Set(addresses.map(lower))].slice(0, 50);
+  const [s, raws] = await Promise.all([stamp(ctx), Promise.all(uniq.map((a) => ctx.chain.ur<string>('reverseResolveString', [a]).catch(() => '')))]);
+  const names: Record<string, string | null> = {};
+  uniq.forEach((a, i) => { names[a] = raws[i] ? displayOf(raws[i]!) : null; });
+  return { ...s, names };
+}
+
 // ── search ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
 export function labelRefusal(label: string): { rule: string; detail: string } | null {

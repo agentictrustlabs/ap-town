@@ -6,7 +6,7 @@ import { lotScene, townScene } from '../src/scenes';
 const stamp = { town: 't', chainId: 1, block: 1 };
 
 describe('the town of names', () => {
-  it('draws a street per root, linked to the root, with its names as linked buildings', () => {
+  it('draws one landmark per root with its count — kinds and counts, never particular agents (owner, 2026-10-06)', () => {
     const t: TownView = {
       ...stamp, estates: [], fees: null, total: 3,
       roots: [
@@ -16,8 +16,10 @@ describe('the town of names', () => {
     };
     const s = townScene(t);
     expect(s.plates.filter((p) => p.href).map((p) => p.href)).toEqual(['/root/me', '/root/org']);
-    expect(s.buildings.map((b) => b.href).sort()).toEqual(['/name/a.me', '/name/b.me', '/name/c.org']);
-    expect(s.buildings.find((b) => b.id === 'c.org')!.roof).toBe(PLACE_SHAPES.org.roof);
+    expect(s.buildings.map((b) => b.href).sort()).toEqual(['/root/me', '/root/org']);
+    expect(s.plates.map((p) => p.label)).toEqual(['.me · 2', '.org · 1']);
+    expect(s.buildings.find((b) => b.id === 'org')!.roof).toBe(PLACE_SHAPES.org.roof);
+    expect(JSON.stringify(s)).not.toContain('a.me');
   });
 
   it('a name with a warning is drawn with dark windows', () => {

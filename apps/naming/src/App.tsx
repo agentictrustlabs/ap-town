@@ -12,7 +12,9 @@ import { Integrate } from './pages/Integrate';
 import { Connect } from './pages/Connect';
 import { Me } from './pages/Me';
 import { SessionProvider, useSession } from './use-session';
-import { short } from './ui';
+import { Glyph, short } from './ui';
+import { PLACE_OF_KIND } from './pages/Me';
+import { nameHref } from './router';
 
 function Page(): ReactNode {
   const { path } = useRoute();
@@ -32,7 +34,33 @@ function Page(): ReactNode {
 function Who(): ReactNode {
   const { session } = useSession();
   if (!session) return <Link href="/connect" className="button button-quiet">Connect</Link>;
-  return <Link href="/me" className="who"><span className="brand-mark" aria-hidden="true" />{session.name ?? <span className="mono">{short(session.address)}</span>}</Link>;
+  return <Link href="/me" className="who"><span className="brand-mark" aria-hidden="true" />{session.name ?? session.label ?? <span className="mono">{short(session.address)}</span>}</Link>;
+}
+
+/**
+ * YOURS — always in view while connected (owner, 2026-10-06): the named agents the person keeps, as one strip under
+ * the header on every page; the unnamed ones are counted, not listed. Each leads to its name; the end leads to /me.
+ */
+function Yours(): ReactNode {
+  const { session, agents } = useSession();
+  const { path } = useRoute();
+  if (!session || path === '/me' || path === '/connect') return null;
+  const named = (agents ?? []).filter((a) => a.name);
+  const unnamed = (agents ?? []).length - named.length;
+  const own = session.name ? [{ agent: session.address, name: session.name, label: null, kind: 'person', relationship: 'own' }] : [];
+  const all = [...own, ...named.filter((a) => a.name !== session.name)];
+  return (
+    <nav className="yours" aria-label="Your named agents">
+      <span className="yours-label">Yours</span>
+      <ul>
+        {all.map((a) => <li key={a.agent}><Link href={nameHref(a.name!)} className="yours-chip"><Glyph kind={PLACE_OF_KIND[a.kind] ?? 'service'} size={18} />{a.name}</Link></li>)}
+        {agents === null && <li className="quiet">reading your Home…</li>}
+        {agents !== null && all.length === 0 && <li className="quiet">no named agent yet</li>}
+        {unnamed > 0 && <li className="quiet">+{unnamed} unnamed</li>}
+        <li><Link href="/me" className="yours-chip yours-more">All yours →</Link></li>
+      </ul>
+    </nav>
+  );
 }
 
 function Shell(): ReactNode {
@@ -48,6 +76,7 @@ function Shell(): ReactNode {
         {path !== '/' && <SearchBox />}
         <nav aria-label="Sections"><Link href="/">Places</Link><Link href="/integrate">Integrate</Link><a href="https://town.faithnet.io/town" rel="noreferrer">The town</a><Who /></nav>
       </header>
+      <Yours />
       <main id="main"><Page /></main>
       <footer className="foot">
         <p>The town’s naming service. It reads the chain and holds no key. A name is an address card: it resolves, it lists, and it gives nobody authority.</p>

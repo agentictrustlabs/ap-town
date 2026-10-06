@@ -215,3 +215,10 @@ main > section { margin-bottom: 30px; }
 .kind-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .kind-label { font-weight: 640; }
 .kind-blurb { color: var(--muted); font-size: .9rem; }
+.yours { display: flex; align-items: center; gap: 12px; padding: 8px clamp(16px, 4vw, 40px); border-bottom: 1px solid var(--line); background: var(--soft); font-size: .9rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.yours-label { font-weight: 700; color: var(--muted); letter-spacing: .04em; text-transform: uppercase; font-size: .72rem; flex: 0 0 auto; }
+.yours ul { display: flex; gap: 8px; list-style: none; margin: 0; padding: 0; align-items: center; flex-wrap: nowrap; }
+.yours li { flex: 0 0 auto; white-space: nowrap; }
+.yours-chip { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 6px; border-radius: 999px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); text-decoration: none; }
+.yours-chip:hover { border-color: var(--accent); }
+.yours-more { background: transparent; border-style: dashed; color: var(--accent); }

@@ -14,7 +14,7 @@ if (hasPendingCeremony(search.get('state'))) {
   // The Home's ceremony landed and sent its popup back here: the result is relayed to the opener and this window
   // closes. Should it stay open (not a popup after all), it shows the new name like any page.
   document.getElementById('root')!.innerHTML = '<p style="font:15px system-ui;padding:24px">Registered. You can close this window.</p>';
-  window.setTimeout(() => { if (!window.closed) { window.history.replaceState({}, '', `/name/${encodeURIComponent(search.get('registered')!)}`); render(); } }, 1200);
+  window.setTimeout(() => { if (!window.closed) { window.history.replaceState({}, '', `/name/${encodeURIComponent(search.get('registered')!)}?just=1`); render(); } }, 1200);
 } else if (relayedToOpener(search)) {
   // This window is the popup's own return leg (COOP severed the opener): the code was relayed; the opener finishes.
   window.setTimeout(() => { window.history.replaceState({}, '', window.location.pathname); render(); }, 700);

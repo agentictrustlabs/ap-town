@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useApi } from './api';
 import type { EstateRef } from './api-types';
-import { connectAsPersona, connectViaHome, consumeConnectError, disconnect, getSession, listPersonas, signOutEverywhere, type NamesSession, type Persona } from './session';
+import { connectAsPersona, connectViaHome, consumeConnectError, disconnect, getSession, listPersonas, listYourAgents, refreshSessionName, signOutEverywhere, type NamesSession, type Persona, type YourAgent } from './session';
 
 export interface SessionState {
   readonly session: NamesSession | null;
@@ -16,9 +16,13 @@ export interface SessionState {
   connectAs(estate: EstateRef, handle: string): Promise<NamesSession | null>;
   personas(estate: EstateRef): Promise<Persona[]>;
   leave(everywhere?: boolean): void;
+  /** The agents the connected person keeps, through their Home (W5c): null until read, [] when none. */
+  readonly agents: YourAgent[] | null;
+  readonly agentsError: string | null;
+  refreshAgents(): void;
 }
 
-const Ctx = createContext<SessionState>({ session: null, estates: [], busy: null, error: null, connect: async () => null, connectAs: async () => null, personas: async () => [], leave: () => undefined });
+const Ctx = createContext<SessionState>({ session: null, estates: [], busy: null, error: null, connect: async () => null, connectAs: async () => null, personas: async () => [], leave: () => undefined, agents: null, agentsError: null, refreshAgents: () => undefined });
 export const useSession = (): SessionState => useContext(Ctx);
 
 export function SessionProvider({ children }: { children: ReactNode }): ReactNode {
@@ -29,6 +33,22 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
   const [error, setError] = useState<string | null>(() => consumeConnectError());
   // The redirect leg lands with the session already stored (main.tsx finished it before rendering).
   useEffect(() => { setSession(getSession()); }, []);
+  // Her agents, through her Home — read once per session and again whenever a ceremony lands.
+  const [agents, setAgents] = useState<YourAgent[] | null>(null);
+  const [agentsError, setAgentsError] = useState<string | null>(null);
+  const [agentsTick, setAgentsTick] = useState(0);
+  const refreshAgents = useCallback(() => {
+    setAgentsTick((n) => n + 1);
+    // The person's own presented name may have changed too (their first purchase).
+    const cur = getSession();
+    if (cur) void refreshSessionName(cur).then((next) => { if (next.name !== cur.name) setSession(next); });
+  }, []);
+  useEffect(() => {
+    if (!session) { setAgents(null); setAgentsError(null); return; }
+    let live = true;
+    listYourAgents(session).then((a) => { if (live) { setAgents(a); setAgentsError(null); } }, (e: unknown) => { if (live) { setAgents([]); setAgentsError(e instanceof Error ? e.message : String(e)); } });
+    return () => { live = false; };
+  }, [session, agentsTick]);
 
   const connect = useCallback(async (estate: EstateRef, returnPath: string) => {
     setError(null); setBusy('Opening your Home…');
@@ -48,6 +68,6 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
     disconnect(); setSession(null);
   }, [session]);
 
-  const value = useMemo<SessionState>(() => ({ session, estates, busy, error, connect, connectAs, personas, leave }), [session, estates, busy, error, connect, connectAs, personas, leave]);
+  const value = useMemo<SessionState>(() => ({ session, estates, busy, error, connect, connectAs, personas, leave, agents, agentsError, refreshAgents }), [session, estates, busy, error, connect, connectAs, personas, leave, agents, agentsError, refreshAgents]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

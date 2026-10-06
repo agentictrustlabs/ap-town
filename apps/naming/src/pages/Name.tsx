@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { PLACE_SHAPES } from '@ap-town/town-scene';
-import { getJson, useApi, type Loaded } from '../api';
+import { useApi } from '../api';
 import type { NameView } from '../api-types';
-import { Link, nameHref, rootHref } from '../router';
+import { Link, nameHref, rootHref, useRoute } from '../router';
 import { Register } from '../register';
 import { forgetJustRegistered, justRegistered } from '../session';
 import { lotScene } from '../scenes';
@@ -160,32 +160,30 @@ function Details({ v }: { v: NameView }): ReactNode {
 }
 
 export function Name({ name }: { name: string }): ReactNode {
-  const first = useApi<NameView>(`/api/name/${encodeURIComponent(name)}`);
+  const { search } = useRoute();
   const [tab, setTab] = useState('profile');
-  // Just registered at the Home: the chain read behind the API can lag the receipt by a block or two, and the
-  // service caches a name page briefly. Re-read past the cache until the name shows as registered (bounded),
-  // rather than greet the buyer with "available".
-  const just = justRegistered();
-  const fresh = just?.name === name;
-  const [v, setV] = useState<Loaded<NameView>>(first);
-  useEffect(() => { setV(first); }, [first]);
+  // Just registered at the Home (`?just=1`, set by the ceremony's return): the chain read behind the API can lag
+  // the receipt by a block or two, and the service caches a name page briefly. Re-read past the cache until the
+  // name shows as registered (bounded), rather than greet the buyer with "available". The route carries the
+  // marker because the buyer was usually ALREADY on this page: a same-path navigation does not remount it.
+  // Decided once, at mount: a later render must not flip the read back to the cached path after the fresh read
+  // showed the name registered (that is how a buyer once saw "available" AFTER the chain had answered).
+  const [freshAt] = useState(() => (new URLSearchParams(search).get('just') === '1' && justRegistered()?.name === name ? Date.now() : 0));
+  const fresh = freshAt > 0;
+  const [tick, setTick] = useState(0);
+  const [shown, setShown] = useState(false);
+  const v = useApi<NameView>(`/api/name/${encodeURIComponent(name)}${fresh ? `?fresh=${freshAt}-${tick}` : ''}`);
   useEffect(() => {
-    if (!fresh || v.state !== 'ready' || v.data.status === 'registered') return;
-    let live = true; let n = 0;
-    const tick = async () => {
-      const r = await getJson<NameView>(`/api/name/${encodeURIComponent(name)}?fresh=${Date.now()}`);
-      if (!live) return;
-      if (r.ok && r.data.status === 'registered') { setV({ state: 'ready', data: r.data }); return; }
-      if (++n < 12) window.setTimeout(() => void tick(), 2500);
-    };
-    const t = window.setTimeout(() => void tick(), 1500);
-    return () => { live = false; window.clearTimeout(t); };
-  }, [fresh, name, v]);
-  useEffect(() => { if (fresh && v.state === 'ready' && v.data.status === 'registered') forgetJustRegistered(); }, [fresh, v]);
+    if (!fresh || v.state !== 'ready') return;
+    if (v.data.status === 'registered') { if (!shown) { setShown(true); forgetJustRegistered(); } return; }
+    if (tick >= 14) return;
+    const t = window.setTimeout(() => setTick((n) => n + 1), 2500);
+    return () => window.clearTimeout(t);
+  }, [fresh, v, tick, shown]);
   return (
     <Loading v={v}>{(n) => {
       if (n.status === 'invalid') return <Invalid v={n} />;
-      if (n.status !== 'registered' && fresh) return <section><h1>{name}</h1><p className="loading" role="status">Registered at your Home a moment ago — waiting for the chain to show it…</p></section>;
+      if (n.status !== 'registered' && fresh) return <section><h1>{name}</h1><p className="loading" role="status">{tick < 14 ? 'Registered at your Home a moment ago — waiting for the chain to show it…' : 'The chain has not shown this name yet. Reload in a moment; your Home\'s receipt stands.'}</p></section>;
       if (n.status !== 'registered') return <Free v={n} />;
       const mismatch = n.typeCheck && !n.typeCheck.ok;
       return (
@@ -198,7 +196,7 @@ export function Name({ name }: { name: string }): ReactNode {
               {n.agent && <p className="title-addr"><span className="quiet">points at</span> <Addr address={n.agent} full /></p>}
             </div>
           </section>
-          {fresh && <div className="banner banner-ok" role="status"><strong>Yours.</strong> Registered just now, signed at your Home; this service only read it back from the chain.</div>}
+          {shown && <div className="banner banner-ok" role="status"><strong>Yours.</strong> Registered just now, signed at your Home; this service only read it back from the chain.</div>}
           <Banners banners={n.banners} />
           {n.signals && <section aria-label="Signals"><Signals signals={n.signals} /></section>}
           <section>

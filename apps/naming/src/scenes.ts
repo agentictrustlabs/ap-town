@@ -1,20 +1,28 @@
 // The town of names (spec 430 D6): what the naming service's data looks like as people and places. Pure builders —
 // API data in, a scene out. The renderer and the shapes are the town's own (@ap-town/town-scene).
-import { LOT, ROAD, PLACE_SHAPES, placeOnLot, street, town, type PlaceInput, type PlaceKind, type TownSceneV1 } from '@ap-town/town-scene';
+import { LOT, PLACE_SHAPES, placeOnLot, street, town, type PlaceInput, type PlaceKind, type TownSceneV1 } from '@ap-town/town-scene';
 import type { AddressView, NameRow, NameView, RootPage, TownView } from './api-types';
 import { nameHref, rootHref } from './router';
 
 const place = (r: NameRow, over: Partial<PlaceInput> = {}): PlaceInput => ({ id: r.name, kind: r.kind, label: r.name, href: nameHref(r.name), lit: true, ...over });
 
-/** The whole town: a street per root, a few of its names standing on it, the root's street as a link. */
+/**
+ * The whole town at the level of KINDS (owner, 2026-10-06: the home page shows agent types and counts, never
+ * particular agents): one landmark per ending, drawn as the kind it names and sized by how many names stand
+ * under it; its label is the ending and its count. Each leads to that ending's street, where the names are.
+ */
 export function townScene(t: TownView): TownSceneV1 {
-  const perRow = 4; const cols = 3; const gap = 1.6;
-  const blockW = cols * LOT; const blockD = 2 * LOT + ROAD;
-  const parts = t.roots.map((r, i) => street(r.sample.slice(0, cols * 2).map((n) => place(n)), {
-    cols, tone: PLACE_SHAPES[r.kind].tone, label: `.${r.tld} · ${r.count}`, href: rootHref(r.tld),
-    ox: (i % perRow) * (blockW + gap), oy: Math.floor(i / perRow) * (blockD + gap),
-  }));
-  return town(parts, `The names of the ${t.town} town: ${t.roots.map((r) => `${r.count} under .${r.tld}`).join(', ')}.`);
+  const perRow = 3;
+  const scaleOf = (n: number): number => (n >= 100 ? 1.9 : n >= 30 ? 1.6 : n >= 10 ? 1.35 : n > 0 ? 1.15 : 0.9);
+  const blockW = LOT + 2.4; const blockD = LOT + 2.6; const gap = 1.4;
+  const parts = t.roots.map((r, i) => {
+    const ox = (i % perRow) * (blockW + gap); const oy = Math.floor(i / perRow) * (blockD + gap);
+    // The ending and its count sit on the lot's plate (the label that is always drawn); the building carries no
+    // label of its own so twelve landmarks never fight for the same pixels on a phone.
+    const b = placeOnLot({ id: r.tld, kind: r.kind, href: rootHref(r.tld), lit: r.count > 0, pinned: true, scale: scaleOf(r.count) }, ox + 1.2, oy + 0.6);
+    return { plates: [{ id: `p-${r.tld}`, x: ox, y: oy, w: blockW, d: blockD, tone: PLACE_SHAPES[r.kind].tone, label: `.${r.tld} · ${r.count}`, href: rootHref(r.tld) }], buildings: [b], trees: [{ x: ox + 0.5, y: oy + blockD - 0.6, s: 0.7 }, { x: ox + blockW - 0.5, y: oy + 0.5, s: 0.6 }], w: blockW, d: blockD };
+  });
+  return town(parts, `The ${t.town} town by kind: ${t.roots.map((r) => `${r.count} under .${r.tld}`).join(', ')}.`);
 }
 
 /** One root's street: this page of its names. */
