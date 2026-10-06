@@ -3,6 +3,7 @@ import { PLACE_SHAPES } from '@ap-town/town-scene';
 import { useApi } from '../api';
 import type { NameView } from '../api-types';
 import { Link, nameHref, rootHref } from '../router';
+import { Register } from '../register';
 import { lotScene } from '../scenes';
 import { Addr, AtYourHome, Banners, Chip, Copy, Glyph, Loading, Scene, Signals, Stamped, Tabs } from '../ui';
 
@@ -47,7 +48,7 @@ function Free({ v }: { v: NameView }): ReactNode {
         <section>
           <h2>Who could {v.price ? 'buy' : 'claim'} it</h2>
           <p><strong>{v.availability.by.charAt(0).toUpperCase() + v.availability.by.slice(1)}.</strong> {v.availability.rule}</p>
-          {v.status === 'available' && v.form === 'canonical' && v.tld && <AtYourHome estates={v.estates} verb={v.price ? `Buying a name for ${v.price.coins} ${v.price.coin}` : 'Claiming a name'} claim={{ label: v.name.split('.')[0]!, tld: v.tld }} />}
+          {v.status === 'available' && v.form === 'canonical' && v.tld && <Register label={v.name.split('.')[0]!} tld={v.tld} price={v.price ? { coins: v.price.coins, coin: v.price.coin } : null} />}
           {v.status === 'available' && v.form !== 'canonical' && <AtYourHome estates={v.estates} verb="Issuing a scoped name" />}
         </section>
       )}

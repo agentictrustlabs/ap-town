@@ -2,8 +2,9 @@ import type { ReactNode } from 'react';
 import { useApi } from '../api';
 import type { RootPage } from '../api-types';
 import { Link, nameHref, rootHref, useRoute } from '../router';
+import { Register } from '../register';
 import { rootScene } from '../scenes';
-import { Addr, AtYourHome, Chip, Glyph, Loading, Map, Stamped } from '../ui';
+import { Addr, Chip, Glyph, Loading, Map, Stamped } from '../ui';
 
 export function Root({ tld }: { tld: string }): ReactNode {
   const { search } = useRoute();
@@ -47,10 +48,10 @@ export function Root({ tld }: { tld: string }): ReactNode {
             <table className="table price-table"><thead><tr><th scope="col">Letters</th><th scope="col">Price</th></tr></thead><tbody>
               {[['3', 4], ['4', 3], ['5', 2], ['6–7', 1.5], ['8 and up', 1]].map(([len, m]) => <tr key={String(len)}><td>{len}</td><td>{Math.min(49, Math.floor((p.root.baseCoins ?? 0) * Number(m)))} SHQ</td></tr>)}
             </tbody></table>
-            <AtYourHome estates={p.estates} verb={`Buying a .${p.root.tld} name`} claim={{ label: '', tld: p.root.tld }} />
+            <Register label="" tld={p.root.tld} />
           </section>
         )}
-        {!p.root.priced && p.root.open && <section><h2>Claim a .{p.root.tld} name</h2><AtYourHome estates={p.estates} verb={`Claiming a .${p.root.tld} name`} claim={{ label: '', tld: p.root.tld }} /></section>}
+        {!p.root.priced && p.root.open && <section><h2>Claim a .{p.root.tld} name</h2><Register label="" tld={p.root.tld} /></section>}
         <Stamped s={p} />
       </>
     )}</Loading>

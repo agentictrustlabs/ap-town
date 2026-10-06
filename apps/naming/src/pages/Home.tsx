@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { useApi } from '../api';
 import type { TownView } from '../api-types';
 import { Link, rootHref } from '../router';
+import { Register } from '../register';
 import { townScene } from '../scenes';
 import { Glyph, Loading, Map, SearchBox, Stamped } from '../ui';
 
@@ -33,6 +34,10 @@ export function Home(): ReactNode {
                 </Link>
               ))}
             </div>
+          </section>
+          <section>
+            <h2>Register a name</h2>
+            <Register label="" tld="me" />
           </section>
           <section className="three">
             <div><h3>The ending is the type</h3><p>.me is a person, .org an organization, .svc a service. The agent’s own record on the chain decides; a name whose ending disagrees is shown as mismatched.</p></div>

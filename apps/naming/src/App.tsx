@@ -9,6 +9,10 @@ import { Root } from './pages/Root';
 import { Name } from './pages/Name';
 import { AddressPage } from './pages/Address';
 import { Integrate } from './pages/Integrate';
+import { Connect } from './pages/Connect';
+import { Me } from './pages/Me';
+import { SessionProvider, useSession } from './use-session';
+import { short } from './ui';
 
 function Page(): ReactNode {
   const { path } = useRoute();
@@ -16,10 +20,19 @@ function Page(): ReactNode {
   if (path === '/' || path === '') return <Home />;
   if (path === '/search') return <Search />;
   if (path === '/integrate') return <Integrate />;
+  if (path === '/connect') return <Connect />;
+  if (path === '/me') return <Me />;
   if ((m = path.match(/^\/name\/(.+)$/))) return <Name key={m[1]} name={decodeURIComponent(m[1]!)} />;
   if ((m = path.match(/^\/address\/(0x[0-9a-fA-F]{40})$/))) return <AddressPage key={m[1]} address={m[1]!} />;
   if ((m = path.match(/^\/root\/([a-z0-9-]+)$/))) return <Root key={m[1]} tld={m[1]!} />;
   return <section><h1>Nothing here</h1><p className="lede">That page does not exist. Try the search box.</p></section>;
+}
+
+/** The connected person in the header: their name, or their address while nameless, leading to /me; else Connect. */
+function Who(): ReactNode {
+  const { session } = useSession();
+  if (!session) return <Link href="/connect" className="button button-quiet">Connect</Link>;
+  return <Link href="/me" className="who"><span className="brand-mark" aria-hidden="true" />{session.name ?? <span className="mono">{short(session.address)}</span>}</Link>;
 }
 
 function Shell(): ReactNode {
@@ -33,7 +46,7 @@ function Shell(): ReactNode {
       <header className="top">
         <Link href="/" className="brand"><span className="brand-mark" aria-hidden="true" />Names{town && <span className="brand-town">the {town} town</span>}</Link>
         {path !== '/' && <SearchBox />}
-        <nav aria-label="Sections"><Link href="/">Places</Link><Link href="/integrate">Integrate</Link><a href="https://town.faithnet.io/town" rel="noreferrer">The town</a></nav>
+        <nav aria-label="Sections"><Link href="/">Places</Link><Link href="/integrate">Integrate</Link><a href="https://town.faithnet.io/town" rel="noreferrer">The town</a><Who /></nav>
       </header>
       <main id="main"><Page /></main>
       <footer className="foot">
@@ -44,4 +57,4 @@ function Shell(): ReactNode {
   );
 }
 
-export function App(): ReactNode { return <Router><Shell /></Router>; }
+export function App(): ReactNode { return <Router><SessionProvider><Shell /></SessionProvider></Router>; }

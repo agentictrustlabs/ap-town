@@ -6,7 +6,7 @@ import { TOWNS, type TownManifest } from '@ap-town/town-model';
 import { isAddress } from 'viem';
 import type { Address, ApiError } from '../src/api-types';
 import { chainFor } from './chain';
-import { addressView, displayView, nameView, rootPage, searchView, townView, type Ctx } from './views';
+import { addressView, displayView, estatesOf, nameView, rootPage, searchView, townView, type Ctx } from './views';
 
 interface Env {
   TOWN: string;
@@ -50,7 +50,8 @@ function ctxOf(env: Env): Ctx {
 /** Route → [seconds to cache, handler]. Names change rarely; a listing can lag a block or two without harm. */
 async function api(url: URL, env: Env): Promise<Response> {
   const path = decodeURIComponent(url.pathname.replace(/^\/api/, '')).replace(/\/+$/, '') || '/';
-  if (path === '/health') return json({ ok: true, service: 'naming', town: env.TOWN });
+  // Keyless and chain-free: the estates (each one's Home) so the page knows where connect and every hand-off go.
+  if (path === '/health') return json({ ok: true, service: 'naming', town: env.TOWN, estates: estatesOf(townOf(env)) }, 200, 300);
   const ctx = ctxOf(env);
   if (path === '/town') return json(await townView(ctx), 200, 60);
   if (path === '/search') return json(await searchView(ctx, url.searchParams.get('q') ?? ''), 200, 15);

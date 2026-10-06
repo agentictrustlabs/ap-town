@@ -195,3 +195,20 @@ main > section { margin-bottom: 30px; }
 .price-domain { background: var(--warn-bg); border-radius: 10px; padding: 8px 12px; }
 .price-pill { font-size: .8rem; font-weight: 650; padding: 2px 9px; border-radius: 999px; background: var(--free-bg); color: var(--free); }
 .price-table { max-width: 360px; margin-bottom: 14px; }
+
+/* Connect + register (naming, spec 431 §5.1). */
+.linkish { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); text-decoration: underline; cursor: pointer; }
+.top .who { display: inline-flex; align-items: center; gap: 8px; font-size: .92rem; }
+.top .who .mono { color: var(--muted); }
+.search-suffix { align-self: center; color: var(--muted); }
+.connect-estate { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
+.connect-estate h2 { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-top: 0; }
+.roster { margin-top: 12px; }
+.roster summary { cursor: pointer; color: var(--muted); }
+.register .button .glyph { margin-right: 2px; }
+.kinds { list-style: none; padding: 0; margin: 10px 0 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 10px; }
+.kind { display: flex; gap: 12px; align-items: center; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); color: var(--ink); text-decoration: none; }
+.kind:hover { border-color: var(--accent); }
+.kind-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.kind-label { font-weight: 640; }
+.kind-blurb { color: var(--muted); font-size: .9rem; }
