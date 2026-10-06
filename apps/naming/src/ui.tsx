@@ -12,7 +12,7 @@ export const short = (a: string): string => `${a.slice(0, 6)}…${a.slice(-4)}`;
 const CHIP: Record<string, { text: string; tone: string }> = {
   registered: { text: 'Registered', tone: 'ok' }, available: { text: 'Available', tone: 'free' }, expired: { text: 'Expired', tone: 'warn' },
   invalid: { text: 'Not a name', tone: 'bad' }, 'not-claimable': { text: 'Not claimable', tone: 'muted' }, mismatch: { text: 'Type mismatch', tone: 'warn' },
-  legacy: { text: 'Legacy root', tone: 'muted' },
+  legacy: { text: 'Legacy root', tone: 'muted' }, persona: { text: 'A name of yours', tone: 'ok' },
 };
 export function Chip({ kind }: { kind: keyof typeof CHIP | string }): ReactNode {
   const c = CHIP[kind] ?? { text: kind, tone: 'muted' };

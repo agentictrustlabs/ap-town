@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { PLACE_SHAPES } from '@ap-town/town-scene';
-import { useApi } from '../api';
+import { getJson, useApi, type Loaded } from '../api';
 import type { NameView } from '../api-types';
 import { Link, nameHref, rootHref } from '../router';
 import { Register } from '../register';
+import { forgetJustRegistered, justRegistered } from '../session';
 import { lotScene } from '../scenes';
 import { Addr, AtYourHome, Banners, Chip, Copy, Glyph, Loading, Scene, Signals, Stamped, Tabs } from '../ui';
 
@@ -159,11 +160,32 @@ function Details({ v }: { v: NameView }): ReactNode {
 }
 
 export function Name({ name }: { name: string }): ReactNode {
-  const v = useApi<NameView>(`/api/name/${encodeURIComponent(name)}`);
+  const first = useApi<NameView>(`/api/name/${encodeURIComponent(name)}`);
   const [tab, setTab] = useState('profile');
+  // Just registered at the Home: the chain read behind the API can lag the receipt by a block or two, and the
+  // service caches a name page briefly. Re-read past the cache until the name shows as registered (bounded),
+  // rather than greet the buyer with "available".
+  const just = justRegistered();
+  const fresh = just?.name === name;
+  const [v, setV] = useState<Loaded<NameView>>(first);
+  useEffect(() => { setV(first); }, [first]);
+  useEffect(() => {
+    if (!fresh || v.state !== 'ready' || v.data.status === 'registered') return;
+    let live = true; let n = 0;
+    const tick = async () => {
+      const r = await getJson<NameView>(`/api/name/${encodeURIComponent(name)}?fresh=${Date.now()}`);
+      if (!live) return;
+      if (r.ok && r.data.status === 'registered') { setV({ state: 'ready', data: r.data }); return; }
+      if (++n < 12) window.setTimeout(() => void tick(), 2500);
+    };
+    const t = window.setTimeout(() => void tick(), 1500);
+    return () => { live = false; window.clearTimeout(t); };
+  }, [fresh, name, v]);
+  useEffect(() => { if (fresh && v.state === 'ready' && v.data.status === 'registered') forgetJustRegistered(); }, [fresh, v]);
   return (
     <Loading v={v}>{(n) => {
       if (n.status === 'invalid') return <Invalid v={n} />;
+      if (n.status !== 'registered' && fresh) return <section><h1>{name}</h1><p className="loading" role="status">Registered at your Home a moment ago — waiting for the chain to show it…</p></section>;
       if (n.status !== 'registered') return <Free v={n} />;
       const mismatch = n.typeCheck && !n.typeCheck.ok;
       return (
@@ -176,6 +198,7 @@ export function Name({ name }: { name: string }): ReactNode {
               {n.agent && <p className="title-addr"><span className="quiet">points at</span> <Addr address={n.agent} full /></p>}
             </div>
           </section>
+          {fresh && <div className="banner banner-ok" role="status"><strong>Yours.</strong> Registered just now, signed at your Home; this service only read it back from the chain.</div>}
           <Banners banners={n.banners} />
           {n.signals && <section aria-label="Signals"><Signals signals={n.signals} /></section>}
           <section>

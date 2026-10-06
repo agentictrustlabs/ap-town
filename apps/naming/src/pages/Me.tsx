@@ -1,12 +1,47 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import type { PlaceKind } from '@ap-town/town-scene';
 import { useApi } from '../api';
 import type { AddressView } from '../api-types';
-import { KindPicker } from '../register';
+import { KindPicker, useHomeCeremony } from '../register';
 import { Link, addressHref, nameHref, useRoute } from '../router';
 import { addressScene } from '../scenes';
-import { handoffHref } from '../session';
-import { Banners, Chip, Copy, Glyph, Loading, Scene } from '../ui';
+import { handoffHref, justRegistered, listYourAgents, type YourAgent } from '../session';
+import { Banners, Chip, Copy, Glyph, Loading, Scene, short } from '../ui';
 import { useSession } from '../use-session';
+
+/** The Home's agent kinds, drawn as the town draws them. */
+const PLACE_OF_KIND: Record<string, PlaceKind> = { person: 'person', org: 'org', team: 'team', service: 'service', workspace: 'workspace', 'person-treasury': 'treasury', 'org-treasury': 'treasury', church: 'church', circle: 'circle', household: 'household' };
+const KIND_WORD: Record<string, string> = { person: 'another person of yours', org: 'an organization', team: 'a team', service: 'a service', workspace: 'a workspace', 'person-treasury': 'your treasury', 'org-treasury': 'a treasury', church: 'a church', circle: 'a circle', household: 'a household' };
+
+/** The agents the connected person keeps, through their Home (W5c). Re-read when a ceremony lands. */
+function YourAgents({ refreshKey }: { refreshKey: string }): ReactNode {
+  const { session } = useSession();
+  const [v, setV] = useState<{ state: 'loading' } | { state: 'ready'; data: YourAgent[] } | { state: 'error'; error: string }>({ state: 'loading' });
+  useEffect(() => {
+    if (!session) return;
+    let live = true;
+    setV({ state: 'loading' });
+    listYourAgents(session).then((data) => { if (live) setV({ state: 'ready', data }); }, (e: unknown) => { if (live) setV({ state: 'error', error: e instanceof Error ? e.message : String(e) }); });
+    return () => { live = false; };
+  }, [session, refreshKey]);
+  if (v.state === 'loading') return <p className="loading" role="status">Asking your Home…</p>;
+  if (v.state === 'error') return <p className="quiet">{v.error}</p>;
+  if (v.data.length === 0) return <p className="quiet">None yet. Register one below.</p>;
+  return (
+    <ul className="rows">
+      {v.data.map((a) => (
+        <li key={a.agent} className="row">
+          <Glyph kind={PLACE_OF_KIND[a.kind] ?? 'service'} lit={!!a.name} />
+          <span className="row-main">
+            {a.name ? <Link href={nameHref(a.name)} className="row-name">{a.name}</Link> : <Link href={addressHref(a.agent)} className="row-name mono">{short(a.agent)}</Link>}
+            <span className="row-sub">{KIND_WORD[a.kind] ?? a.kind}{a.name ? '' : ' · unnamed'}</span>
+          </span>
+          {a.relationship === 'self' && <Chip kind="persona" />}
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /**
  * YOU, at the naming service (spec 431 §5.1): the names your agent holds, read from the chain the way anyone could;
@@ -16,7 +51,9 @@ import { useSession } from '../use-session';
 export function Me(): ReactNode {
   const { session, leave } = useSession();
   const { go } = useRoute();
-  const v = useApi<AddressView>(session ? `/api/address/${session.address}` : null);
+  const { run, busy, error } = useHomeCeremony();
+  const just = justRegistered();
+  const v = useApi<AddressView>(session ? `/api/address/${session.address}?t=${just?.name ?? ''}` : null);
   const [label, setLabel] = useState('');
   if (!session) {
     return (
@@ -40,6 +77,9 @@ export function Me(): ReactNode {
           <p className="quiet"><button type="button" className="linkish" onClick={() => leave()}>Disconnect here</button> · <button type="button" className="linkish" onClick={() => leave(true)}>Sign out of your Home too</button> · <Link href={addressHref(session.address)}>Public view</Link></p>
         </div>
       </section>
+      {just && (
+        <div className="banner banner-ok" role="status"><strong>{just.name} is yours.</strong> Registered just now, signed at your Home. <Link href={nameHref(just.name)}>Open it →</Link></div>
+      )}
       {!session.name && (
         <section>
           <h2>Your own name</h2>
@@ -48,7 +88,7 @@ export function Me(): ReactNode {
             <span className="search-suffix mono">.me</span>
             <button type="submit" className="button">Check and buy →</button>
           </form>
-          <p className="quiet">Three letters or more; shorter costs more; nothing costs 50. Or <a href={handoffHref(estate, { tld: 'me' })} rel="noreferrer">pick it at your Home</a>.</p>
+          <p className="quiet">Three letters or more; shorter costs more; nothing costs 50. Or <button type="button" className="linkish" disabled={!!busy} onClick={() => void run(handoffHref(estate, { tld: 'me' }))}>{busy ?? 'pick it at your Home'}</button>.{error ? ` ${error}` : ''}</p>
         </section>
       )}
       <Loading v={v}>{(a) => (
@@ -73,6 +113,11 @@ export function Me(): ReactNode {
           </section>
         </>
       )}</Loading>
+      <section>
+        <h2>Your agents</h2>
+        <p className="quiet">What you keep, as your Home lists it: a second person of yours, organizations, teams, services, treasuries. Read as you; nothing here can act for any of them.</p>
+        <YourAgents refreshKey={just?.name ?? ''} />
+      </section>
       <section>
         <h2>Register a new agent under a name</h2>
         <p>An agent you keep, with its own treasury, named at creation: a second person (another name of yours), an organization, a team, a service, a church, a circle, a household. Your Home creates it, buys the name, and brings you back. The ending is the kind; the label is yours to choose there.</p>
