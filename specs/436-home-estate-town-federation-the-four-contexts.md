@@ -279,9 +279,80 @@ token's next call is denied and its row shows it.
 
 ---
 
-## 8. Not in v1 (named)
+## 8. Hosts and zones: telling the town from the estate (added 2026-10-10)
 
-Multi-estate towns with more than one live estate (the design is ready; faithnet is one card) · the federation view ·
+**The observation (owner):** "our current faithnet.me / faithnet.ai / faithnet.io hosts blend estate and town. It
+really focuses on estate, but the graph, faithchain, the KMS and naming also use faithnet." True, and it is the one
+place the four contexts are not yet legible. Today, by what each host actually serves:
+
+| Host | Serves | Context | Where it should sit |
+| --- | --- | --- | --- |
+| `www.faithnet.me`, `faithnet.me` | the Home | estate | estate zone |
+| `*.faithnet.ai` | every resident's A2A endpoint (the agent zone) | estate | estate zone |
+| `edge.faithnet.io`, `a2a.faithnet.io`, `mcp.faithnet.io`, `home-mcp.faithnet.io` | edge, runtime, vault MCP, Home MCP | estate | estate zone |
+| `<label>.faithnet.io` (alice, bob, accelerate-team, …), `scripture.faithnet.io`, `explorer.faithnet.io`, `field-a2a.faithnet.io` | per-agent hosts from before the agent zone; self-hosted services; applications | estate / application | estate zone (agents), the application's own zone (apps) |
+| `names.faithnet.io` | the town's naming service | **town** | town zone |
+| `town.faithnet.io` | the portal and the town agent | **town** | town zone |
+| `discovery.faithnet.io`, `discovery-a2a.faithnet.io`, `discovery-connector.faithnet.io` | the registry, the graph, discovery | **town** | town zone |
+| `rpc.faithnet.io` → `faithchain-rpc.agentkg.io` | the chain gateway → the node | **town** (the node: the chain's operator) | town zone (node: the chain's zone) |
+| `skills.faithnet.io` | the skills registry | **town** | town zone |
+| `akcs-pilot.faithnet.io` | the KMS (one tenant per estate) | **town** | town zone |
+| `inference.faithnet.io` (434, planned) | the model gateway | **town** | town zone — provision it there from day one |
+| `graphdb.agentkg.io` | the graph store behind discovery | town (infrastructure) | the chain operator's zone, as now |
+| `gamenight.faithnet.io`, `games.`, `agents.`, `poker.` | applications | application | the application's own zone |
+
+**The rule.** A zone names the context that operates what it serves. The **estate** is a brand (`faithnet`), so its
+Home, its agents and its buildings carry it: `www.<estate>.me` (Home), `*.<estate>.ai` (agents), `<building>.<estate>.io`
+(edge, runtime, vault, Home MCP). The **town** is a chain, so its services carry the chain's name, not any estate's:
+`names.`, `town.`, `discovery.`, `rpc.`, `skills.`, `kms.`, `inference.` under a zone named for `faithchain`. An
+**application** carries its own. A second estate on faithchain then reads as `www.<theirs>.me` beside the same
+`names.<faithchain zone>` — and nobody has to be told which is which.
+
+**The move, under 429 D5 (no Worker renames, ever).** Hostnames are aliases on Workers that keep their names:
+
+1. Acquire a zone for the town (named for the chain) and a CNAME-free custom domain per town service on it; the
+   manifest's `hosts:` lists both the new host and the `faithnet.io` one.
+2. Move references repo by repo — ap-home's `DEMO_EDGE_URL`-class vars, `town.yaml` probes, the skills service's
+   `A2A_BASE`, the indexer's crawl list, the Home's `SKILLS_REGISTRY_ORIGIN`, cards and `atl:` records that name a town
+   host (the registry's own card, `discovery.registry`) — each a PR with the old host still answering.
+3. When `pnpm check:town` finds no reference to the old town host outside the manifest, the `faithnet.io` town hosts
+   become redirects for pages and stay as aliases for APIs for a year; then they leave the manifest.
+4. The node and the graph store stay where the chain's operator runs them (`agentkg.io`); the gateway in front of them
+   is what estates and applications are given.
+
+Nothing in this is a cut-over: every step is additive, and a reference that is missed keeps working on the old host.
+
+## 9. The second estate (added 2026-10-10)
+
+"Another estate … where they want to manage identity and estate-oriented custody, authority and storage." Exactly what
+an estate is for, and the split between what the new estate BRINGS and what it SHARES is the test that §1's table is
+right:
+
+| | The second estate brings (its own) | It shares with the town (the chain's) |
+| --- | --- | --- |
+| **Identity** | its Home (the app, its OIDC issuer, its session cookie, its deployment epoch); its brand zones (`<theirs>.me`, `<theirs>.ai`, `<theirs>.io`); its roster | the chain's `AgentAccountFactory` (every resident is a Smart Agent on the same chain); the naming registry and its roots (a name is unique chain-wide; the estate's `nameRoots` say which roots it serves) |
+| **Custody** | its residents' custody ceremonies at ITS Home (passkeys, SIWE, hardware, trustees, recovery); its KMS tenant (`kms: { tenant: <theirs> }`) for the delegate keys its services sign with | the `CustodyPolicy` module code and the validator on chain; the KMS service itself |
+| **Authority** | every delegation its residents issue (session wires, mandates, grants) — minted at its Home, verified by its edge and runtime | the `DelegationManager` and the enforcers on chain (the same contracts verify every estate's wires); revocation is chain state |
+| **Storage** | its vault (its own D1, its own vault id, its own envelope keys under its KMS tenant); its runtime's Durable Objects; its KV | nothing — a town holds no record (C6) |
+| **Capability** | its default playbooks per agent type, its hosted services, its estate MCPs | the skills registry (it publishes there under its domain organization), the model gateway (its own app keys), the chain gateway (its own tokens) |
+| **Public face** | its released cards, its attestations, its `TownStanding`s (435) | the registry, the graph, discovery, the portal's district for it |
+| **Accounts** | its Cloudflare account(s) and Vercel project; Worker names of its own (`<app>-<estate>`, never reusing faithnet's); secrets | the town's accounts for the town's Workers |
+
+What the operating entity does is §3's recipe. What the town does for it: a row in `estates:` (home, edge, a2a, agent
+zone, name roots, lanes, KMS tenant), the indexer crawling its roots, a district on the map, tokens at the two gateways,
+a heartbeat token so its counts reach the Pulse. What the town must NOT be asked for: a key, a vault, a delegation, a
+session — if a step in standing up the estate needs one of those from the town, the step is wrong (429 D2).
+
+**The checks that keep it honest** (ap-town `pnpm check`): `check:no-estate-binding` — a town Worker binds only town
+Workers or a lane the manifest declares, so the second estate is a manifest edit; `check:town-manifest` — hosts do not
+collide, every estate has its own agent zone and KMS tenant; and, new with this spec, `check:zone-context` — a town
+service's host is under the town zone and an estate's buildings under its own, with the migration allow-list of §8
+step 3 until it empties.
+
+## 10. Not in v1 (named)
+
+Multi-estate towns with more than one live estate (the design is ready; faithnet is one card; §9 is the checklist for
+the second) · the town zone move of §8 as a scheduled program (named here, run as its own PRs) · the federation view ·
 an estate switching towns · a resident's view of their own gateway usage inside their Home (counts are the estate's;
 a person's own receipts are already in their provenance) · alerting on any panel.
 
