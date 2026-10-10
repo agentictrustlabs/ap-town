@@ -211,6 +211,57 @@ The Pulse's tabs become the shared infrastructure, one per service that is meter
 Admin lenses: `/admin/inference` (434 §11), `/admin/chain` (§6.3), `/estate/:id/admin` (435 §6, the steward's view of
 an estate from the town side — a lens on the estate console, never a second console).
 
+### 5.5 The Town Ask — context agents whose vaults are the record (added 2026-10-10)
+
+**The observation (owner):** "include an ask feature in town to retrieve any information about performance, spend,
+status … create faith-town and faith-estate workspace agents custodied by demo admin, with A2A agents on the
+workspace-agent harness and vaults that hold information about the estate and town; then the ask can get past data
+stored in those vaults, and skills in the harness support estate and town questions."
+
+This closes the one gap §5.3 left open: the Pulse's history lives in `HeartbeatDO`, a serving plane. The record of
+how a town or an estate has been doing belongs where every other record lives — in a vault, owned by an agent, read
+by grant or by its public lane, written through the owner's agent (the vault-is-the-record rule). So each context
+gets an agent:
+
+| Context agent | Typed name | Custodian | Holds (vault) | Answers |
+| --- | --- | --- | --- | --- |
+| the town's | `faith-town.workspace` | demo-admin (the persona that custodies the registry's unclaimed domains) | `pulse.day:<date>` (the day's rollup: services up/down, chain summary, inference summary, every estate's heartbeat), `pulse.sample:<at>` (optional, the raw five-minute sample, 30 days), `town.manifest:<digest>` (the manifest as deployed), `chain.policy-change:` / `inference.policy-change:` mirrors by reference | "how is the town doing today / this week", "what did inference cost this month", "which services were down yesterday", "when did the block rate last drop" |
+| the estate's | `faith-estate.workspace` | demo-admin | `pulse.day:<date>` for the estate (its heartbeat series: agents, homes, runs, spend, latency), `estate.manifest:<digest>` (the manifest export of 435 §6), `estate.checklist:<date>` (the standing checklist across residents, counts) | "how many runs failed this week and why", "how many people joined this month", "what is parked for signature right now", "is any resident missing a birthright" |
+
+Both are **workspace agents** (`.workspace`: the coordinator SA of a context, spec 344 / ADR-0061) chartered under
+demo-admin's organization at the faithnet Home, because a town context agent is still a resident of some estate — the
+town holds no vault and no key (C6), so its memory is kept by an agent that lives in an estate, under a custodian the
+town's steward controls. A second estate charters its own `<estate>.workspace`; the town's stays one.
+
+**The sampler writes the record, not only the cache.** The five-minute cron (434 §10.3) keeps filling `HeartbeatDO`
+for the live tabs; once a day (and on demand) it ALSO writes `pulse.day:<date>` into `faith-town.workspace`'s vault —
+and the estate's slice into `faith-estate.workspace`'s — through the vault's native door as the agent itself, under a
+scoped grant and a DEL-001 leaf to the town-agent Worker's own key (the shape `inference.svc` writes its receipts
+with). A wiped `HeartbeatDO` is then a rebuild from the vault; the vault is the record.
+
+**The skills are the questions.** A `town-steward` archetype (skills registry, `agentic-trust` context) carries
+`town.pulse.read` ("how is the town doing", over `pulse.day:*`), `town.spend.read` ("what did inference / chain cost",
+over the inference and chain summaries inside the rollups), `town.status.read` ("which services were down when"),
+`town.estates.read` ("how is each estate doing"); an `estate-steward` archetype carries `estate.pulse.read`,
+`estate.runs.read`, `estate.residents.read` (counts and the checklist). Every skill is a READ over the agent's own
+vault records, compiled into the harness the usual way (spec 354) and answered by the vault-question machinery
+(spec 356): a question compiles to a selector over `pulse.day:*` evaluated in the store, never a decrypted copy in an
+engine. The record keys are bound to T-box classes (`apinf:EstateHeartbeat` for the estate's rollup; a `apinf:TownPulse`
+for the town's — added with the keys) so the Ask knows what a `pulse.day` IS.
+
+**The Ask door.** The portal's Pulse gains an Ask box. A visitor's question goes to `faith-town.workspace`'s A2A door
+(hosted by the estate runtime, like every workspace agent) as a stranger: the standard surface answers from the agent's
+public lane — the town's rollups are public by construction (the same numbers the Pulse draws) — on the
+`subject-answer` artifact, with the records it read cited. A steward signed in through Home asks the same agent under
+their standing and reaches the private legs too (the estate's checklist with names stays at the estate's agent, read
+by its steward). The town agent's own A2A skills (`town.describe`, `town.service`) stay as they are; the new questions
+are the workspace agent's, because they are answered from records, not probes.
+
+**Waves (T1–T4, after the Pulse's W5):** T1 charter the two workspace agents under demo-admin (ap-home PR #34's
+persona, deployed) with all four birthrights; T2 the sampler's daily vault write (grant + leaf ceremony, the record
+bindings in Ring 0's `vault-records.ts`); T3 the `town-steward` / `estate-steward` archetypes and skills published
+and assigned; T4 the Ask box on the Pulse, the public lane answering, the steward's signed-in path.
+
 ### 5.4 Federation (later, named)
 
 A map of towns; standing proven across a boundary; nothing else until `ap-federation` exists.
