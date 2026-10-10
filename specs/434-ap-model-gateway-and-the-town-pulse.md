@@ -7,7 +7,11 @@ ontology terms, the record shapes). **Depends on:** 429 (the town: D1–D8), 388
 (a second model behind the same port), 350 (the harness), 389/390 (provenance, tracing), 406 (the operator view),
 372 S3c (the session wire), 426 (executor invoke), 433 §1.1 (service agent birthrights), ADR-0013 (no silent
 fallbacks), ADR-0021 (generic packages), ADR-0037/ADR-0063 (packages in Ring 0, Workers in product repos), ADR-0040,
-ADR-0041, ADR-0055 (the vault is the record).
+ADR-0041, ADR-0055 (the vault is the record). **Companion:** [spec 435](435-town-governance-plane-standing-estate-picture-mcp-catalog.md)
+owns *who* and *what* (standing, the estate picture, the MCP catalog, the admin lens); this spec owns models and spend.
+**Field comparison:** [docs/town-control-plane-gap-analysis-2026-10.md](../docs/town-control-plane-gap-analysis-2026-10.md)
+(Prediction Guard, Microsoft Agent 365 / Entra Agent ID, Okta Agent Gateway, AWS AgentCore Gateway, Kong, Obot, LiteLLM,
+Portkey, Cloudflare AI Gateway) — §15 below says what it changed here.
 
 ---
 
@@ -414,7 +418,7 @@ rule covers them and the ceremony is the same signature every other act asks for
 | **W3** | ap-home | `selectPlanner` / `selectComposer` / `structuredCallFor` / `textStreamFor` / `logprobChoiceFor` → `model-client/orchestration` bridges with role → profile map; delete `routeProvider`, `SpendWindow`, `ProviderMeterDO`, `llmAllowlist` branches, provider secrets and `ORCHESTRATION_*` model/budget vars; add `INFERENCE_URL`, `INFERENCE_APP_KEY`; `receiptRef` into `run-trace.ts` | the comparison runner (spec 415 A4) arms gateway vs direct on the live Gemini pair with no regression on the panel before `ORCHESTRATION_LLM` goes; Activities and `run.provenance` show `receiptRef` |
 | **W4** | skills · verifiable-content-demo | `skills-a2a callClaude` and `demo-bible-a2a ask.ts` onto `/v1/chat/completions` with their own app keys (profiles `author`, `evals`, `answer-stream`) | each Worker loses its provider key; their receipts appear in the Inference panel by client |
 | **W5** | ap-home · ap-town | `GET /ops/heartbeat`; `/v1/ops/summary`; the cron sampler + `HeartbeatDO`; Pulse tabs; `town-model`/`town-ui`/`town-scene` additions; operator sign-in | 30 days of samples survive a deploy; a wiped `HeartbeatDO` refills from the next sample; the map lights by freshness |
-| **W6** | ap-town | `/admin/inference`: catalog switch, profile editor, change log; `/v1/admin/*` with the stewardship check | a toggle disables a model across every profile at once and the next receipt cites the new version; a non-steward session is refused |
+| **W6** | ap-town | `/admin/inference`: catalog switch, profile editor, change log, the principal class on every receipt row; `/v1/admin/*` with the stewardship check; profile versions exported into 435's estate manifest | a toggle disables a model across every profile at once and the next receipt cites the new version; a non-steward session is refused |
 
 W1 and W2 can run in parallel with W5's heartbeat sources; W3 waits for W2; W6 waits for W5's sign-in.
 
@@ -425,7 +429,8 @@ W1 and W2 can run in parallel with W5's heartbeat sources; W3 waits for W2; W6 w
 Per-agent wires as caller class (b) in the harness · embeddings and Workers AI behind `embeddings-default` · content
 inspection as an opt-in record kind · client entitlement and budget edits in the admin · per-home drill-down from the
 Pulse into that agent's Home (a link today) · OpenRouter normalization (no consumer exists) · eval scripts in
-`~/skills/scripts` as clients · `/admin/town` (manifest edits with receipts) · a second renderer for the map.
+`~/skills/scripts` as clients · `/admin/town` (manifest edits with receipts) · a second renderer for the map · Cloudflare AI Gateway as an upstream cache
+behind an adapter · spend alerts (the Pulse shows utilisation; alerting is a later wave).
 
 ---
 
@@ -440,6 +445,37 @@ Pulse into that agent's Home (a link today) · OpenRouter normalization (no cons
   gateway. Mitigation named, not built: a second Worker deployment behind the same host.
 - Admin writes bypass the harness in v1 (steward session + stewardship check); §11's "later" closes it.
 - Cost needs catalog pricing kept current by hand; a stale price mis-states spend, never authority.
+
+---
+
+## 15. Alignment with the field (added 2026-10-10)
+
+The gap analysis compared this design with the products that sell a "control plane" for agents and models. What it
+confirmed, what it changed, and what we keep different:
+
+**Confirmed (no change).** The gateway core is LiteLLM's shape — an OpenAI-format proxy with per-key budgets, rate limits,
+retries and fallbacks — and Portkey's "routing as data": our app key is their virtual key, our profile record is their
+routing config. The limits table in §5 is at parity with LiteLLM's key budgets (`max_budget` → `microUsdPerDay`,
+`rpm_limit` → `requestsPerMinute`, `max_parallel_requests` → `concurrency`, `models` → `profiles`); the one deliberate
+coarsening is that tokens roll per day, because that is the window the receipts settle on.
+
+**Adopted from the field.**
+
+| From | Feature | Where it lands here |
+| --- | --- | --- |
+| Prediction Guard (supply-chain / AIBOM), VeriGuard (AI-BOM) | a bill of materials for what is running | every receipt names its **profile version**; the **estate manifest export** (435 §6) lists the model profile versions in force beside card, playbook and connector digests |
+| Prediction Guard runtime controls, Entra "block on risk" | a kill switch | the **model catalog switch** (G4) empties every profile at once; **quarantine** of an agent is 435's (registry `suspended` + wire revocation, two acts from one screen) |
+| Okta Agent Gateway's unified trail | "this call ran under credential X" | the Inference panel shows each receipt's **principal class** (app key / session wire) and the asserted agent beside it; tool-call receipts rendered the same way are 435 §10 |
+| Portkey's attribution dashboard | spend by feature / user / model | the Inference panel's client × profile × provider × model slices — with the difference that the principal is proved by the gateway and the agent is an asserted field kept separate |
+| Cloudflare AI Gateway | an upstream cache in front of a provider | named for later, as a cache behind an adapter, never as the gateway (it has no principal model beyond an account and the receipts would not be ours) |
+| AWS AgentCore / Kong | hide denied tools at discovery | not this spec — the harness already narrows the offer (`composeOfferedTools`); 435 §5 makes it visible on the catalog |
+
+**Kept different, on purpose** (the five points of the gap analysis §3): identity is an address, not a tenant record;
+receipts live with the owner, not the operator; credentials for tools stay with the holder, not a proxy; authority is a
+signature per step, not an attribute at the gate; no score.
+
+**The gap we share with the field and name:** SIEM / OpenTelemetry export. Spec 390's spans exist; no exporter runs in
+production. The Pulse links to the gap; it does not pretend.
 
 ---
 
