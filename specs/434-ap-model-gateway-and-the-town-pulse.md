@@ -355,6 +355,14 @@ Three, all pulled by the town, none pushed into it:
 4. **Chain** — `apps/chain-gateway` `GET /ops/summary` (`ChainGatewayOpsSummaryV1`, spec 436 §6: requests, reads/writes,
    denials by reason, cache hit rate, upstream latency and errors, block head and rate, by token with its estate and
    kind, top methods). Added 2026-10-10.
+5. **Infrastructure** (spec 437 §4, added 2026-10-10) — Cloudflare GraphQL Analytics per account (Workers, DO, D1, KV,
+   Queues, Workers AI, Pages Functions), Vercel deployments, Azure Monitor + Resource Health, GraphDB monitor: status
+   every 5 min, metrics hourly, each sample with its `asOf` and lag class.
+6. **Cost** (spec 437 I1/I2) — Vercel billing charges and Azure Cost Management daily over a rolling 7-day window
+   (BILLED, restated up to 72 h), Cloudflare DERIVED from the day's meters × `pricing.json`; never summed without the label.
+7. **Performance** (spec 437 I5) — the infrastructure half from 5, the provenance half from each estate's
+   `EstateHeartbeatV1.performance` (run duration, step duration by capability × risk, model latency by provider/profile,
+   parked wait, vault calls per run, verdicts, failure classes, first-token latency), aggregate only.
 
 ### 10.3 The sampler and its store
 
@@ -386,6 +394,11 @@ cache, and the Pulse gains an Ask answered by those agents' skills.
   `chain.policy-change:` record, the allow-list and gas cap in force.
 - **Applications** (added 2026-10-10) — the listed applications (Game Night, Gather27, the Explorer…) with their probes
   and their usage of both gateways under their own tokens and app keys.
+- **Infra** (spec 437 §6) — platform cards (Cloudflare per account, Vercel, Azure, GraphDB, the chain node): status,
+  24h/7d/30d cost with derived/billed badges and `asOf`, top Workers by requests · errors · CPU, storage, deploy state
+  and age, VM CPU/memory, unreadable-source banners, the Unattributed bucket.
+- **Performance** (spec 437 §6) — the infrastructure latency row over the provenance latency row, per estate, with the
+  cost-per-completed-run tile and its two components.
 
 `town-model` gains `TownPulse` types (`PulseSampleV1`, `PulseSeriesV1`); `town-ui` gains the sparkline, the stat tile and
 the window picker; `town-scene` lights estate buildings by heartbeat freshness. Operator sign-in uses

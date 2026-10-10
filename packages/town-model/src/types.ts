@@ -43,6 +43,11 @@ export interface TownEstate {
   /** The name roots this estate names agents under; the indexer crawls the union over every estate. */
   nameRoots: string[];
   kms?: { tenant: string };
+  /** Spec 437 I4 — the platform resources this estate owns, for the Pulse's attribution (never authority). */
+  workers?: string[];
+  pagesProjects?: string[];
+  vercelProjects?: string[];
+  azureResources?: string[];
 }
 
 export interface TownService {
@@ -64,6 +69,11 @@ export interface TownService {
   /** Estate ids this service serves; absent = every estate in the town. */
   estates?: string[];
   description: string;
+  /** Spec 437 I4 — the platform resources this service owns beyond its `worker`, for the Pulse's attribution. */
+  workers?: string[];
+  pagesProjects?: string[];
+  vercelProjects?: string[];
+  azureResources?: string[];
 }
 
 export interface TownManifest {
@@ -73,6 +83,8 @@ export interface TownManifest {
   chain: TownChain;
   estates: TownEstate[];
   services: TownService[];
+  /** Spec 437 I4 — the accounts the town's resources live in (ids and labels; never a token). */
+  accounts?: import('./pulse-types').TownAccountsV1;
 }
 
 /**

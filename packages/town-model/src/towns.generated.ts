@@ -68,6 +68,33 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "decimals": 6
       }
     },
+    "accounts": {
+      "cloudflare": [
+        {
+          "id": "5da2feaa56593839672948e16c6e809d",
+          "label": "faithnet-town"
+        },
+        {
+          "id": "0a1fdbaf6dc871dd3faf7a8d0dc6c534",
+          "label": "richcanvas"
+        }
+      ],
+      "vercel": {
+        "teamId": "team_5pDHXIoVgGTQ5zs7s0RQJ0Ta",
+        "label": "rpedersen3s-projects"
+      },
+      "azure": {
+        "subscriptionId": "",
+        "resourceGroups": [
+          "rg-faithnet"
+        ],
+        "label": "faithchain-node"
+      },
+      "graphdb": {
+        "url": "https://graphdb.agentkg.io",
+        "label": "ontotext"
+      }
+    },
     "estates": [
       {
         "id": "faithnet",
@@ -95,7 +122,17 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         ],
         "kms": {
           "tenant": "faithnet"
-        }
+        },
+        "workers": [
+          "demo-a2a-faithnet",
+          "demo-mcp-faithnet",
+          "demo-edge-faithnet",
+          "home-mcp-faithnet",
+          "harness-approval-faithnet"
+        ],
+        "vercelProjects": [
+          "faithnet-home"
+        ]
       }
     ],
     "services": [
@@ -189,6 +226,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "hosts": [
           "rpc.faithnet.io"
         ],
+        "probe": "https://rpc.faithnet.io/healthz",
         "description": "Chain access — per-app tokens, method allow-list, rate limits — in front of the faithchain node."
       },
       {
