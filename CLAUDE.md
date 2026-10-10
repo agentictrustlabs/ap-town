@@ -10,6 +10,7 @@ access, and — next — naming, the town agent and the Town portal. A product r
 
 - `specs/429-ap-town-the-towns-repository.md` — the charter: what is in the town, what is referenced, the releases.
 - `specs/430-the-towns-naming-service.md` — the naming service (`apps/naming`): what it borrows from ENS v2, the four signals, the town of names, waves N1–N5.
+- `specs/434-ap-model-gateway-and-the-town-pulse.md` — the AP Model Gateway (`inference.svc`, `apps/inference`): one request contract, profiles over a model catalog, reserve-then-settle budgets, declared fallback, receipts in its vault; and the portal re-shaped around the **Pulse** (town · estates · homes · inference, sampled into `HeartbeatDO`) and a steward-gated `/admin/inference`. The town governs model access, acts for no one (D2).
 - `towns/<chain>/town.yaml` — the one description of a town; every app, check and generator reads it (`packages/town-model`).
 - `DEPLOYER.md` — which Worker this repo deploys, in which env. Worker names, hosts, DO classes and migration tags never change in a move.
 
