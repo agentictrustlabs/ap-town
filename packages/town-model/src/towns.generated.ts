@@ -218,19 +218,6 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "description": "The town's naming service — every name on the chain, what it points at, and who can change it. It reads; an owner's Home writes."
       },
       {
-        "id": "inference",
-        "kind": "commons",
-        "repo": "ap-town",
-        "app": "apps/inference",
-        "worker": "faithchain-inference",
-        "agentName": "inference.svc",
-        "hosts": [
-          "inference.faithnet.io"
-        ],
-        "probe": "https://inference.faithnet.io/healthz",
-        "description": "The town's model gateway (spec 434) — profiles over a model catalog, per-principal budgets, declared fallback, receipts in its own vault. Governs model access; acts for no one."
-      },
-      {
         "id": "chain-gateway",
         "kind": "commons",
         "repo": "ap-town",
