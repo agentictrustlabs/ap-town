@@ -4,7 +4,9 @@
 this space … a gap analysis with Prediction Guard and other leading products that provide a 'town'-like context control
 plane"; first assessment `~/.cursor/plans/town_governance_plane_a91d43a3.plan.md`). **Owner:** ap-town (the data plane,
 the portal, the admin lens) · Ring 0 (`attestations`, `agent-resolution`, `registry-kit`, `context`, `discovery`, the
-ontology) · ap-home (the ceremonies). **Companion:** [spec 434](434-ap-model-gateway-and-the-town-pulse.md) owns models
+ontology) · ap-home (the ceremonies). **Frame:** [spec 436](436-home-estate-town-federation-the-four-contexts.md) (the estate as the key context; the
+estate picture here is the public face of the estate console's Residents column, and the admin lens at the town is a
+lens on that console). **Companion:** [spec 434](434-ap-model-gateway-and-the-town-pulse.md) owns models
 and spend; this spec owns *who* and *what*. **Field comparison:**
 [docs/town-control-plane-gap-analysis-2026-10.md](../docs/town-control-plane-gap-analysis-2026-10.md).
 **Depends on:** 429 (D2, D7), ADR-0025 (related-agent links are private), ADR-0040 (the KB holds chain-derivable facts),
