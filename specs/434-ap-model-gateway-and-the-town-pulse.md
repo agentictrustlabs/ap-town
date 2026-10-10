@@ -362,7 +362,10 @@ Three, all pulled by the town, none pushed into it:
 30-day retention, alarm prune). Every five minutes it probes services, pulls each estate's heartbeat and the inference
 summary, and appends a sample. `GET /api/pulse?window=24h|7d|30d` serves series + latest per kind. `HeartbeatDO` is a
 serving plane: wiping it loses trend lines, never a record (receipts and policy changes are in `inference.svc`'s vault;
-runs are in each estate). `pnpm probe:town` stays as the external, independent check.
+runs are in each estate). `pnpm probe:town` stays as the external, independent check. **Added 2026-10-10 (spec 436
+§5.5):** the sampler also writes the day's rollup into the town context agent's vault (`faith-town.workspace`,
+`pulse.day:<date>`) and each estate's slice into its estate agent's — the record; `HeartbeatDO` becomes the rebuildable
+cache, and the Pulse gains an Ask answered by those agents' skills.
 
 ### 10.4 The panels
 
