@@ -23,12 +23,18 @@ ESTIMATE_GAS_CAP = ""
 [[durable_objects.bindings]]
 name = "RATE"
 class_name = "RateLimiter"
+[[durable_objects.bindings]]
+name = "OPS"
+class_name = "ChainOpsDO"
 
 # Migration history is shared across envs. `v1` is ALREADY APPLIED to the live Worker of every env —
 # do not bump or rename it.
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["RateLimiter"]
+[[migrations]]
+tag = "v2"
+new_sqlite_classes = ["ChainOpsDO"]
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────────
 # Deployment envs. CUTOVER RULE for every env: the Worker name is what the TOKENS KV, the RateLimiter
@@ -47,6 +53,8 @@ custom_domain = true
 [env.faithnet.vars]
 ORIGIN = "https://faithchain-rpc.agentkg.io"
 ESTIMATE_GAS_CAP = "0x2dc6c0"
+CHAIN_GENERATION = "1"
+# TOWN_OPS_TOKEN is a secret (`wrangler secret put TOWN_OPS_TOKEN --env faithnet`): the Pulse sampler reads /ops/summary with it (spec 436 §6).
 
 [[env.faithnet.kv_namespaces]]
 binding = "TOKENS"
@@ -55,3 +63,6 @@ id = "efc60d50844441b5b585873605b1888b"
 [[env.faithnet.durable_objects.bindings]]
 name = "RATE"
 class_name = "RateLimiter"
+[[env.faithnet.durable_objects.bindings]]
+name = "OPS"
+class_name = "ChainOpsDO"
