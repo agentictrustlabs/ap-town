@@ -1,0 +1,18 @@
+{
+  "asOf": "2026-10-10",
+  "source": "https://developers.cloudflare.com/workers/platform/pricing/ (Workers Paid; D1, KV, Queues and Durable Objects pricing pages) — published unit prices, read by hand; a derived cost is a meter times this table, never a bill",
+  "meters": {
+    "workers.requests": { "unit": "request", "microUsdPerUnit": 0.3, "includedPerMonth": 10000000 },
+    "workers.cpuMs": { "unit": "cpu-ms", "microUsdPerUnit": 0.02, "includedPerMonth": 30000000 },
+    "do.requests": { "unit": "request", "microUsdPerUnit": 0.15, "includedPerMonth": 1000000 },
+    "do.gbSeconds": { "unit": "GB-s", "microUsdPerUnit": 12.5, "includedPerMonth": 400000 },
+    "do.storageGbMonth": { "unit": "GB-month", "microUsdPerUnit": 200000, "includedPerMonth": 5 },
+    "d1.rowsRead": { "unit": "row", "microUsdPerUnit": 0.001, "includedPerMonth": 25000000000 },
+    "d1.rowsWritten": { "unit": "row", "microUsdPerUnit": 1, "includedPerMonth": 50000000 },
+    "d1.storageGbMonth": { "unit": "GB-month", "microUsdPerUnit": 750000, "includedPerMonth": 5 },
+    "kv.reads": { "unit": "operation", "microUsdPerUnit": 0.5, "includedPerMonth": 10000000 },
+    "kv.writes": { "unit": "operation", "microUsdPerUnit": 5, "includedPerMonth": 1000000 },
+    "kv.storageGbMonth": { "unit": "GB-month", "microUsdPerUnit": 500000, "includedPerMonth": 1 },
+    "queues.operations": { "unit": "operation", "microUsdPerUnit": 0.4, "includedPerMonth": 1000000 }
+  }
+}

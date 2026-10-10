@@ -1,0 +1,26 @@
+{
+  "name": "@ap-town/inference",
+  "version": "0.0.1",
+  "private": true,
+  "description": "inference.svc — the town's model gateway Worker (spec 434): profiles over a model catalog, per-principal budgets, declared fallback, receipts in its own vault; a contract door and an OpenAI-compatible door.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "deploy:faithnet": "wrangler deploy --env faithnet"
+  },
+  "dependencies": {
+    "@agenticprimitives/delegation": "1.0.0-alpha.32",
+    "@agenticprimitives/model-gateway": "0.0.0-alpha.1",
+    "@agenticprimitives/orchestration-anthropic": "0.0.0-alpha.12",
+    "@agenticprimitives/orchestration-openai-compat": "0.0.0-alpha.11",
+    "viem": "2.52.2"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260605.1",
+    "typescript": "5.7.3",
+    "vitest": "4.1.8",
+    "wrangler": "4.93.0"
+  }
+}

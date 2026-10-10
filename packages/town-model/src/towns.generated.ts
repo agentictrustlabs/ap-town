@@ -84,9 +84,10 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "label": "rpedersen3s-projects"
       },
       "azure": {
-        "subscriptionId": "",
+        "subscriptionId": "5a656e13-849d-4b56-9101-53f987cf971b",
         "resourceGroups": [
-          "rg-faithnet"
+          "rg-faithnet",
+          "rg-akcs-pilot-westus"
         ],
         "label": "faithchain-node"
       },
@@ -128,7 +129,11 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "demo-mcp-faithnet",
           "demo-edge-faithnet",
           "home-mcp-faithnet",
-          "harness-approval-faithnet"
+          "harness-approval-faithnet",
+          "demo-a2a",
+          "demo-mcp",
+          "demo-edge",
+          "home-mcp"
         ],
         "vercelProjects": [
           "faithnet-home"
@@ -206,6 +211,16 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "description": "The town's own agent — what this town offers and whether each service is up. Lists; never grants."
       },
       {
+        "id": "town-mcp",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/town-mcp",
+        "worker": "faithchain-town-mcp",
+        "hosts": [],
+        "workers": [],
+        "description": "The town's private MCP (spec 437 §4) — the only place a platform read credential lives, and the only thing that reads Cloudflare, Vercel, Azure and GraphDB. No hostname; reachable only by service binding from the town agent. It reads; it acts for nobody."
+      },
+      {
         "id": "naming",
         "kind": "commons",
         "repo": "ap-town",
@@ -218,15 +233,33 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "description": "The town's naming service — every name on the chain, what it points at, and who can change it. It reads; an owner's Home writes."
       },
       {
+        "id": "inference",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/inference",
+        "worker": "faithchain-inference",
+        "hosts": [
+          "inference.faithnet.io"
+        ],
+        "probe": "https://inference.faithnet.io/healthz",
+        "description": "The town's model gateway (spec 434) — provider keys live on this Worker and nowhere else; it routes a call to a provider by budget and records the route it chose. It answers; it decides no authority."
+      },
+      {
         "id": "chain-gateway",
         "kind": "commons",
         "repo": "ap-town",
         "app": "apps/chain-gateway",
         "worker": "faithchain-rpc-gateway",
+        "workers": [
+          "chain-rpc-gateway"
+        ],
         "hosts": [
           "rpc.faithnet.io"
         ],
         "probe": "https://rpc.faithnet.io/healthz",
+        "azureResources": [
+          "/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-FAITHNET/providers/Microsoft.Compute/virtualMachines/faithnet-vm"
+        ],
         "description": "Chain access — per-app tokens, method allow-list, rate limits — in front of the faithchain node."
       },
       {
@@ -237,6 +270,14 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "skills.faithnet.io"
         ],
         "probe": "https://skills.faithnet.io/",
+        "workers": [
+          "skills-web-faithnet",
+          "skills-web",
+          "skills-a2a",
+          "skills-corpus",
+          "skills-mcp",
+          "skills-ontology"
+        ],
         "description": "The skills registry — SKILL.md contracts and playbooks, pinned by digest."
       },
       {
@@ -247,6 +288,10 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "akcs-pilot.faithnet.io"
         ],
         "probe": "https://akcs-pilot.faithnet.io/healthz",
+        "azureResources": [
+          "/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-AKCS-PILOT-WESTUS/providers/Microsoft.Compute/virtualMachines/vm-akcs-pilot-0",
+          "/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-AKCS-PILOT-WESTUS/providers/Microsoft.Compute/virtualMachines/vm-akcs-tunnel-pilot"
+        ],
         "description": "Key custody (AKCS) — a tenant per estate; keys are delegates, never identities."
       },
       {
@@ -261,6 +306,14 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "probe": "https://gamenight.faithnet.io/",
         "estates": [
           "faithnet"
+        ],
+        "workers": [
+          "pokernight-web-faithnet",
+          "pokernight-agent-worker-faithnet",
+          "pokernight-tables-faithnet",
+          "pokernight-web",
+          "pokernight-agent-worker",
+          "pokernight-tables"
         ],
         "description": "Game Night — people and agents at the same tables, including Field Operations."
       }

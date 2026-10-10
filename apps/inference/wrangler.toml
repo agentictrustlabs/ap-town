@@ -1,0 +1,41 @@
+# inference.svc — the town's model gateway (spec 434 §9). Provider keys live on THIS Worker and nowhere else (G1).
+# Bindings are per-env on purpose (wrangler does not inherit vars / kv / DO bindings into envs).
+name = "inference"
+main = "src/index.ts"
+compatibility_date = "2026-05-20"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+TOWN = "faithchain"
+
+[[durable_objects.bindings]]
+name = "BUDGET"
+class_name = "BudgetDO"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BudgetDO"]
+
+# Secrets (wrangler secret put <NAME> --env faithnet):
+#   ANTHROPIC_API_KEY · GEMINI_API_KEY · OPENAI_COMPAT_KEYS (JSON endpoint-origin → key, optional) · TOWN_OPS_TOKEN
+#   VAULT_GRANT · VAULT_SESSION_LEAF · INFERENCE_SIGNER_KEY (the ledger: inference.svc writes its receipts to its vault)
+# KV CACHE rows: policy:profiles · policy:catalog (W6 writes; absent ⇒ seeds) · client:<sha256(appKey)> · entitlement:<sa> · clients:principals
+#   (scripts/inference-client.mts registers a client)
+
+[env.faithnet]
+name = "faithchain-inference"
+[[env.faithnet.routes]]
+pattern = "inference.faithnet.io"
+custom_domain = true
+[env.faithnet.vars]
+TOWN = "faithchain"
+CHAIN_ID = "34348"
+VAULT_URL = "https://mcp.faithnet.io"
+VAULT_AUDIENCE = "urn:mcp:server:person"
+INFERENCE_AGENT_NAME = "inference.svc"
+[[env.faithnet.kv_namespaces]]
+binding = "CACHE"
+id = "62a0d85224c44c188f4af66406a66645"
+[[env.faithnet.durable_objects.bindings]]
+name = "BUDGET"
+class_name = "BudgetDO"

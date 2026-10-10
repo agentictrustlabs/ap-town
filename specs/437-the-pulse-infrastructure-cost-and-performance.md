@@ -118,11 +118,57 @@ its `asOf` and lag class (I2) and its own `ok`/`error` (I3).
 
 ---
 
+---
+
+## 4a. AMENDED 2026-10-10 — the credentials live in the town's MCP, and the portal retrieves nothing
+
+The owner's rule, during the build: *"I want town mcp associated with town a2a to retrieve info needed for vercel,
+cloudflare, graphdb, azure, etc. All the security stuff to do this needs to be in the mcp in some secure way"* and
+*"the town app should not retrieve this data; the town or estate mcp should"*. §4 and I7 are amended accordingly, and
+this is the shape ADR-0057 already asks for: **MCP is a private capability interface behind an admitted runtime,
+absent from every Agent Card.**
+
+- **`apps/town-mcp` (Worker `faithchain-town-mcp`) is the only thing in the town that holds a platform read credential
+  and the only thing that reaches Cloudflare, Vercel, Azure or GraphDB.** It has no route and no custom domain: the
+  town agent reaches it over the `INFRA` service binding, and nothing on the public internet reaches it at all. Behind
+  the binding it still checks the town ops token (defence in depth), in constant time, and an unset token closes the
+  door rather than opening it.
+- **It collects.** The three cadences (I1) are ITS crons — status `*/5`, metrics `7 * * * *`, cost `30 6 * * *` — and
+  its samples live in its own `InfraDO` (30 days of readings, 400 of cost rows, pruned by alarm). The portal's Worker
+  keeps its one five-minute cron for what needs no credential: the service probes, the two gateways' rollups, each
+  estate's heartbeat.
+- **The portal asks.** `GET /api/pulse` reads the stored rows from the MCP (`infraRowsFrom`) and composes them with its
+  own heartbeat samples into the view (`readPerformance(town, samples, rows, …)`). An unbound or unreachable MCP is
+  `performance.unavailable` with its reason — never zeros. The portal holds no provider credential, and after this
+  change it has none set.
+- **Each agent knows its own configuration.** `infra_config` (and `GET /api/config?owner=`) answers what the town — or
+  one estate, service or application — is configured with: the accounts its resources live in (ids and labels), the
+  Workers · Pages projects · Vercel projects · Azure resources it declares, which read credentials this deployment
+  holds **by name**, and which declared resources have no reading yet. A credential's presence is a fact; its value
+  never leaves the MCP.
+- **The tools** (`POST /mcp`, JSON-RPC 2.0, so the Town Ask's harness calls them as tools and an MCP client could):
+  `infra_sources` · `infra_status` (status, lag, owner — no metrics) · `infra_metrics` (the last reading) ·
+  `infra_cost` (per day per owner, derived/billed labelled, never summed across the label) · `infra_config`.
+- **Attribution moved to the model.** `attributeResource` / `declaredResources` are pure manifest functions in
+  `@ap-town/town-model`, because both sides read them and neither should own them (I4 unchanged: declared, never
+  guessed; a resource listed nowhere is `null` and lands in the Unattributed bucket the Pulse SHOWS).
+- **An estate may do the same.** The rule generalises: an estate that holds its own accounts runs its own estate MCP
+  with its own credentials and answers for its own resources (436 §9 — what an estate brings). The town shows
+  "not shared" for an estate whose operator shares no read token, never a zero (I7 unchanged).
+
+Ground truth found while wiring it, both now fixtures: GraphDB's `/rest/monitor/infrastructure` answers **Prometheus
+text**, not JSON (20 `graphdb_*` gauges; a JSON-shaped parser read nothing and would have reported a healthy node, so
+an unrecognised body is now UNREADABLE), while `/rest/repositories/<id>/size` is JSON (`{inferred, total, explicit}`).
+Vercel's `/v6/deployments` and `/v1/billing/charges` answer the shapes §4 assumed (checked against the live team:
+402 FOCUS rows over seven days, `BilledCost` as a number or a string, grouped by day × project × SKU).
+
 ## 5. Sampler, store, API
 
-`pulse.ts` gains kinds `infra`, `cost`, `perf`; `wrangler.toml` carries three cron expressions dispatched by
-`event.cron`; `HeartbeatDO` keeps retention per kind (30 d / 30 d / 400 d); `readPulse` gains `infra`, `cost` and
-`performance` views with the attribution joins and `complete` flags; `GET /api/pulse?window=24h|7d|30d|90d`.
+**As amended by §4a:** the infra and cost store is the town MCP's `InfraDO` (30 d readings, 400 d cost), its three
+crons are dispatched by `event.cron` on that Worker, and the portal's `readPerformance(town, samples, rows, …)`
+composes the MCP's rows with its own heartbeat samples into the `infra`, `cost` and `performance` views with the
+attribution joins and `complete` flags. `GET /api/pulse?window=24h|7d|30d|90d`, with the operator's detail under the
+town ops token.
 
 ap-home `apps/agent-runtime`: `GET /ops/heartbeat` fills `performance` from the OPS index via `rollupMetrics`; first-token
 latency is recorded on the stream path if it is not already on the trace.
@@ -156,6 +202,25 @@ infra, cost and performance views, so "what did the town cost last week" is a va
 | **P2** | sampler kinds, three crons, retention per kind, `readPulse` views, `/api/pulse` windows; ap-home fills the performance block | 30 days of infra samples and 400 days of cost rows survive a deploy; a wiped DO refills from the next passes and (436 §5.5) from the context agents' vaults |
 | **P3** | the two tabs; the Estates tiles; the badges | `/operations/performance` draws 7 days for faithnet |
 | **P4** | the day-level gates below | — |
+
+**Status 2026-10-10 (evening):** P0 landed (ap-town #9; Ring 0 `rollupMetrics` + `EstateHeartbeatV1.performance` in
+agenticprimitives #702). P1 built: `apps/town-agent/worker/infra/{common,cloudflare,vercel,azure,graphdb,index}.ts` +
+`pricing.json` (11 fixture tests incl. the partial-failure cases: one Cloudflare dataset unreadable alone; a refused account
+token = every dataset unreadable; Vercel 403; Azure 429 → one back-off → still refused = failed, incomplete). P2 built:
+kinds `infra` + `cost` (the performance block rides on the estate heartbeat), three crons dispatched on `event.cron`,
+`HeartbeatDO` keeps cost 400 d and the rest 30 d, `/read?kind=&from=&to=`, `readPerformance` → `PerfViewV1`
+(`worker/pulse-perf.ts`; supersession per cost day, owner grouping, cost per completed run, Unattributed, `sources`,
+`complete`), `GET /api/pulse?window=24h|7d|30d|90d` (+ `authorization: Bearer <TOWN_OPS_TOKEN>` for the operator's
+detail — amounts and metrics withheld on the public read, said so with `detail: false`); the day record (`pulse.day`)
+carries infra status, cost rows, cost per run and the unattributed list; ap-home fills `performance` from a new OPS
+column `perf` (`PerfColumnV1` = `metricsOf(record)` + model-call timings, rows indexed since the column shipped). P3
+built: `/operations/infra` and `/operations/performance` (`app/pulse/InfraTabs.tsx`), lag + basis badges, the Estates
+tiles (cost over the window · run p95), the Operator token affordance (session-only, unlocks a READ). Deployed from the
+working trees (town-agent version df9f6ac1; runtime 2fda668b). **Not yet:** the read tokens (I7) — none exist; create them
+and run `scripts/set-pulse-secrets.sh`; until then the Infra tab says "not configured" per source (GraphDB's monitor
+answers 401 anonymously). Parked wait and first token are `count: 0` (not on the index yet). The Cloudflare GraphQL field
+names are the schema as read on 2026-10-10 — a drift shows as ONE dataset unreadable with the GraphQL message, which is
+the P4 gate's job to prove. Commit of the product trees waits on the npm publish (exact pins; `ap doctor lock-coherent`).
 
 **Gates (P4):** a day with a Cloudflare account token revoked shows the account as unreadable and the total as
 incomplete; Vercel cost for yesterday matches `vercel usage --since` for the same day; Azure day-N cost restates when

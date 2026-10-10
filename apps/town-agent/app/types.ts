@@ -13,6 +13,8 @@ export interface TownData {
   services: ServiceView[];
   names: NamesSummary | null;
   card: string;
+  /** Spec 437 I4 — the accounts' ids and labels (never a token), for the Infra tab's names. */
+  accounts?: { cloudflare?: Array<{ id: string; label: string }>; vercel?: { teamId: string; label?: string }; azure?: { subscriptionId: string; resourceGroups: string[]; label?: string }; graphdb?: { url: string; label?: string } } | null;
 }
 export interface FindHit {
   name: string | null; smartAgent: string; score: number; why: string[]; registered?: boolean; shaclConforms?: boolean;

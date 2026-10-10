@@ -1,0 +1,47 @@
+# THE TOWN'S PRIVATE MCP — spec 437 §4 / ADR-0057 (MCP is a PRIVATE capability interface, absent from every Agent Card).
+#
+# This Worker is the ONLY place the platform read credentials live. It has NO route and NO custom domain: the town
+# agent reaches it over a service binding, and nothing on the public internet can reach it at all. The portal's
+# Worker holds none of these secrets and never did after this change.
+#
+# Secrets (`wrangler secret put <name> --env faithnet`, or ../../scripts/set-pulse-secrets.sh):
+#   TOWN_OPS_TOKEN        the one token the town's own services answer to (defence in depth behind the binding)
+#   CLOUDFLARE_ACCOUNTS   JSON [{"id":"<account id>","label":"…","token":"<Account Analytics Read API token>"}]
+#   VERCEL_TOKEN          a Vercel access token for the team (deployments + billing/charges)
+#   AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_SUBSCRIPTION_ID
+#                         a service principal with Reader + Cost Management Reader on the subscription
+#   GRAPHDB_MONITOR_TOKEN the full Authorization header value for GraphDB's /rest/monitor endpoints
+name = "town-mcp"
+main = "src/index.ts"
+compatibility_date = "2026-05-20"
+compatibility_flags = ["nodejs_compat"]
+
+[dev]
+port = 8793
+
+[vars]
+TOWN = "faithchain"
+
+[env.faithnet]
+name = "faithchain-town-mcp"
+
+[env.faithnet.vars]
+TOWN = "faithchain"
+
+# The sample store (spec 437 I1): 30 days of infrastructure readings, 400 of cost rows, pruned by alarm.
+[[durable_objects.bindings]]
+name = "INFRA"
+class_name = "InfraDO"
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["InfraDO"]
+
+[triggers]
+crons = ["*/5 * * * *", "7 * * * *", "30 6 * * *"]
+
+[[env.faithnet.durable_objects.bindings]]
+name = "INFRA"
+class_name = "InfraDO"
+
+[env.faithnet.triggers]
+crons = ["*/5 * * * *", "7 * * * *", "30 6 * * *"]

@@ -1,0 +1,24 @@
+{
+  "name": "@ap-town/town-mcp",
+  "version": "0.0.1-alpha.0",
+  "private": true,
+  "description": "The town's private MCP (spec 437 §4): the one place the platform read credentials live. Tools that report infrastructure status, metrics and cost for Cloudflare, Vercel, Azure and GraphDB. No public hostname — the town agent reaches it over a service binding, and the Town Ask's harness calls its tools.",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "deploy:faithnet": "wrangler deploy --env faithnet",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ap-town/town-model": "workspace:*",
+    "hono": "4.13.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "4.20260605.1",
+    "typescript": "5.7.3",
+    "wrangler": "3.114.17",
+    "vitest": "4.1.8"
+  }
+}

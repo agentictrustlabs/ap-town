@@ -12,6 +12,11 @@
 import { createStandardA2aServer, type AgentCardV1, type MessageV1, type PartV1 } from '@agenticprimitives/a2a/standard';
 import { TOWNS, type TownManifest } from '@ap-town/town-model';
 import { describe, serviceViews, townSummary, type Probe, type ServiceView } from './signals';
+import { samplePulse, readPulse, type PulseSampleV1, type PulseEnv } from './pulse';
+import { recordDay, pulseRecordReadiness, contextAgents, type PulseRecordEnv } from './pulse-record';
+import { PERF_WINDOWS, operatorAuthorized, readPerformance, type InfraRowV1, type PerfWindow } from './pulse-perf';
+import { resolveAgentCard, createStandardA2aClient } from '@agenticprimitives/a2a/standard';
+export { HeartbeatDO } from './pulse';
 
 interface Env {
   TOWN: string;
@@ -20,6 +25,48 @@ interface Env {
   /** The town's registry and naming service, over service bindings — the portal's Find and Names areas. */
   REGISTRY?: { fetch(req: Request): Promise<Response> };
   NAMING?: { fetch(req: Request): Promise<Response> };
+  /** Spec 434 §10 / 436 §5.3 — the Pulse: the two metered gateways over service bindings, the estates over their heartbeat tokens, the sample store. */
+  CHAIN?: { fetch(req: Request): Promise<Response> };
+  INFERENCE?: { fetch(req: Request): Promise<Response> };
+  TOWN_OPS_TOKEN?: string;
+  ESTATE_HEARTBEAT_TOKENS?: string;
+  HEARTBEAT?: DurableObjectNamespace;
+  /** Spec 436 §5.5 — the Town Ask: the context agents (by name) whose vaults keep the Pulse's record and whose doors answer. */
+  CONTEXT_AGENTS?: string;
+  CONTEXT_AGENT_ZONE?: string;
+  CONTEXT_AGENT_CREDENTIALS?: string;
+  TOWN_SIGNER_KEY?: string;
+  VAULT_URL?: string;
+  VAULT_AUDIENCE?: string;
+  CHAIN_ID?: string;
+  /**
+   * Spec 437 §4 (the owner's rule, 2026-10-10: "the town app should not retrieve this data; the town or estate MCP
+   * should"). The town's PRIVATE MCP — the only thing in the town that holds a platform read credential and the only
+   * thing that talks to Cloudflare, Vercel, Azure or GraphDB. This Worker asks it over a service binding and holds
+   * nothing. Unbound ⇒ the Infra and Performance tabs say the MCP is not bound, never zeros.
+   */
+  INFRA?: { fetch(req: Request): Promise<Response> };
+}
+
+/** The town MCP's stored infra + cost rows for a window. `[]` is "nothing collected yet", which the tab says. */
+export async function infraRowsFrom(env: Env, fromMs: number): Promise<{ rows: InfraRowV1[]; unavailable: string | null }> {
+  if (!env.INFRA) return { rows: [], unavailable: 'the town MCP is not bound on this deployment' };
+  if (!env.TOWN_OPS_TOKEN) return { rows: [], unavailable: 'this deployment has no town ops token, so it cannot read the town MCP' };
+  try {
+    const r = await env.INFRA.fetch(new Request(`https://town-mcp/infra/read?from=${fromMs}`, { headers: { accept: 'application/json', authorization: `Bearer ${env.TOWN_OPS_TOKEN}` }, signal: AbortSignal.timeout(15_000) }));
+    if (!r.ok) return { rows: [], unavailable: `the town MCP answered ${r.status}` };
+    return { rows: (await r.json()) as InfraRowV1[], unavailable: null };
+  } catch (e) { return { rows: [], unavailable: `the town MCP could not be asked: ${e instanceof Error ? e.message : String(e)}` }; }
+}
+
+/** What the town MCP says it is configured with — the agent's own account of its servers and its security (names only). */
+export async function infraConfigFrom(env: Env, owner?: string): Promise<unknown> {
+  if (!env.INFRA) return { ok: false, error: 'the town MCP is not bound on this deployment' };
+  if (!env.TOWN_OPS_TOKEN) return { ok: false, error: 'this deployment has no town ops token' };
+  try {
+    const r = await env.INFRA.fetch(new Request(`https://town-mcp/infra/config${owner ? `?owner=${encodeURIComponent(owner)}` : ''}`, { headers: { accept: 'application/json', authorization: `Bearer ${env.TOWN_OPS_TOKEN}` }, signal: AbortSignal.timeout(15_000) }));
+    return r.ok ? await r.json() : { ok: false, error: `the town MCP answered ${r.status}` };
+  } catch (e) { return { ok: false, error: `the town MCP could not be asked: ${e instanceof Error ? e.message : String(e)}` }; }
 }
 
 const VERSION = '0.1.0';
@@ -99,9 +146,24 @@ async function ask<T>(svc: { fetch(req: Request): Promise<Response> } | undefine
   try { const r = await svc.fetch(new Request(url, { ...init, headers: { accept: 'application/json', ...(init?.headers ?? {}) } })); return r.ok ? ((await r.json()) as T) : null; } catch { return null; }
 }
 
-async function api(path: string, url: URL, env: Env, town: TownManifest, selfHost: string, origin: string): Promise<Response> {
-  if (path === '/health') return json({ ok: true, service: 'town-agent', town: town.town });
+/** The operator's "collect now": forwarded to the town MCP, which does the collecting. This Worker reaches no provider. */
+async function runPassVia(env: Env, which: string, authorization: string | null): Promise<Response> {
+  if (!operatorAuthorized(env.TOWN_OPS_TOKEN, authorization)) return json({ ok: false, error: 'a pass is run with the town ops token' }, 401);
+  if (!env.INFRA) return json({ ok: false, error: 'the town MCP is not bound on this deployment' }, 503);
+  try {
+    const r = await env.INFRA.fetch(new Request('https://town-mcp/infra/pass', { method: 'POST', headers: { 'content-type': 'application/json', authorization: `Bearer ${env.TOWN_OPS_TOKEN}` }, body: JSON.stringify({ which }), signal: AbortSignal.timeout(110_000) }));
+    return json(await r.json().catch(() => ({ ok: false, error: `the town MCP answered ${r.status}` })), r.ok ? 200 : 502);
+  } catch (e) { return json({ ok: false, error: `the town MCP could not be asked: ${e instanceof Error ? e.message : String(e)}` }, 502); }
+}
+
+async function api(path: string, url: URL, env: Env, town: TownManifest, selfHost: string, origin: string, authorization: string | null = null, method = 'GET'): Promise<Response> {
+  if (path === '/pulse/pass') return method === 'POST' ? runPassVia(env, url.searchParams.get('which') ?? 'status', authorization) : json({ error: 'POST, with the town ops token' }, 405);
+  if (path === '/health') return json({ ok: true, service: 'town-agent', town: town.town, pulseRecord: pulseRecordReadiness(env as PulseRecordEnv), contextAgents: contextAgents(env as PulseRecordEnv), townMcp: env.INFRA ? 'bound' : 'not bound on this deployment' });
   if (path === '/estates') return json(townSummary(town).estates);
+  // WHAT THIS AGENT IS CONFIGURED WITH (the owner's rule, 2026-10-10): which servers the town — or one estate,
+  // service or application — declares, and which read credentials the town MCP holds, BY NAME. Never a value: the
+  // credentials live only in the MCP, and this Worker could not print one if it tried.
+  if (path === '/config') return json(await infraConfigFrom(env, url.searchParams.get('owner') ?? undefined), 200, { 'cache-control': 'public, max-age=60' });
   if (path === '/town') {
     const [services, names] = await Promise.all([serviceViews(town, fetchProbe, selfHost), ask<unknown>(env.NAMING, 'https://naming/api/town')]);
     return json({ ...townSummary(town), services, names, card: `${origin}/.well-known/agent-card.json` }, 200, { 'cache-control': 'public, max-age=30' });
@@ -138,10 +200,69 @@ async function api(path: string, url: URL, env: Env, town: TownManifest, selfHos
     if (!agent) return json({ error: 'the registry could not be asked just now' }, 502);
     return json({ key, agent, offerings });
   }
+  // The Pulse (spec 434 §10 / 436 §5.3): the latest sample per source and the series for a window, from the store the
+  // cron fills. Public: everything here is aggregate — probes, gateway rollups, estate counts — never a person's record.
+  if (path === '/pulse') {
+    if (!env.HEARTBEAT) return json({ error: 'no sample store is bound on this deployment' }, 503);
+    const window = (PERF_WINDOWS as string[]).includes(url.searchParams.get('window') ?? '') ? (url.searchParams.get('window') as PerfWindow) : '24h';
+    const nowMs = Date.now();
+    const from = nowMs - (window === '90d' ? 90 : window === '30d' ? 30 : window === '7d' ? 7 : 1) * 86_400_000;
+    const r = await env.HEARTBEAT.get(env.HEARTBEAT.idFromName(town.town)).fetch(`https://pulse/read?from=${from}`);
+    const samples = (await r.json()) as PulseSampleV1[];
+    // Spec 437 / 434 §10: infra STATUS and the provenance block are public; cost amounts and infra metrics are the operator's
+    // (the one town ops token, `authorization: Bearer …`) — withheld, said so (`detail: false`), never zeroed.
+    const detail = operatorAuthorized(env.TOWN_OPS_TOKEN, authorization);
+    const infra = await infraRowsFrom(env, from);
+    const performance = readPerformance(town, samples, infra.rows, { window, nowMs, detail });
+    return json({ ...readPulse(town, samples, window === '90d' ? '30d' : window), performance: { ...performance, ...(infra.unavailable ? { unavailable: infra.unavailable } : {}) } }, 200, detail ? { 'cache-control': 'private, no-store' } : { 'cache-control': 'public, max-age=60' });
+  }
+  // THE TOWN ASK (spec 436 §5.5 T4): a question goes to the context agent's A2A door as a stranger; the portal relays
+  // the answer and names who said it. No key, no session, no rewrite here. Until the agent is chartered: said so.
+  if (path === '/ask') {
+    const q = (url.searchParams.get('q') ?? '').trim();
+    const scope = url.searchParams.get('scope') === 'estate' ? 'estate' : 'town';
+    if (!q) return json({ ok: false, error: 'say what you want to know' }, 400);
+    const cfg = contextAgents(env as PulseRecordEnv);
+    const estateId = url.searchParams.get('estate') ?? town.estates[0]?.id ?? '';
+    const name = scope === 'town' ? cfg.town : cfg.estates[estateId];
+    if (!name) return json({ ok: false, error: 'not_configured', detail: `the ${scope} context agent is not chartered yet (spec 436 §5.5 T1: ${scope === 'town' ? 'faith-town.workspace' : `${estateId}'s estate agent`} under demo-admin) — the Pulse's tabs show the live numbers meanwhile` }, 503);
+    const zone = env.CONTEXT_AGENT_ZONE ?? town.estates[0]?.agentZone ?? '';
+    const host = `${name.split('.')[0]}-${name.split('.')[1]}.${zone}`;
+    try {
+      const resolved = await resolveAgentCard(`https://${host}/.well-known/agent-card.json`, fetch);
+      const client = createStandardA2aClient({ endpoint: resolved.endpoint, fetch });
+      const a = await client.ask(q, { timeoutMs: 45_000 });
+      const data = (a.task?.artifacts ?? []).flatMap((x: { parts?: Array<{ data?: unknown }> }) => x.parts ?? []).map((p) => p.data).find((d) => d && typeof d === 'object') as { cited?: Array<{ key: string; day?: string }>; runRef?: string } | undefined;
+      return json({ ok: true, answer: a.text || '(no words)', agent: name, ...(data?.cited ? { cited: data.cited } : {}), ...(data?.runRef ? { runRef: data.runRef } : {}) });
+    } catch (e) { return json({ ok: false, error: 'unreachable', detail: `${name} at ${host} did not answer: ${e instanceof Error ? e.message : String(e)}` }, 502); }
+  }
   return json({ error: 'not found' }, 404);
 }
 
+/** The sampler: every five minutes (wrangler `[triggers]`), one pass over every source into the store. */
+export async function takeSample(env: Env, town: TownManifest): Promise<number> {
+  if (!env.HEARTBEAT) return 0;
+  const samples = await samplePulse(town, env as PulseEnv, fetchProbe, fetch, new URL(env.PUBLIC_ORIGIN).host);
+  const store = env.HEARTBEAT.get(env.HEARTBEAT.idFromName(town.town));
+  await store.fetch('https://pulse/put', { method: 'POST', body: JSON.stringify(samples) });
+  // Once an hour (the first pass of the hour) the day's rollup goes to the context agents' vaults — the record (436 §5.5 T2).
+  if (new Date().getUTCMinutes() < 5 && pulseRecordReadiness(env as PulseRecordEnv).ready) {
+    const day = new Date().toISOString().slice(0, 10);
+    const all = (await (await store.fetch(`https://pulse/read?from=${Date.parse(day)}`)).json()) as PulseSampleV1[];
+    const landed = await recordDay(env as PulseRecordEnv, all, day, fetch, town, (await infraRowsFrom(env, Date.parse(day))).rows);
+    for (const l of landed) if (!l.ok) console.warn(`[pulse-record] ${l.agent} ${l.recordType}: ${l.error}`);
+  }
+  return samples.length;
+}
+
+
 export default {
+  // The portal's own clock samples what it can read without a credential: the service probes, the two gateways'
+  // rollups, each estate's heartbeat. Infrastructure, cost and performance are the town MCP's three cadences on its
+  // own Worker — this one holds no provider credential and reaches no provider (spec 437 §4).
+  async scheduled(_ev: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(takeSample(env, townOf(env)));
+  },
   async fetch(req: Request, env: Env): Promise<Response> {
     const town = townOf(env);
     const origin = env.PUBLIC_ORIGIN.replace(/\/$/, '');
@@ -153,8 +274,11 @@ export default {
       return json(card, 200, { 'cache-control': 'public, max-age=300', etag: `"${town.town}-${VERSION}"` });
     }
     if (url.pathname.startsWith('/api/')) {
-      if (req.method !== 'GET') return json({ error: 'read only' }, 405);
-      return api(url.pathname.slice(4).replace(/\/+$/, '') || '/', url, env, town, selfHost, origin);
+      // Read-only, with one exception: an operator may tell the town MCP to collect now (`POST /api/pulse/pass`).
+      // The MCP does the collecting; this Worker holds no provider credential and reaches no provider.
+      const path = url.pathname.slice(4).replace(/\/+$/, '') || '/';
+      if (req.method !== 'GET' && !(req.method === 'POST' && path === '/pulse/pass')) return json({ error: 'read only' }, 405);
+      return api(path, url, env, town, selfHost, origin, req.headers.get('authorization'), req.method);
     }
     if (url.pathname === '/a2a') {
       const server = createStandardA2aServer({

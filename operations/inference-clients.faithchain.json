@@ -1,0 +1,19 @@
+{
+  "clients": [
+    {
+      "principal": "0xd34c3fbc89706dd57d426546dcebd3ba926ede35",
+      "estate": "faithnet",
+      "kind": "estate-app",
+      "label": "faithnet-runtime",
+      "profiles": [
+        "planner-fast",
+        "composer-default",
+        "answer-stream",
+        "judge-thorough",
+        "selection-structured"
+      ],
+      "keyHash": "03c8982ebc42688f745c880e8c96cec8ebe01461b3370e41ce9a1143949122ae",
+      "registeredAt": "2026-10-10"
+    }
+  ]
+}

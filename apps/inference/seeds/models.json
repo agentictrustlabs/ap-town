@@ -1,0 +1,91 @@
+[
+  {
+    "provider": "openai-compat",
+    "model": "gemini-3.5-flash",
+    "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "enabled": true,
+    "capabilities": [
+      "tools",
+      "json",
+      "stream",
+      "vision"
+    ],
+    "pricing": {
+      "inputMicroUsdPerMtok": 300000,
+      "outputMicroUsdPerMtok": 2500000
+    },
+    "contextWindow": 1048576,
+    "privacy": "standard",
+    "notes": "The estate's live composer model (orchestration.ts defaults; the 2.5 generation is closed to new keys). Pricing as of 2026-10-10, kept by hand."
+  },
+  {
+    "provider": "openai-compat",
+    "model": "gemini-3.5-flash-lite",
+    "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "enabled": true,
+    "capabilities": [
+      "tools",
+      "json",
+      "stream"
+    ],
+    "pricing": {
+      "inputMicroUsdPerMtok": 100000,
+      "outputMicroUsdPerMtok": 400000
+    },
+    "contextWindow": 1048576,
+    "privacy": "standard",
+    "notes": "The estate's live planner model. Pricing as of 2026-10-10, kept by hand."
+  },
+  {
+    "provider": "anthropic",
+    "model": "claude-haiku-4-5-20251001",
+    "enabled": true,
+    "capabilities": [
+      "tools",
+      "json",
+      "stream",
+      "vision"
+    ],
+    "pricing": {
+      "inputMicroUsdPerMtok": 1000000,
+      "outputMicroUsdPerMtok": 5000000,
+      "cachedInputMicroUsdPerMtok": 100000
+    },
+    "contextWindow": 200000,
+    "privacy": "no-retention",
+    "notes": "Pricing as of 2026-10-10, kept by hand; no-retention per the API terms the estate runs under."
+  },
+  {
+    "provider": "anthropic",
+    "model": "claude-sonnet-4-5-20250929",
+    "enabled": false,
+    "capabilities": [
+      "tools",
+      "json",
+      "stream",
+      "vision"
+    ],
+    "pricing": {
+      "inputMicroUsdPerMtok": 3000000,
+      "outputMicroUsdPerMtok": 15000000,
+      "cachedInputMicroUsdPerMtok": 300000
+    },
+    "contextWindow": 200000,
+    "privacy": "no-retention",
+    "notes": "Off until a profile needs it; the one switch."
+  },
+  {
+    "provider": "openai-compat",
+    "model": "text-embedding-004",
+    "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai",
+    "enabled": false,
+    "capabilities": [],
+    "pricing": {
+      "inputMicroUsdPerMtok": 0,
+      "outputMicroUsdPerMtok": 0
+    },
+    "contextWindow": 2048,
+    "privacy": "standard",
+    "notes": "Embeddings are declared, not served, in v1."
+  }
+]

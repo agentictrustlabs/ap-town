@@ -1,0 +1,231 @@
+[
+  {
+    "id": "planner-fast",
+    "servesCapability": [
+      "plan"
+    ],
+    "description": "The harness's planning turn: one tool choice, fast.",
+    "models": [
+      {
+        "provider": "openai-compat",
+        "model": "gemini-3.5-flash-lite",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai"
+      },
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ],
+    "requiredCapabilities": [
+      "tools"
+    ],
+    "maxOutputTokens": 1024,
+    "privacy": "standard",
+    "fallbackOn": [
+      "rate-limited",
+      "unavailable",
+      "timeout"
+    ],
+    "timeoutMs": 30000
+  },
+  {
+    "id": "composer-default",
+    "servesCapability": [
+      "compose"
+    ],
+    "description": "Composes the reply from the observations.",
+    "models": [
+      {
+        "provider": "openai-compat",
+        "model": "gemini-3.5-flash",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai"
+      },
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ],
+    "requiredCapabilities": [],
+    "maxOutputTokens": 2048,
+    "privacy": "standard",
+    "fallbackOn": [
+      "rate-limited",
+      "unavailable",
+      "timeout"
+    ],
+    "timeoutMs": 45000
+  },
+  {
+    "id": "answer-stream",
+    "servesCapability": [
+      "answer-stream"
+    ],
+    "description": "A streamed answer to the person.",
+    "models": [
+      {
+        "provider": "openai-compat",
+        "model": "gemini-3.5-flash",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai"
+      },
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ],
+    "requiredCapabilities": [
+      "stream"
+    ],
+    "maxOutputTokens": 2048,
+    "privacy": "standard",
+    "fallbackOn": [
+      "rate-limited",
+      "unavailable"
+    ],
+    "timeoutMs": 60000
+  },
+  {
+    "id": "judge-thorough",
+    "servesCapability": [
+      "judge"
+    ],
+    "description": "The judgment call: which skill, with care.",
+    "models": [
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+      },
+      {
+        "provider": "openai-compat",
+        "model": "gemini-3.5-flash",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai"
+      }
+    ],
+    "requiredCapabilities": [
+      "tools"
+    ],
+    "maxOutputTokens": 1024,
+    "privacy": "standard",
+    "fallbackOn": [
+      "rate-limited",
+      "unavailable"
+    ],
+    "timeoutMs": 30000
+  },
+  {
+    "id": "selection-structured",
+    "servesCapability": [
+      "selection",
+      "structured"
+    ],
+    "description": "A structured choice inside a step (the KB and vault question choosers).",
+    "models": [
+      {
+        "provider": "openai-compat",
+        "model": "gemini-3.5-flash-lite",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai"
+      },
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ],
+    "requiredCapabilities": [
+      "tools",
+      "json"
+    ],
+    "maxOutputTokens": 1500,
+    "privacy": "standard",
+    "fallbackOn": [
+      "rate-limited",
+      "unavailable",
+      "timeout"
+    ],
+    "timeoutMs": 30000
+  },
+  {
+    "id": "private-analysis",
+    "servesCapability": [
+      "private-analysis"
+    ],
+    "description": "Analysis over a person's records: no-retention models only; refuses rather than fall back.",
+    "models": [
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ],
+    "requiredCapabilities": [],
+    "maxOutputTokens": 2048,
+    "privacy": "no-retention",
+    "fallbackOn": [],
+    "timeoutMs": 60000
+  },
+  {
+    "id": "author",
+    "servesCapability": [
+      "author"
+    ],
+    "description": "The skills service's authoring assistant.",
+    "models": [
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ],
+    "requiredCapabilities": [],
+    "maxOutputTokens": 6000,
+    "privacy": "standard",
+    "fallbackOn": [
+      "rate-limited",
+      "unavailable"
+    ],
+    "timeoutMs": 120000
+  },
+  {
+    "id": "evals",
+    "servesCapability": [
+      "evals"
+    ],
+    "description": "The tests assistant and the comparison runner's judge.",
+    "models": [
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+      },
+      {
+        "provider": "openai-compat",
+        "model": "gemini-3.5-flash",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai"
+      }
+    ],
+    "requiredCapabilities": [
+      "json"
+    ],
+    "maxOutputTokens": 4000,
+    "privacy": "standard",
+    "fallbackOn": [
+      "rate-limited",
+      "unavailable"
+    ],
+    "timeoutMs": 120000
+  },
+  {
+    "id": "embeddings-default",
+    "servesCapability": [
+      "embed"
+    ],
+    "description": "Declared, not served in v1 (no embedding adapter yet) \u2014 a request fails closed as profile_unavailable.",
+    "models": [
+      {
+        "provider": "openai-compat",
+        "model": "text-embedding-004",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai"
+      }
+    ],
+    "requiredCapabilities": [],
+    "maxOutputTokens": 1,
+    "privacy": "standard",
+    "fallbackOn": [],
+    "timeoutMs": 15000
+  }
+]

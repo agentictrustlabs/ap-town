@@ -53,6 +53,8 @@ export function townSummary(town: TownManifest) {
     town: town.town, status: town.status,
     chain: { id: town.chain.id, generation: town.chain.generation, rpc: town.chain.rpc },
     estates: town.estates.map((e) => ({ id: e.id, home: e.home, edge: e.edge, nameRoots: e.nameRoots, repo: e.repo })),
+    // Spec 437 I4 — account ids and labels only; the tokens are the Worker's secrets.
+    accounts: town.accounts ?? null,
   };
 }
 

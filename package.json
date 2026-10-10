@@ -27,19 +27,23 @@
     "provision:naming": "tsx scripts/provision-naming-service.mts"
   },
   "devDependencies": {
-    "@agenticprimitives/a2a": "0.0.0-alpha.28",
-    "@agenticprimitives/devkit": "0.0.0-alpha.13",
+    "@agenticprimitives/a2a": "0.0.0-alpha.33",
+    "@agenticprimitives/devkit": "0.0.0-alpha.18",
     "@agenticprimitives/evaluation": "0.0.0-alpha.5",
     "@agenticprimitives/mcp-protocol": "0.0.0-alpha.4",
     "typescript": "^5.7.3",
     "vitest": "^4.1.8",
     "tsx": "^4.22.4",
     "@types/node": "^22.7.0",
-    "@agenticprimitives/agent-account": "1.0.0-alpha.30",
-    "@agenticprimitives/agent-naming": "1.0.0-alpha.30",
-    "@agenticprimitives/contracts": "1.0.0-alpha.30",
+    "@agenticprimitives/audit": "1.0.0-alpha.32",
+    "@agenticprimitives/connect-auth": "1.0.0-alpha.32",
+    "@agenticprimitives/key-custody": "1.0.0-alpha.32",
+    "@agenticprimitives/ontology": "1.0.0-alpha.32",
+    "@agenticprimitives/agent-account": "1.0.0-alpha.32",
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.32",
+    "@agenticprimitives/contracts": "1.0.0-alpha.32",
     "viem": "2.52.2",
-    "@agenticprimitives/types": "1.0.0-alpha.30"
+    "@agenticprimitives/types": "1.0.0-alpha.32"
   },
   "pnpm": {
     "overrides": {

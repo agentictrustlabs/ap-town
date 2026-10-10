@@ -14,6 +14,19 @@ run_worker_first = ["/api/*", "/a2a", "/.well-known/*"]
 TOWN = "faithchain"
 PUBLIC_ORIGIN = "http://localhost:8792"
 
+# The Pulse (spec 434 §10 / 436 §5.3): a sample every five minutes into HeartbeatDO (30 days). Secrets:
+#   TOWN_OPS_TOKEN (the two gateways' /ops/summary; also the operator's detail read of /api/pulse) · ESTATE_HEARTBEAT_TOKENS (JSON estate id → token for GET <a2a>/ops/heartbeat)
+# Spec 437 §4 — infrastructure, cost and performance are collected by the TOWN MCP (apps/town-mcp), the only Worker
+# that holds a platform read credential. This one asks it over the INFRA service binding and holds none. One cron here.
+[triggers]
+crons = ["*/5 * * * *"]
+[[durable_objects.bindings]]
+name = "HEARTBEAT"
+class_name = "HeartbeatDO"
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["HeartbeatDO"]
+
 [env.faithnet]
 name = "faithchain-town-agent"
 
@@ -24,6 +37,13 @@ custom_domain = true
 [env.faithnet.vars]
 TOWN = "faithchain"
 PUBLIC_ORIGIN = "https://town.faithnet.io"
+# The Town Ask (spec 436 §5.5): CONTEXT_AGENTS = {"town":"faith-town.workspace","estates":{"faithnet":"faith-estate.workspace"}} once chartered (T1);
+# secrets CONTEXT_AGENT_CREDENTIALS ({name:{grant,leaf}}) + TOWN_SIGNER_KEY once the stewards issue them (T2).
+CONTEXT_AGENTS = ""
+CONTEXT_AGENT_ZONE = "faithnet.ai"
+VAULT_URL = "https://mcp.faithnet.io"
+VAULT_AUDIENCE = "urn:mcp:server:person"
+CHAIN_ID = "34348"
 
 # Two town services the portal reads through: the registry (Find) and the naming service (the town of names).
 [[env.faithnet.services]]
@@ -33,3 +53,18 @@ service = "demo-discovery-a2a-faithnet"
 [[env.faithnet.services]]
 binding = "NAMING"
 service = "faithchain-naming"
+[[env.faithnet.services]]
+binding = "CHAIN"
+service = "faithchain-rpc-gateway"
+[[env.faithnet.services]]
+binding = "INFERENCE"
+service = "faithchain-inference"
+# Spec 437 §4 — the town's private MCP: infrastructure status, metrics and cost. It holds the credentials; this Worker does not.
+[[env.faithnet.services]]
+binding = "INFRA"
+service = "faithchain-town-mcp"
+[env.faithnet.triggers]
+crons = ["*/5 * * * *"]
+[[env.faithnet.durable_objects.bindings]]
+name = "HEARTBEAT"
+class_name = "HeartbeatDO"
