@@ -68,6 +68,33 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "decimals": 6
       }
     },
+    "accounts": {
+      "cloudflare": [
+        {
+          "id": "5da2feaa56593839672948e16c6e809d",
+          "label": "faithnet-town"
+        },
+        {
+          "id": "0a1fdbaf6dc871dd3faf7a8d0dc6c534",
+          "label": "richcanvas"
+        }
+      ],
+      "vercel": {
+        "teamId": "team_5pDHXIoVgGTQ5zs7s0RQJ0Ta",
+        "label": "rpedersen3s-projects"
+      },
+      "azure": {
+        "subscriptionId": "",
+        "resourceGroups": [
+          "rg-faithnet"
+        ],
+        "label": "faithchain-node"
+      },
+      "graphdb": {
+        "url": "https://graphdb.agentkg.io",
+        "label": "ontotext"
+      }
+    },
     "estates": [
       {
         "id": "faithnet",
@@ -95,7 +122,17 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         ],
         "kms": {
           "tenant": "faithnet"
-        }
+        },
+        "workers": [
+          "demo-a2a-faithnet",
+          "demo-mcp-faithnet",
+          "demo-edge-faithnet",
+          "home-mcp-faithnet",
+          "harness-approval-faithnet"
+        ],
+        "vercelProjects": [
+          "faithnet-home"
+        ]
       }
     ],
     "services": [
@@ -181,6 +218,19 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "description": "The town's naming service — every name on the chain, what it points at, and who can change it. It reads; an owner's Home writes."
       },
       {
+        "id": "inference",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/inference",
+        "worker": "faithchain-inference",
+        "agentName": "inference.svc",
+        "hosts": [
+          "inference.faithnet.io"
+        ],
+        "probe": "https://inference.faithnet.io/healthz",
+        "description": "The town's model gateway (spec 434) — profiles over a model catalog, per-principal budgets, declared fallback, receipts in its own vault. Governs model access; acts for no one."
+      },
+      {
         "id": "chain-gateway",
         "kind": "commons",
         "repo": "ap-town",
@@ -189,6 +239,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "hosts": [
           "rpc.faithnet.io"
         ],
+        "probe": "https://rpc.faithnet.io/healthz",
         "description": "Chain access — per-app tokens, method allow-list, rate limits — in front of the faithchain node."
       },
       {

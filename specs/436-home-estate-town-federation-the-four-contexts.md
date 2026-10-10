@@ -207,6 +207,8 @@ The Pulse's tabs become the shared infrastructure, one per service that is meter
 | Inference | `/operations/inference` | 434's panel |
 | **Chain** | `/operations/chain` | §6 |
 | Applications | `/operations/apps` | the listed applications (Game Night, Gather27, the Explorer…) with their probes and their usage of the gateways under their own tokens and app keys |
+| **Infra** | `/operations/infra` | spec 437: the platforms the town runs on — status, cost (derived / billed, labelled), storage, deploys, the Unattributed bucket |
+| **Performance** | `/operations/performance` | spec 437: infrastructure latency over provenance latency, per estate; cost per completed run |
 
 Admin lenses: `/admin/inference` (434 §11), `/admin/chain` (§6.3), `/estate/:id/admin` (435 §6, the steward's view of
 an estate from the town side — a lens on the estate console, never a second console).

@@ -2,3 +2,4 @@
 export * from './types';
 export * from './validate';
 export * from './generate';
+export * from './pulse-types';

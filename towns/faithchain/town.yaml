@@ -10,6 +10,16 @@ chain:
   deployment: faithchain   # @agenticprimitives/contracts/deployments — the one source of addresses
   coin: { address: "0xa14E4a9447607c1233DcE34dB6Ead47C094f6141", symbol: SHQ, decimals: 6 }   # Sheqel — names are bought with it (spec 431)
 
+# Spec 437 I4 — the accounts the town's resources live in (ids and labels only; tokens are the town agent's secrets) and,
+# per estate and service, the resources each owns. A Worker listed nowhere shows in the Pulse's Unattributed bucket.
+accounts:
+  cloudflare:
+    - { id: 5da2feaa56593839672948e16c6e809d, label: faithnet-town }
+    - { id: 0a1fdbaf6dc871dd3faf7a8d0dc6c534, label: richcanvas }
+  vercel: { teamId: team_5pDHXIoVgGTQ5zs7s0RQJ0Ta, label: rpedersen3s-projects }
+  azure: { subscriptionId: "", resourceGroups: [rg-faithnet], label: faithchain-node }
+  graphdb: { url: https://graphdb.agentkg.io, label: ontotext }
+
 estates:
   - id: faithnet
     repo: agentictrustlabs/ap-home
@@ -26,6 +36,8 @@ estates:
       "*.faithnet.ai": demo-a2a-faithnet
     nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle, impact]
     kms: { tenant: faithnet }
+    workers: [demo-a2a-faithnet, demo-mcp-faithnet, demo-edge-faithnet, home-mcp-faithnet, harness-approval-faithnet]
+    vercelProjects: [faithnet-home]
 
 services:
   # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
@@ -86,12 +98,22 @@ services:
     hosts: [names.faithnet.io]
     probe: https://names.faithnet.io/api/health
     description: The town's naming service — every name on the chain, what it points at, and who can change it. It reads; an owner's Home writes.
+  - id: inference
+    kind: commons
+    repo: ap-town
+    app: apps/inference
+    worker: faithchain-inference
+    agentName: inference.svc
+    hosts: [inference.faithnet.io]
+    probe: https://inference.faithnet.io/healthz
+    description: The town's model gateway (spec 434) — profiles over a model catalog, per-principal budgets, declared fallback, receipts in its own vault. Governs model access; acts for no one.
   - id: chain-gateway
     kind: commons
     repo: ap-town
     app: apps/chain-gateway
     worker: faithchain-rpc-gateway
     hosts: [rpc.faithnet.io]
+    probe: https://rpc.faithnet.io/healthz
     description: Chain access — per-app tokens, method allow-list, rate limits — in front of the faithchain node.
 
   # ── Commons deployed from their own repositories ──────────────────────────────────────────────────────────
