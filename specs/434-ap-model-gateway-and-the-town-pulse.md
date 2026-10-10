@@ -7,7 +7,8 @@ ontology terms, the record shapes). **Depends on:** 429 (the town: D1–D8), 388
 (a second model behind the same port), 350 (the harness), 389/390 (provenance, tracing), 406 (the operator view),
 372 S3c (the session wire), 426 (executor invoke), 433 §1.1 (service agent birthrights), ADR-0013 (no silent
 fallbacks), ADR-0021 (generic packages), ADR-0037/ADR-0063 (packages in Ring 0, Workers in product repos), ADR-0040,
-ADR-0041, ADR-0055 (the vault is the record). **Companion:** [spec 435](435-town-governance-plane-standing-estate-picture-mcp-catalog.md)
+ADR-0041, ADR-0055 (the vault is the record). **Frame:** [spec 436](436-home-estate-town-federation-the-four-contexts.md) (Home · Estate · Town · Federation — the
+contexts the Pulse and every lens are built on; the chain gateway's metrics, §6 there). **Companion:** [spec 435](435-town-governance-plane-standing-estate-picture-mcp-catalog.md)
 owns *who* and *what* (standing, the estate picture, the MCP catalog, the admin lens); this spec owns models and spend.
 **Field comparison:** [docs/town-control-plane-gap-analysis-2026-10.md](../docs/town-control-plane-gap-analysis-2026-10.md)
 (Prediction Guard, Microsoft Agent 365 / Entra Agent ID, Okta Agent Gateway, AWS AgentCore Gateway, Kong, Obot, LiteLLM,
@@ -128,7 +129,7 @@ Streaming returns the same receipt as the final event, after usage is known.
 nothing that decides. The ap-home runtime is one app principal in v1 with per-agent attribution as evidence; per-agent
 wires are the later wave (§13).
 
-**Entitlement is the service's own policy over its own resource.** `ClientEntitlementV1 { principal, profiles: string[],
+**Entitlement is the service's own policy over its own resource.** `ClientEntitlementV1 { principal, estate?, kind: 'estate-app' | 'town-service' | 'application', profiles: string[],
 limits: { tokensPerDay, microUsdPerDay, requestsPerMinute, concurrency, maxAttempts } per profile, privacyFloor }`. It
 answers "may this principal spend this service's model budget on this profile?" — the same kind of question the naming
 service answers about a priced name (spec 431) — and nothing about what the principal may DO with the answer. It is a
@@ -349,7 +350,11 @@ Three, all pulled by the town, none pushed into it:
    }
    ```
 3. **Inference** — `inference.svc` `GET /v1/ops/summary` (`InferenceOpsSummaryV1`: requests, tokens, cost, latency
-   p50/p95, error rate, fallbacks, budget utilisation, sliced client × profile × provider × model, for a window).
+   p50/p95, error rate, fallbacks, budget utilisation, sliced client × profile × provider × model, for a window;
+   `?estate=` slices by the client record's estate — spec 436 C8).
+4. **Chain** — `apps/chain-gateway` `GET /ops/summary` (`ChainGatewayOpsSummaryV1`, spec 436 §6: requests, reads/writes,
+   denials by reason, cache hit rate, upstream latency and errors, block head and rate, by token with its estate and
+   kind, top methods). Added 2026-10-10.
 
 ### 10.3 The sampler and its store
 
@@ -372,6 +377,12 @@ runs are in each estate). `pnpm probe:town` stays as the external, independent c
 - **Inference** — spend and tokens by client, profile, provider and model; fallbacks and their reasons; budget
   utilisation per client × profile with the limit drawn; error rate and latency; the profile version in force and when
   it last changed (joins the change log).
+- **Chain** (added 2026-10-10, spec 436 §6) — requests over time (reads vs writes), denials by reason, cache hit rate,
+  upstream latency and errors, block head and rate; by estate and by application with rate-limit utilisation against
+  the limit; top methods. The companion lens is `/admin/chain`: tokens, limits, issue / rotate / revoke as acts with a
+  `chain.policy-change:` record, the allow-list and gas cap in force.
+- **Applications** (added 2026-10-10) — the listed applications (Game Night, Gather27, the Explorer…) with their probes
+  and their usage of both gateways under their own tokens and app keys.
 
 `town-model` gains `TownPulse` types (`PulseSampleV1`, `PulseSeriesV1`); `town-ui` gains the sparkline, the stat tile and
 the window picker; `town-scene` lights estate buildings by heartbeat freshness. Operator sign-in uses
@@ -417,7 +428,7 @@ rule covers them and the ceremony is the same signature every other act asks for
 | **W2** | ap-town | `apps/inference` Worker + `BudgetDO` + KV + vault receipts; `profiles.json`/`models.json`; provision script (four birthrights); `town.yaml` row; register `faithnet-runtime` as the first client | `/healthz` listed; one receipt readable in `inference.svc`'s vault; `pnpm check` green |
 | **W3** | ap-home | `selectPlanner` / `selectComposer` / `structuredCallFor` / `textStreamFor` / `logprobChoiceFor` → `model-client/orchestration` bridges with role → profile map; delete `routeProvider`, `SpendWindow`, `ProviderMeterDO`, `llmAllowlist` branches, provider secrets and `ORCHESTRATION_*` model/budget vars; add `INFERENCE_URL`, `INFERENCE_APP_KEY`; `receiptRef` into `run-trace.ts` | the comparison runner (spec 415 A4) arms gateway vs direct on the live Gemini pair with no regression on the panel before `ORCHESTRATION_LLM` goes; Activities and `run.provenance` show `receiptRef` |
 | **W4** | skills · verifiable-content-demo | `skills-a2a callClaude` and `demo-bible-a2a ask.ts` onto `/v1/chat/completions` with their own app keys (profiles `author`, `evals`, `answer-stream`) | each Worker loses its provider key; their receipts appear in the Inference panel by client |
-| **W5** | ap-home · ap-town | `GET /ops/heartbeat`; `/v1/ops/summary`; the cron sampler + `HeartbeatDO`; Pulse tabs; `town-model`/`town-ui`/`town-scene` additions; operator sign-in | 30 days of samples survive a deploy; a wiped `HeartbeatDO` refills from the next sample; the map lights by freshness |
+| **W5** | ap-home · ap-town | `GET /ops/heartbeat`; `/v1/ops/summary`; chain-gateway `GET /ops/summary` + token `estate`/`kind` (436 §6); the cron sampler + `HeartbeatDO`; Pulse tabs incl. Chain and Applications; `town-model`/`town-ui`/`town-scene` additions; operator sign-in | 30 days of samples survive a deploy; a wiped `HeartbeatDO` refills from the next sample; the map lights by freshness |
 | **W6** | ap-town | `/admin/inference`: catalog switch, profile editor, change log, the principal class on every receipt row; `/v1/admin/*` with the stewardship check; profile versions exported into 435's estate manifest | a toggle disables a model across every profile at once and the next receipt cites the new version; a non-steward session is refused |
 
 W1 and W2 can run in parallel with W5's heartbeat sources; W3 waits for W2; W6 waits for W5's sign-in.
