@@ -42,6 +42,7 @@
     "@agenticprimitives/agent-account": "1.0.0-alpha.32",
     "@agenticprimitives/agent-naming": "1.0.0-alpha.32",
     "@agenticprimitives/contracts": "1.0.0-alpha.32",
+    "@agenticprimitives/delegation": "1.0.0-alpha.32",
     "viem": "2.52.2",
     "@agenticprimitives/types": "1.0.0-alpha.32"
   },

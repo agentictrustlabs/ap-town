@@ -14,14 +14,21 @@
 #                         az role assignment create --assignee <appId> --role "Cost Management Reader" --scope /subscriptions/<id>
 #   GRAPHDB_MONITOR_TOKEN the full Authorization header value for GraphDB's /rest/monitor endpoints ("Basic …" or "GDB …")
 #
+# And on the TOWN AGENT, which records the day into the context agents' vaults (spec 436 §5.5 T2):
+#   TOWN_SIGNER_KEY CONTEXT_AGENT_CREDENTIALS   both minted by scripts/mint-context-agent-wires.mts
+#
 # Usage: scripts/set-pulse-secrets.sh [wrangler env]   (default: faithnet)
 set -euo pipefail
 cd "$(dirname "$0")/.."
 ENV_NAME="${1:-faithnet}"
 [ -f .env.ops.local ] || { echo "no .env.ops.local — create it (0600) with the names above"; exit 1; }
 set -a; . ./.env.ops.local; set +a
-put() { local name="$1"; local val="${!name:-}"; if [ -z "$val" ]; then echo "  skip  $name (unset — the Pulse shows this source as not configured)"; return; fi; printf '%s' "$val" | npx -y wrangler secret put "$name" --env "$ENV_NAME" -c apps/town-mcp/wrangler.toml >/dev/null && echo "  set   $name"; }
-echo "town-mcp secrets (env $ENV_NAME):"
-for n in TOWN_OPS_TOKEN CLOUDFLARE_ACCOUNTS VERCEL_TOKEN AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_SUBSCRIPTION_ID GRAPHDB_MONITOR_TOKEN; do put "$n"; done
+put() { local cfg="$1"; local name="$2"; local why="$3"; local val="${!name:-}"; if [ -z "$val" ]; then echo "  skip  $name (unset — $why)"; return; fi; printf '%s' "$val" | npx -y wrangler secret put "$name" --env "$ENV_NAME" -c "$cfg" >/dev/null && echo "  set   $name"; }
+echo "town-mcp secrets (env $ENV_NAME) — the only Worker that reaches a provider:"
+for n in TOWN_OPS_TOKEN CLOUDFLARE_ACCOUNTS VERCEL_TOKEN AZURE_TENANT_ID AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_SUBSCRIPTION_ID GRAPHDB_MONITOR_TOKEN; do put apps/town-mcp/wrangler.toml "$n" "the Pulse shows this source as not configured"; done
+# The town agent writes the day's rollup into the context agents' vaults AS those agents (spec 436 §5.5 T2).
+# The key is a DELEGATE, never an identity; the wires are what authorize it, and either can be revoked on chain.
+echo "town-agent secrets (env $ENV_NAME) — the record of the day:"
+for n in TOWN_SIGNER_KEY CONTEXT_AGENT_CREDENTIALS CONTEXT_AGENT_CREDENTIALS_2 CONTEXT_AGENT_CREDENTIALS_3 CONTEXT_AGENT_CREDENTIALS_4; do put apps/town-agent/wrangler.toml "$n" "the day's pulse is not recorded; run scripts/mint-context-agent-wires.mts"; done
 echo "done — the town MCP's own crons read them: status every 5 min, metrics at :07, cost at 06:30 UTC."
 echo "       GET https://town.faithnet.io/api/config names what the town is configured with (never a value)."

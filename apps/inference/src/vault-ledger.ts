@@ -58,7 +58,11 @@ export function vaultReceiptLedger(env: VaultLedgerEnv, fetchImpl: typeof fetch 
       );
       const now = Date.now();
       const toolArgs = { recordType: `inference.receipt:${receipt.id}`, data: receipt };
-      const invocationProof = await buildInvocationProof({ chainId, audience, principal: ready.agent, sessionKey: ready.delegate, operation: 'set_vault_record', args: toolArgs, rawDelegationToken: token, requestId: crypto.randomUUID(), issuedAt: now, expiresAt: now + 30_000, sign: signDigest } as never);
+      // THE PROOF IS SIGNED OVER WHAT THE SERVER RECOMPUTES. `withDelegation` strips `token`,
+    // `quorumProof` and `invocationProof` from the handler's input and hashes THE REST — and this door
+    // hands it `{ token, invocationProof, args }`, so the rest is `{ args }`, never the args alone.
+    // Signing `toolArgs` gave `arguments_mismatch`, surfaced only as a flat 401 `invalid_invocation_proof`.
+    const invocationProof = await buildInvocationProof({ chainId, audience, principal: ready.agent, sessionKey: ready.delegate, operation: 'set_vault_record', args: { args: toolArgs }, rawDelegationToken: token, requestId: crypto.randomUUID(), issuedAt: now, expiresAt: now + 30_000, sign: signDigest } as never);
       const res = await fetchImpl(`${ready.vault}/mcp/native`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ token, invocationProof, tool: 'set_vault_record', args: toolArgs }) });
       const out = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; code?: string; detail?: string };
       if (!(res.ok && out.ok)) log?.(`[ledger] vault refused inference.receipt:${receipt.id}: ${out.error ?? out.code ?? res.status}${out.detail ? ` (${out.detail})` : ''}`);

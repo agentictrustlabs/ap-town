@@ -49,6 +49,9 @@ interface Env {
 }
 
 /** The town MCP's stored infra + cost rows for a window. `[]` is "nothing collected yet", which the tab says. */
+/** The capability a context agent offers a stranger (spec 436 §5.5 T3) — the runtime's public lane allows it by this id. */
+const PULSE_PUBLIC_ASK = 'pulse.public.ask';
+
 export async function infraRowsFrom(env: Env, fromMs: number): Promise<{ rows: InfraRowV1[]; unavailable: string | null }> {
   if (!env.INFRA) return { rows: [], unavailable: 'the town MCP is not bound on this deployment' };
   if (!env.TOWN_OPS_TOKEN) return { rows: [], unavailable: 'this deployment has no town ops token, so it cannot read the town MCP' };
@@ -158,6 +161,22 @@ async function runPassVia(env: Env, which: string, authorization: string | null)
 
 async function api(path: string, url: URL, env: Env, town: TownManifest, selfHost: string, origin: string, authorization: string | null = null, method = 'GET'): Promise<Response> {
   if (path === '/pulse/pass') return method === 'POST' ? runPassVia(env, url.searchParams.get('which') ?? 'status', authorization) : json({ error: 'POST, with the town ops token' }, 405);
+  // RECORD THE DAY NOW (spec 436 §5.5 T2). The sampler does this once an hour; an operator may ask for it, which
+  // is how the wires get proven the moment they are minted rather than at the top of the next hour. It writes
+  // the same record the cron would, into the context agents' own vaults, as those agents.
+  if (path === '/pulse/record') {
+    if (method !== 'POST') return json({ error: 'POST, with the town ops token' }, 405);
+    if (!operatorAuthorized(env.TOWN_OPS_TOKEN, authorization)) return json({ ok: false, error: 'the town ops token is required' }, 401);
+    const ready = pulseRecordReadiness(env as PulseRecordEnv);
+    if (!ready.ready) return json({ ok: false, error: 'not_ready', detail: ready.reason }, 503);
+    if (!env.HEARTBEAT) return json({ ok: false, error: 'no sample store is bound on this deployment' }, 503);
+    const day = url.searchParams.get('day') ?? new Date().toISOString().slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ ok: false, error: 'day must be YYYY-MM-DD' }, 400);
+    const store = env.HEARTBEAT.get(env.HEARTBEAT.idFromName(town.town));
+    const all = (await (await store.fetch(`https://pulse/read?from=${Date.parse(day)}`)).json()) as PulseSampleV1[];
+    const landed = await recordDay(env as PulseRecordEnv, all, day, fetch, town, (await infraRowsFrom(env, Date.parse(day))).rows);
+    return json({ ok: landed.every((l) => l.ok), day, samples: all.length, landed });
+  }
   if (path === '/health') return json({ ok: true, service: 'town-agent', town: town.town, pulseRecord: pulseRecordReadiness(env as PulseRecordEnv), contextAgents: contextAgents(env as PulseRecordEnv), townMcp: env.INFRA ? 'bound' : 'not bound on this deployment' });
   if (path === '/estates') return json(townSummary(town).estates);
   // WHAT THIS AGENT IS CONFIGURED WITH (the owner's rule, 2026-10-10): which servers the town — or one estate,
@@ -231,9 +250,20 @@ async function api(path: string, url: URL, env: Env, town: TownManifest, selfHos
     try {
       const resolved = await resolveAgentCard(`https://${host}/.well-known/agent-card.json`, fetch);
       const client = createStandardA2aClient({ endpoint: resolved.endpoint, fetch });
-      const a = await client.ask(q, { timeoutMs: 45_000 });
-      const data = (a.task?.artifacts ?? []).flatMap((x: { parts?: Array<{ data?: unknown }> }) => x.parts ?? []).map((p) => p.data).find((d) => d && typeof d === 'object') as { cited?: Array<{ key: string; day?: string }>; runRef?: string } | undefined;
-      return json({ ok: true, answer: a.text || '(no words)', agent: name, ...(data?.cited ? { cited: data.cited } : {}), ...(data?.runRef ? { runRef: data.runRef } : {}) });
+      // THE QUESTION GOES AS A STRANGER (spec 436 §5.5 T4). A stranger's message is admitted only on the public
+      // lane, which takes a NAMED capability — so the question travels as words AND as the one capability it is
+      // asking for. The portal holds no key and signs nothing; naming a capability is not holding authority, and
+      // an agent that does not offer this one simply refuses.
+      const sent = await client.sendMessage([{ text: q }, { data: { skill: PULSE_PUBLIC_ASK, question: q } }]);
+      const reply = sent.message ?? (sent.task ? await client.awaitTask(sent.task.id, { timeoutMs: 45_000 }) : null);
+      const parts = sent.message ? (sent.message.parts ?? []) : ((reply as { artifacts?: Array<{ parts?: unknown[] }> } | null)?.artifacts ?? []).flatMap((x) => x.parts ?? []);
+      const textOf = (ps: unknown[]): string => ps.map((x) => (x as { text?: string }).text ?? '').filter(Boolean).join(' ').trim();
+      const data = parts.map((x) => (x as { data?: unknown }).data).find((d) => d && typeof d === 'object') as { answer?: string; cited?: Array<{ key: string; day?: string }>; read?: boolean; window?: unknown; runRef?: string } | undefined;
+      const words = data?.answer || textOf(parts);
+      // AN ANSWER THAT CITES NOTHING IS NOT AN ANSWER (436 §5.5): the agent answers from records it keeps, so a
+      // reply with no record behind it is relayed as the refusal it is, never dressed up as a finding.
+      if (!words) return json({ ok: false, error: 'no_answer', detail: `${name} answered without words.` }, 502);
+      return json({ ok: true, answer: words, agent: name, ...(data?.cited ? { cited: data.cited } : {}), ...(data?.window ? { window: data.window } : {}), ...(data?.read === false ? { read: false } : {}), ...(data?.runRef ? { runRef: data.runRef } : {}) });
     } catch (e) {
       const why = e instanceof Error ? e.message : String(e);
       // The agent is chartered and its door answers, but a stranger's plain question is not yet something it
@@ -282,10 +312,11 @@ export default {
       return json(card, 200, { 'cache-control': 'public, max-age=300', etag: `"${town.town}-${VERSION}"` });
     }
     if (url.pathname.startsWith('/api/')) {
-      // Read-only, with one exception: an operator may tell the town MCP to collect now (`POST /api/pulse/pass`).
-      // The MCP does the collecting; this Worker holds no provider credential and reaches no provider.
+      // Read-only, with two exceptions, both the operator's: tell the town MCP to collect now
+      // (`POST /api/pulse/pass`), and write the day's record into the context agents' vaults
+      // (`POST /api/pulse/record`). The MCP does the collecting; this Worker reaches no provider.
       const path = url.pathname.slice(4).replace(/\/+$/, '') || '/';
-      if (req.method !== 'GET' && !(req.method === 'POST' && path === '/pulse/pass')) return json({ error: 'read only' }, 405);
+      if (req.method !== 'GET' && !(req.method === 'POST' && (path === '/pulse/pass' || path === '/pulse/record'))) return json({ error: 'read only' }, 405);
       return api(path, url, env, town, selfHost, origin, req.headers.get('authorization'), req.method);
     }
     if (url.pathname === '/a2a') {

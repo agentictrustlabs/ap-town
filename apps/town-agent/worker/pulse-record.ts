@@ -14,8 +14,15 @@ import { readPerformance, type InfraRowV1 } from './pulse-perf';
 export interface PulseRecordEnv {
   VAULT_URL?: string;
   VAULT_AUDIENCE?: string;
-  /** `{ "<agent-name>": { grant, leaf } }` — the town context agent and each estate context agent's credentials, one JSON secret. */
+  /**
+   * `{ "<agent-name>": { grant, leaf } }` — each context agent's vault wires. A Cloudflare secret is capped at
+   * 5.1 kB and two wire pairs are 5.4 kB, so the JSON may be SPLIT across `CONTEXT_AGENT_CREDENTIALS` and
+   * `…_2`, `…_3`, `…_4`, concatenated in that order before parsing. One agent still fits in the first alone.
+   */
   CONTEXT_AGENT_CREDENTIALS?: string;
+  CONTEXT_AGENT_CREDENTIALS_2?: string;
+  CONTEXT_AGENT_CREDENTIALS_3?: string;
+  CONTEXT_AGENT_CREDENTIALS_4?: string;
   /** This Worker's signing key (the leaf's delegate) — a delegate under wires the custodians minted; never an identity. */
   TOWN_SIGNER_KEY?: string;
   /** `{ "town": "faith-town.workspace", "estates": { "faithnet": "faith-estate.workspace" } }`. */
@@ -28,6 +35,12 @@ const isWireDoc = (x: unknown): x is WireDoc => { const w = x as Partial<WireDoc
 const toDelegation = (w: WireDoc): Delegation => ({ delegator: w.delegator as Address, delegate: w.delegate as Address, authority: w.authority as Hex, caveats: w.caveats.map((c) => ({ enforcer: c.enforcer as Address, terms: c.terms as Hex, args: (c.args ?? '0x') as Hex })), salt: BigInt(w.salt), signature: w.signature as Hex });
 
 export interface ContextAgentsConfig { town?: string; estates: Record<string, string> }
+
+/** The credentials JSON, re-joined from however many parts the 5.1 kB secret ceiling forced it into. */
+export function contextAgentCredentialsRaw(env: PulseRecordEnv): string {
+  return [env.CONTEXT_AGENT_CREDENTIALS, env.CONTEXT_AGENT_CREDENTIALS_2, env.CONTEXT_AGENT_CREDENTIALS_3, env.CONTEXT_AGENT_CREDENTIALS_4].filter((x): x is string => typeof x === 'string' && x.length > 0).join('');
+}
+
 export function contextAgents(env: PulseRecordEnv): ContextAgentsConfig {
   try { const j = JSON.parse(env.CONTEXT_AGENTS ?? '{}') as Partial<ContextAgentsConfig>; return { ...(j.town ? { town: j.town } : {}), estates: j.estates ?? {} }; } catch { return { estates: {} }; }
 }
@@ -40,7 +53,7 @@ export function pulseRecordReadiness(env: PulseRecordEnv): RecordReadiness {
   const names = [...(cfg.town ? [cfg.town] : []), ...Object.values(cfg.estates)];
   if (!names.length) return { ready: false, reason: 'CONTEXT_AGENTS names no context agent (spec 436 §5.5 T1: charter faith-town.workspace / faith-estate.workspace)' };
   let creds: Record<string, { grant?: unknown; leaf?: unknown }>;
-  try { creds = JSON.parse(env.CONTEXT_AGENT_CREDENTIALS ?? '{}'); } catch { return { ready: false, reason: 'CONTEXT_AGENT_CREDENTIALS is not JSON' }; }
+  try { creds = JSON.parse(contextAgentCredentialsRaw(env) || '{}'); } catch { return { ready: false, reason: 'CONTEXT_AGENT_CREDENTIALS is not JSON (all parts joined)' }; }
   const missing = names.filter((n) => !isWireDoc(creds[n]?.grant) || !isWireDoc(creds[n]?.leaf));
   if (missing.length) return { ready: false, reason: `no vault credentials for ${missing.join(', ')} (T2: the steward issues the grant + leaf)` };
   return { ready: true, agents: names };
@@ -65,7 +78,7 @@ export function dayRollup(samples: PulseSampleV1[], day: string, town?: TownMani
 export async function writeContextRecord(env: PulseRecordEnv, agentName: string, recordType: string, data: unknown, fetchImpl: typeof fetch = fetch): Promise<{ ok: true } | { ok: false; error: string }> {
   const ready = pulseRecordReadiness(env);
   if (!ready.ready) return { ok: false, error: ready.reason };
-  const creds = (JSON.parse(env.CONTEXT_AGENT_CREDENTIALS!) as Record<string, { grant: WireDoc; leaf: WireDoc }>)[agentName];
+  const creds = (JSON.parse(contextAgentCredentialsRaw(env)) as Record<string, { grant: WireDoc; leaf: WireDoc }>)[agentName];
   if (!creds) return { ok: false, error: `no credentials for ${agentName}` };
   const grant = toDelegation(creds.grant), leaf = toDelegation(creds.leaf);
   const signer = privateKeyToAccount(env.TOWN_SIGNER_KEY as Hex);
@@ -77,7 +90,11 @@ export async function writeContextRecord(env: PulseRecordEnv, agentName: string,
     const { token } = await mintDelegationToken({ iss: agentName, aud: audience, sub: agent, delegation: grant, sessionKeyAddress: leaf.delegate, sessionDelegation: leaf, usageLimit: 1, ttlSeconds: 300 } as never, async (message: string) => signDigest(hashMessage(message)));
     const now = Date.now();
     const toolArgs = { recordType, data };
-    const invocationProof = await buildInvocationProof({ chainId: Number(env.CHAIN_ID ?? '0'), audience, principal: agent, sessionKey: leaf.delegate, operation: 'set_vault_record', args: toolArgs, rawDelegationToken: token, requestId: crypto.randomUUID(), issuedAt: now, expiresAt: now + 30_000, sign: signDigest } as never);
+    // THE PROOF IS SIGNED OVER WHAT THE SERVER RECOMPUTES. `withDelegation` strips `token`,
+    // `quorumProof` and `invocationProof` from the handler's input and hashes THE REST — and this door
+    // hands it `{ token, invocationProof, args }`, so the rest is `{ args }`, never the args alone.
+    // Signing `toolArgs` gave `arguments_mismatch`, surfaced only as a flat 401 `invalid_invocation_proof`.
+    const invocationProof = await buildInvocationProof({ chainId: Number(env.CHAIN_ID ?? '0'), audience, principal: agent, sessionKey: leaf.delegate, operation: 'set_vault_record', args: { args: toolArgs }, rawDelegationToken: token, requestId: crypto.randomUUID(), issuedAt: now, expiresAt: now + 30_000, sign: signDigest } as never);
     const res = await fetchImpl(`${env.VAULT_URL!.replace(/\/$/, '')}/mcp/native`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json' }, body: JSON.stringify({ token, invocationProof, tool: 'set_vault_record', args: toolArgs }) });
     const out = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string; code?: string; detail?: string };
     return res.ok && out.ok ? { ok: true } : { ok: false, error: `vault refused ${recordType} for ${agentName}: ${out.error ?? out.code ?? res.status}${out.detail ? ` (${out.detail})` : ''}` };
