@@ -42,8 +42,13 @@ export function LagBadge({ lag }: { lag: string | null | undefined }): ReactNode
   return <span className="chip chip-muted lag" title="How current this source's numbers can be">{lag ? LAG_LABEL[lag] ?? lag : 'lag unknown'}</span>;
 }
 /** Spec 437 I2 — derived (meter × published price) and billed are never summed without the label. */
-export function BasisBadge({ basis }: { basis: 'derived' | 'billed' }): ReactNode {
-  return <span className={`chip ${basis === 'billed' ? 'chip-ok' : 'chip-free'}`} title={basis === 'billed' ? 'From the provider\'s billing' : 'A meter times a published unit price — not a bill'}>{basis}</span>;
+const BASIS_TITLE: Record<string, string> = {
+  billed: "What the provider says it invoiced for the period",
+  effective: "What the period consumed once committed and subscription spend is amortised — real money, but not a line on this invoice",
+  derived: 'A meter times a published unit price — our estimate, not a bill',
+};
+export function BasisBadge({ basis }: { basis: 'derived' | 'billed' | 'effective' }): ReactNode {
+  return <span className={`chip ${basis === 'billed' ? 'chip-ok' : basis === 'effective' ? 'chip-warn' : 'chip-free'}`} title={BASIS_TITLE[basis] ?? basis}>{basis}</span>;
 }
 export const fmtBytes = (b: number | null | undefined): string => { if (b === null || b === undefined) return '—'; const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0, x = b; while (x >= 1024 && i < u.length - 1) { x /= 1024; i++; } return `${x >= 100 || i === 0 ? Math.round(x) : x.toFixed(1)} ${u[i]}`; };
 export const fmtPct = (r: number | null | undefined, digits = 1): string => (r === null || r === undefined ? '—' : `${(r * 100).toFixed(digits)}%`);

@@ -32,7 +32,17 @@ export interface CostSampleV1 {
   resource: string;
   sku?: string;
   amountMicroUsd: number;
-  basis: 'derived' | 'billed';
+  /**
+   * How the number was arrived at — NEVER summed across bases without the label (I1):
+   *   `derived`   our own meter reading × a published price (an estimate we computed);
+   *   `billed`    what the provider says it INVOICED for the period;
+   *   `effective` what the provider says the period CONSUMED, amortising committed and subscription spend.
+   * `billed` and `effective` differ whenever usage falls inside a plan's included allowance: Vercel's FOCUS
+   * stream reports `BilledCost: 0` on every row of a Pro team while `EffectiveCost` carries the real figure
+   * (2026-10-10: $0.00 billed vs $27.41 effective over seven days). Reporting only the billed half would be
+   * true and useless, so both are carried and each is labelled.
+   */
+  basis: 'derived' | 'billed' | 'effective';
   asOf: string;
   /** False when any scope of the read failed — the total is partial, never smaller (I3). */
   complete: boolean;
@@ -65,10 +75,16 @@ export interface PerfQuantilesV1 { p50: number | null; p95: number | null; p99?:
 export interface PerfReadV1 {
   window: { from: string; to: string };
   infrastructure: Array<{ platform: InfraPlatform; account: string; resource: string; kind: InfraResourceKind; owner: AttributedOwner | null; latest: InfraSampleV1 | null; series: Array<{ at: string; metrics: Record<string, number | null> }> }>;
-  cost: Array<{ platform: InfraPlatform; account: string; owner: AttributedOwner | null; basis: 'derived' | 'billed'; days: Array<{ day: string; amountMicroUsd: number; asOf: string; complete: boolean }> }>;
+  cost: Array<{ platform: InfraPlatform; account: string; owner: AttributedOwner | null; basis: 'derived' | 'billed' | 'effective'; days: Array<{ day: string; amountMicroUsd: number; asOf: string; complete: boolean }> }>;
   /** Per estate: the provenance half of performance, as the estate reported it (`EstateHeartbeatV1.performance`). */
   provenance: Record<string, unknown | null>;
-  costPerCompletedRun: Record<string, { microUsd: number | null; inferenceMicroUsd: number; infraMicroUsd: number | null; completedRuns: number; complete: boolean; lag: LagClass[] }>;
+  /**
+   * One estate's cost per completed run (I6). `infraBasis` names WHICH basis the infrastructure half was taken
+   * on, because the bases are never added together (I1): one is chosen — billed if the provider actually
+   * invoiced anything, else effective, else our own derived estimate — and said out loud. `null` when no
+   * infrastructure cost was readable at all.
+   */
+  costPerCompletedRun: Record<string, { microUsd: number | null; inferenceMicroUsd: number; infraMicroUsd: number | null; infraBasis: 'derived' | 'billed' | 'effective' | null; completedRuns: number; complete: boolean; lag: LagClass[] }>;
   unattributed: Array<{ platform: InfraPlatform; account: string; resource: string; kind: InfraResourceKind }>;
   complete: boolean;
 }

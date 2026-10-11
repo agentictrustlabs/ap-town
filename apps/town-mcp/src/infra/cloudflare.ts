@@ -10,10 +10,12 @@ export interface CloudflareAccountCfg { id: string; label: string; token: string
 export const CF_GRAPHQL = 'https://api.cloudflare.com/client/v4/graphql';
 
 interface Dataset { key: string; kind: InfraResourceKind; field: string; select: string; map: (row: Row) => { resource: string; metrics: Record<string, number | null>; status?: InfraSampleV1['status'] } }
-type Row = { dimensions?: Record<string, unknown>; sum?: Record<string, unknown>; quantiles?: Record<string, unknown>; max?: Record<string, unknown> };
+type Row = { dimensions?: Record<string, unknown>; sum?: Record<string, unknown>; quantiles?: Record<string, unknown>; max?: Record<string, unknown>; count?: unknown };
 const dim = (r: Row, k: string): string => String(r.dimensions?.[k] ?? '?');
 const sum = (r: Row, k: string): number | null => num(r.sum?.[k]);
 const q = (r: Row, k: string): number | null => num(r.quantiles?.[k]);
+/** The group's own row count. Some datasets (Workers AI) have no `requests` meter and count rows instead. */
+const count = (r: Row): number | null => num(r.count);
 const us2ms = (x: number | null): number | null => (x === null ? null : x / 1000);
 
 export const HOURLY_DATASETS: Dataset[] = [
@@ -21,14 +23,18 @@ export const HOURLY_DATASETS: Dataset[] = [
     map: (r) => ({ resource: dim(r, 'scriptName'), metrics: { requests: sum(r, 'requests'), errors: sum(r, 'errors'), subrequests: sum(r, 'subrequests'), cpuP50Ms: us2ms(q(r, 'cpuTimeP50')), cpuP99Ms: us2ms(q(r, 'cpuTimeP99')), wallP50Ms: us2ms(q(r, 'wallTimeP50')), wallP99Ms: us2ms(q(r, 'wallTimeP99')) }, status: statusFromErrors(sum(r, 'requests'), sum(r, 'errors')) }) },
   { key: 'durableObjects', kind: 'durable-object', field: 'durableObjectsInvocationsAdaptiveGroups', select: 'dimensions { scriptName } sum { requests errors wallTime } quantiles { wallTimeP50 wallTimeP99 }',
     map: (r) => ({ resource: dim(r, 'scriptName'), metrics: { requests: sum(r, 'requests'), errors: sum(r, 'errors'), wallTimeMs: us2ms(sum(r, 'wallTime')), wallP50Ms: us2ms(q(r, 'wallTimeP50')), wallP99Ms: us2ms(q(r, 'wallTimeP99')) }, status: statusFromErrors(sum(r, 'requests'), sum(r, 'errors')) }) },
-  { key: 'd1', kind: 'd1', field: 'd1AnalyticsAdaptiveGroups', select: 'dimensions { databaseId } sum { readQueries writeQueries rowsRead rowsWritten queryBatchTimeMs }',
-    map: (r) => ({ resource: dim(r, 'databaseId'), metrics: { readQueries: sum(r, 'readQueries'), writeQueries: sum(r, 'writeQueries'), rowsRead: sum(r, 'rowsRead'), rowsWritten: sum(r, 'rowsWritten'), queryBatchTimeMs: sum(r, 'queryBatchTimeMs') } }) },
+  // `queryBatchTimeMs` is a QUANTILE here, never a sum — asking for it under `sum` made the whole D1 dataset
+  // unreadable ("unknown field") while every other dataset read fine (I3). Schema re-read live 2026-10-11.
+  { key: 'd1', kind: 'd1', field: 'd1AnalyticsAdaptiveGroups', select: 'dimensions { databaseId } sum { readQueries writeQueries rowsRead rowsWritten queryBatchResponseBytes } quantiles { queryBatchTimeMsP50 queryBatchTimeMsP99 }',
+    map: (r) => ({ resource: dim(r, 'databaseId'), metrics: { readQueries: sum(r, 'readQueries'), writeQueries: sum(r, 'writeQueries'), rowsRead: sum(r, 'rowsRead'), rowsWritten: sum(r, 'rowsWritten'), responseBytes: sum(r, 'queryBatchResponseBytes'), queryBatchTimeP50Ms: q(r, 'queryBatchTimeMsP50'), queryBatchTimeP99Ms: q(r, 'queryBatchTimeMsP99') } }) },
   { key: 'kv', kind: 'kv', field: 'kvOperationsAdaptiveGroups', select: 'dimensions { namespaceId actionType } sum { requests }',
     map: (r) => { const a = dim(r, 'actionType'); return { resource: dim(r, 'namespaceId'), metrics: { reads: a === 'read' ? sum(r, 'requests') : 0, writes: a === 'read' ? 0 : sum(r, 'requests') } }; } },
   { key: 'queues', kind: 'queue', field: 'queueMessageOperationsAdaptiveGroups', select: 'dimensions { queueId } sum { billableOperations }',
     map: (r) => ({ resource: dim(r, 'queueId'), metrics: { operations: sum(r, 'billableOperations') } }) },
-  { key: 'ai', kind: 'workers-ai', field: 'aiInferenceAdaptiveGroups', select: 'dimensions { modelId } sum { requests totalTokensIn totalTokensOut }',
-    map: (r) => ({ resource: dim(r, 'modelId'), metrics: { requests: sum(r, 'requests'), tokensIn: sum(r, 'totalTokensIn'), tokensOut: sum(r, 'totalTokensOut') } }) },
+  // Workers AI has no `requests` meter and no `totalTokensIn/Out`: the group's own `count` is the request count and
+  // the tokens are `totalInputTokens` / `totalOutputTokens`. Schema re-read live 2026-10-11.
+  { key: 'ai', kind: 'workers-ai', field: 'aiInferenceAdaptiveGroups', select: 'dimensions { modelId } count sum { totalInputTokens totalOutputTokens totalNeurons totalInferenceTimeMs }',
+    map: (r) => ({ resource: dim(r, 'modelId'), metrics: { requests: count(r), tokensIn: sum(r, 'totalInputTokens'), tokensOut: sum(r, 'totalOutputTokens'), neurons: sum(r, 'totalNeurons'), inferenceTimeMs: sum(r, 'totalInferenceTimeMs') } }) },
   { key: 'pages', kind: 'pages', field: 'pagesFunctionsInvocationsAdaptiveGroups', select: 'dimensions { scriptName } sum { requests errors }',
     map: (r) => ({ resource: dim(r, 'scriptName'), metrics: { requests: sum(r, 'requests'), errors: sum(r, 'errors') }, status: statusFromErrors(sum(r, 'requests'), sum(r, 'errors')) }) },
 ];

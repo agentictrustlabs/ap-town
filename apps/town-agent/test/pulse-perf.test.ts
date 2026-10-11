@@ -4,7 +4,7 @@ import { readPerformance, daysOf, operatorAuthorized, type InfraRowV1 } from '..
 
 // The town MCP's stored rows (spec 437 §4): the portal reads these over its service binding and holds no credential.
 const toInfraSample = (s: InfraSampleV1): InfraRowV1 => ({ kind: 'infra', id: `${s.platform}|${s.account}|${s.kind}|${s.resource}`, at: s.at, ok: s.ok, payload: s, ...(s.error ? { error: s.error } : {}) });
-const toCostSample = (c: CostSampleV1): InfraRowV1 => ({ kind: 'cost', id: `${c.platform}|${c.account}|${c.day}|${c.resource}|${c.sku ?? ''}`, at: c.asOf, ok: c.ok, payload: c, ...(c.error ? { error: c.error } : {}) });
+const toCostSample = (c: CostSampleV1): InfraRowV1 => ({ kind: 'cost', id: `${c.platform}|${c.account}|${c.day}|${c.resource}|${c.sku ?? ''}|${c.basis}`, at: c.asOf, ok: c.ok, payload: c, ...(c.error ? { error: c.error } : {}) });
 import { dayRollup } from '../worker/pulse-record';
 import type { PulseSampleV1 } from '../worker/pulse';
 
@@ -64,13 +64,45 @@ describe('readPerformance (spec 437 §5)', () => {
     const r = readPerformance(town, samples, rows, { window: '24h', nowMs: NOW, detail: true });
     expect(r.provenance.faithnet).toEqual(perf);
     // 24h window = today only: one heartbeat (50 completed, 200k inference) + today's vercel 1.5M; yesterday's rows are outside the window.
-    expect(r.costPerCompletedRun.faithnet).toMatchObject({ completedRuns: 50, inferenceMicroUsd: 200_000, infraMicroUsd: 1_500_000, microUsd: Math.round(1_700_000 / 50), lag: ['5min', 'daily-restated'] });
+    expect(r.costPerCompletedRun.faithnet).toMatchObject({ completedRuns: 50, inferenceMicroUsd: 200_000, infraMicroUsd: 1_500_000, infraBasis: 'billed', microUsd: Math.round(1_700_000 / 50), lag: ['5min', 'daily-restated'] });
     const week = readPerformance(town, samples, rows, { window: '7d', nowMs: NOW, detail: true });
-    expect(week.costPerCompletedRun.faithnet).toMatchObject({ completedRuns: 150, inferenceMicroUsd: 600_000, infraMicroUsd: 4_600_000, complete: false });
-    expect(week.costPerCompletedRun.faithnet!.lag).toEqual(['5min', 'daily-restated', 'hourly']);
+    // ONE basis, named (I1): the two billed vercel days, NOT billed + the derived cloudflare estimate. Adding a
+    // bill to an estimate produced a number that was neither, which is the whole point of carrying the label.
+    expect(week.costPerCompletedRun.faithnet).toMatchObject({ completedRuns: 150, inferenceMicroUsd: 600_000, infraMicroUsd: 4_500_000, infraBasis: 'billed', complete: false });
+    expect(week.costPerCompletedRun.faithnet!.lag).toEqual(['5min', 'daily-restated']);
     const pub = readPerformance(town, samples, rows, { window: '7d', nowMs: NOW, detail: false });
     expect(pub.costPerCompletedRun.faithnet).toMatchObject({ microUsd: null, infraMicroUsd: null, completedRuns: 150 });
     expect(pub.provenance.faithnet).toEqual(perf);
+  });
+  it('a source that has since been configured reads from its newest sample, not from the failure row that never gets overwritten', () => {
+    // A source-level failure is one `resource: '*'` row; success writes per-resource rows and never replaces it.
+    // Preferring any failure over any success left Cloudflare reading "not configured" while 67 readings landed.
+    const old = { ...infra({ platform: 'cloudflare', account: 'acctA', resource: '*', ok: false, status: 'unknown' as const, error: 'not configured: CLOUDFLARE_ACCOUNTS unset', metrics: {} }), at: new Date(NOW - 7_200_000).toISOString(), asOf: new Date(NOW - 7_200_000).toISOString() };
+    const fresh = { ...infra({ platform: 'cloudflare', account: 'acctA', resource: 'demo-a2a-faithnet' }), at: new Date(NOW - 60_000).toISOString(), asOf: new Date(NOW - 60_000).toISOString() };
+    const rows: InfraRowV1[] = [{ kind: 'infra', id: 'cloudflare|acctA|*', at: old.at, ok: false, payload: old }, { kind: 'infra', id: 'cloudflare|acctA|demo-a2a-faithnet', at: fresh.at, ok: true, payload: fresh }];
+    const src = readPerformance(town, [], rows, { window: '24h', nowMs: NOW, detail: true }).sources.find((x) => x.platform === 'cloudflare')!;
+    expect(src).toMatchObject({ ok: true, error: null });
+    // but a failure that IS the newest word still shows — an outage is never hidden by an older success
+    const outage = { ...infra({ platform: 'cloudflare', account: 'acctA', resource: '*', ok: false, status: 'unknown' as const, error: 'authorization denied', metrics: {} }), at: new Date(NOW - 30_000).toISOString(), asOf: new Date(NOW - 30_000).toISOString() };
+    const down = readPerformance(town, [], [...rows, { kind: 'infra', id: 'cloudflare|acctA|*', at: outage.at, ok: false, payload: outage }], { window: '24h', nowMs: NOW, detail: true }).sources.find((x) => x.platform === 'cloudflare')!;
+    expect(down).toMatchObject({ ok: false, error: 'authorization denied' });
+  });
+  it('cost per run prefers a real effective over a billed zero, and says which basis it used', () => {
+    // A Pro team whose usage sits inside its allowance: every billed row is 0, effective carries the money.
+    const samples: PulseSampleV1[] = [hb('2026-10-10T11:55:00Z', 50, 200_000)];
+    const inAllowance: InfraRowV1[] = [
+      toCostSample(cost({ day: '2026-10-10', amountMicroUsd: 0, basis: 'billed' })),
+      toCostSample(cost({ day: '2026-10-10', amountMicroUsd: 2_000_000, basis: 'effective' })),
+    ];
+    const r = readPerformance(town, samples, inAllowance, { window: '24h', nowMs: NOW, detail: true });
+    expect(r.costPerCompletedRun.faithnet).toMatchObject({ infraBasis: 'effective', infraMicroUsd: 2_000_000, microUsd: Math.round(2_200_000 / 50) });
+    // the two bases stay separate rows in the cost table — neither is folded into the other
+    expect(r.cost.filter((c) => c.platform === 'vercel').map((c) => c.basis).sort()).toEqual(['billed', 'effective']);
+    // and a provider that really did invoice money is preferred over the amortised figure
+    const invoiced = readPerformance(town, samples, [...inAllowance, toCostSample(cost({ day: '2026-10-10', resource: 'faithnet-home', sku: 'x', amountMicroUsd: 900_000, basis: 'billed' }))], { window: '24h', nowMs: NOW, detail: true });
+    expect(invoiced.costPerCompletedRun.faithnet).toMatchObject({ infraBasis: 'billed', infraMicroUsd: 900_000 });
+    // no infrastructure cost at all is still null, never zero
+    expect(readPerformance(town, samples, [], { window: '24h', nowMs: NOW, detail: true }).costPerCompletedRun.faithnet).toMatchObject({ infraMicroUsd: null, infraBasis: null });
   });
   it('the day rollup carries the day\'s infra status, cost and cost per run into the record when the town is given, and each estate\'s slice is its own', () => {
     const samples: PulseSampleV1[] = [hb('2026-10-10T11:55:00Z', 10, 100_000)];

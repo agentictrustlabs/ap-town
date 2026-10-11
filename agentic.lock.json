@@ -48,6 +48,14 @@
         {
           "file": "apps/discovery-connector/src/gateway/tools.ts",
           "why": "gateway-raw-delegate-key (findings.yaml, accepted-risk): the gateway agent's own session-wire delegate key (spec 387); KMS signer + re-issued wire scheduled"
+        },
+        {
+          "file": "apps/town-agent/worker/pulse-record.ts",
+          "why": "the town agent's own session-wire delegate key (TOWN_SIGNER_KEY, spec 437): it signs ONLY its own delegation token to write the day's pulse record into a context agent's vault, and the code refuses to run unless the key's address equals the leaf's named delegate. A leaf delegate, revocable on chain — never a custodian or a person's key. Same accepted risk and remediation as the gateway entry: KMS signer + re-issued wire scheduled"
+        },
+        {
+          "file": "apps/inference/src/vault-ledger.ts",
+          "why": "inference.svc's own session-wire delegate key (INFERENCE_SIGNER_KEY, spec 434 §9): it signs ONLY its own delegation token to write its receipt ledger into its own vault, and vaultLedgerReadiness refuses unless the key's address equals the leaf's named delegate. A leaf delegate, revocable on chain. Same accepted risk and remediation as the gateway entry"
         }
       ],
       "toleratedEnvNames": [

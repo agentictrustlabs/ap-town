@@ -43,7 +43,8 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
   // ── Infrastructure: latest per resource (any age — a quiet source still shows its last word), series in the window ──
   const infra = rows.filter((s) => s.kind === 'infra');
   const latestInfra = new Map<string, InfraSampleV1>();
-  for (const s of infra) { const cur = latestInfra.get(s.id); if (!cur || cur.at <= s.at) latestInfra.set(s.id, s.payload as InfraSampleV1); }
+  const latestAt = new Map<string, string>();
+  for (const s of infra) { const cur = latestAt.get(s.id); if (cur === undefined || cur <= s.at) { latestInfra.set(s.id, s.payload as InfraSampleV1); latestAt.set(s.id, s.at); } }
   const seriesInfra = new Map<string, Map<string, InfraSampleV1>>();
   for (const s of infra) { if (Date.parse(s.at) < from || !s.ok) continue; const m = seriesInfra.get(s.id) ?? new Map<string, InfraSampleV1>(); m.set(bucket(s.at), s.payload as InfraSampleV1); seriesInfra.set(s.id, m); }
   const infrastructure: PerfReadV1['infrastructure'] = [...latestInfra.entries()].filter(([, s]) => s.resource !== '*' || !s.ok).map(([id, s]) => ({
@@ -82,18 +83,37 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
     const completedRuns = hbs.reduce((n, h) => n + h.runs.completed, 0);
     const inferenceKnown = hbs.filter((h) => h.inferenceMicroUsd !== null);
     const inferenceMicroUsd = inferenceKnown.reduce((n, h) => n + (h.inferenceMicroUsd ?? 0), 0);
-    const mine = costRows.filter((c) => { const o = c.resource === '*' ? null : attributeResource(town, c.platform, c.resource); return o?.kind === 'estate' && o.id === e.id; });
+    const ours = costRows.filter((c) => { const o = c.resource === '*' ? null : attributeResource(town, c.platform, c.resource); return o?.kind === 'estate' && o.id === e.id; });
+    // ONE basis, named — never the sum of two (I1). A provider that invoiced nothing because the usage sat inside
+    // a plan's allowance still consumed something, so `effective` is preferred over a true but useless $0.00
+    // `billed`; our own `derived` estimate is the last resort.
+    const nonZero = (b: CostSampleV1['basis']): boolean => ours.some((c) => c.basis === b && c.ok && c.amountMicroUsd > 0);
+    const infraBasis: CostSampleV1['basis'] | null = !ours.length ? null : (nonZero('billed') ? 'billed' : nonZero('effective') ? 'effective' : nonZero('derived') ? 'derived' : ours[0]!.basis);
+    const mine = infraBasis ? ours.filter((c) => c.basis === infraBasis) : [];
     const infraMicroUsd = mine.length ? mine.reduce((n, c) => n + (c.ok ? c.amountMicroUsd : 0), 0) : null;
     const daysWithCost = new Set(mine.map((c) => c.day));
     const complete = hbs.length === days.length && inferenceKnown.length === hbs.length && mine.length > 0 && mine.every((c) => c.complete && c.ok) && days.filter((d) => d !== days[days.length - 1]).every((d) => daysWithCost.has(d));
     const lag = [...new Set<LagClass>(['5min', ...mine.map(lagOfCost)])];
     const total = completedRuns > 0 && (inferenceKnown.length || infraMicroUsd !== null) ? Math.round((inferenceMicroUsd + (infraMicroUsd ?? 0)) / completedRuns) : null;
-    costPerCompletedRun[e.id] = { microUsd: opts.detail ? total : null, inferenceMicroUsd: opts.detail ? inferenceMicroUsd : 0, infraMicroUsd: opts.detail ? infraMicroUsd : null, completedRuns, complete, lag };
+    costPerCompletedRun[e.id] = { microUsd: opts.detail ? total : null, inferenceMicroUsd: opts.detail ? inferenceMicroUsd : 0, infraMicroUsd: opts.detail ? infraMicroUsd : null, infraBasis, completedRuns, complete, lag };
   }
 
   const unattributed: PerfReadV1['unattributed'] = infrastructure.filter((r) => r.owner === null && r.latest?.ok && r.resource !== '*').map((r) => ({ platform: r.platform, account: r.account, resource: r.resource, kind: r.kind }));
+  // A source's standing is its MOST RECENT word, not its worst. A source-level failure is written as a single
+  // `resource: '*'` row and success writes per-resource rows instead, so nothing ever overwrites that failure —
+  // preferring any failure over any success meant a source that had since been configured went on reporting
+  // "not configured" until the row aged out of retention (30 d). Seen live 2026-10-10: Cloudflare had just
+  // collected 67 readings and still read as unset. Ties go to the failure, so a genuine outage is never hidden
+  // by a reading taken in the same instant.
   const sourceMap = new Map<string, PerfViewV1['sources'][number]>();
-  for (const s of latestInfra.values()) { const k = `${s.platform}|${s.account}`; const cur = sourceMap.get(k); const row = { platform: s.platform, account: s.account, ok: s.ok, asOf: s.asOf, lagClass: s.lagClass, error: s.error ?? null }; if (!cur) sourceMap.set(k, row); else if (!s.ok && cur.ok) sourceMap.set(k, row); else if (cur.ok && s.asOf > (cur.asOf ?? '')) sourceMap.set(k, row); }
+  const seenAt = new Map<string, string>();
+  for (const [id, s] of latestInfra.entries()) {
+    const k = `${s.platform}|${s.account}`;
+    const at = latestAt.get(id) ?? s.asOf ?? '';
+    const cur = sourceMap.get(k); const curAt = seenAt.get(k) ?? '';
+    const row = { platform: s.platform, account: s.account, ok: s.ok, asOf: s.asOf, lagClass: s.lagClass, error: s.error ?? null };
+    if (!cur || at > curAt || (at === curAt && !s.ok)) { sourceMap.set(k, row); seenAt.set(k, at); }
+  }
   const complete = [...latestInfra.values()].every((s) => s.ok) && costRows.every((c) => c.complete && c.ok);
   return { window: { from: new Date(from).toISOString(), to: new Date(opts.nowMs).toISOString() }, infrastructure, cost: opts.detail ? cost : [], provenance, costPerCompletedRun, unattributed, complete, detail: opts.detail, days, sources: [...sourceMap.values()] };
 }

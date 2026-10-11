@@ -24,7 +24,15 @@ export async function collectVercelDeployments(cfg: VercelCfg, projects: string[
   }));
 }
 
-interface FocusRow { ChargePeriodStart?: string; ChargePeriodEnd?: string; BilledCost?: number | string; BillingCurrency?: string; ServiceName?: string; SkuId?: string; SkuPriceId?: string; ResourceName?: string; ResourceId?: string; Tags?: Record<string, string> }
+interface FocusRow { ChargePeriodStart?: string; ChargePeriodEnd?: string; BilledCost?: number | string; EffectiveCost?: number | string; BillingCurrency?: string; ServiceName?: string; SkuId?: string; SkuPriceId?: string; ResourceName?: string; ResourceId?: string; Tags?: Record<string, string> }
+
+/**
+ * Which project a charge belongs to. Vercel tags the row `Tags.ProjectName` (capitalised) and leaves FOCUS's own
+ * `ResourceName` empty — reading the lower-case `project` key sent EVERY row to the Unattributed bucket while the
+ * attribution sat right there (2026-10-10: $9.78/wk of faithnet-home read as unowned). Rows with no project are
+ * genuinely team-level — a seat, a plan, a subscription — and are left unattributed on purpose.
+ */
+export const projectOf = (row: FocusRow): string => row.Tags?.ProjectName ?? row.Tags?.projectName ?? row.Tags?.project ?? row.ResourceName ?? row.ServiceName ?? 'unattributed';
 
 /** Parse the charges stream (JSONL, or a JSON array) into FOCUS rows; a line that is not JSON is skipped and counted. */
 export function parseFocus(text: string): { rows: FocusRow[]; skipped: number } {
@@ -35,23 +43,42 @@ export function parseFocus(text: string): { rows: FocusRow[]; skipped: number } 
   return { rows, skipped };
 }
 
-/** Billed cost per day × project (or service) × SKU over `[from, to]` (`YYYY-MM-DD`). One failed read is one failed row for the team. */
+/**
+ * Cost per day × project (or service) × SKU over `[from, to]` (`YYYY-MM-DD`), on BOTH of FOCUS's bases.
+ *
+ * `BilledCost` is what Vercel invoiced for the period and `EffectiveCost` is what the period consumed once
+ * committed and subscription spend is amortised. On a plan with included allowance they diverge completely —
+ * a Pro team reads `BilledCost: 0` on every row while `EffectiveCost` carries the real figure — so emitting
+ * only the billed half would report a live estate as free. Each basis becomes its OWN row and the two are
+ * never added together (I1); a basis whose rows are all zero is dropped rather than shown as a true $0.00.
+ * One failed read is one failed row for the team.
+ */
 export async function collectVercelCharges(cfg: VercelCfg, from: string, to: string, fetchImpl: FetchLike, at: string): Promise<CostSampleV1[]> {
   const r = await readHttp(fetchImpl, `${VERCEL_API}/v1/billing/charges?teamId=${encodeURIComponent(cfg.teamId)}&from=${from}&to=${to}`, { headers: { authorization: `Bearer ${cfg.token}`, accept: 'application/x-ndjson, application/json' } }, 60_000);
   if (!r.ok) return [failedCost('vercel', cfg.teamId, to, '*', 'billed', r.error, at)];
   const { rows, skipped } = parseFocus(r.data);
   const grouped = new Map<string, CostSampleV1>();
   let nonUsd = 0;
+  const num = (v: number | string | undefined): number | null => { const n = typeof v === 'string' ? Number(v) : v; return typeof n === 'number' && Number.isFinite(n) ? n : null; };
+  const seen: Record<'billed' | 'effective', boolean> = { billed: false, effective: false };
   for (const row of rows) {
     const day = (row.ChargePeriodStart ?? '').slice(0, 10); if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
-    const cost = typeof row.BilledCost === 'string' ? Number(row.BilledCost) : row.BilledCost; if (typeof cost !== 'number' || !Number.isFinite(cost)) continue;
+    const costs: Array<['billed' | 'effective', number | null]> = [['billed', num(row.BilledCost)], ['effective', num(row.EffectiveCost)]];
+    if (costs.every(([, c]) => c === null)) continue;
     if (row.BillingCurrency && row.BillingCurrency !== 'USD') nonUsd += 1;
-    const resource = row.Tags?.project ?? row.ResourceName ?? row.ServiceName ?? 'unattributed'; const sku = row.SkuId ?? row.SkuPriceId ?? row.ServiceName ?? undefined;
-    const k = `${day}|${resource}|${sku ?? ''}`;
-    const cur = grouped.get(k) ?? { type: 'ap.cost-sample.v1', platform: 'vercel', account: cfg.teamId, day, resource, ...(sku ? { sku } : {}), amountMicroUsd: 0, basis: 'billed', asOf: at, complete: true, ok: true };
-    cur.amountMicroUsd += microUsd(cost); grouped.set(k, cur);
+    const resource = projectOf(row); const sku = row.SkuId ?? row.SkuPriceId ?? row.ServiceName ?? undefined;
+    for (const [basis, cost] of costs) {
+      if (cost === null) continue;
+      if (cost !== 0) seen[basis] = true;
+      const k = `${basis}|${day}|${resource}|${sku ?? ''}`;
+      const cur = grouped.get(k) ?? { type: 'ap.cost-sample.v1', platform: 'vercel', account: cfg.teamId, day, resource, ...(sku ? { sku } : {}), amountMicroUsd: 0, basis, asOf: at, complete: true, ok: true };
+      cur.amountMicroUsd += microUsd(cost); grouped.set(k, cur);
+    }
   }
-  const out = [...grouped.values()];
+  // A basis the stream reports as zero everywhere is absent, not free — keep the other rather than show $0.00 as
+  // if it were the answer. If BOTH are all-zero the team really did spend nothing and both are kept.
+  const anyNonZero = seen.billed || seen.effective;
+  const out = [...grouped.values()].filter((c) => !anyNonZero || seen[c.basis as 'billed' | 'effective']);
   if (skipped || nonUsd) for (const c of out) { c.complete = false; c.error = `${skipped ? `${skipped} unreadable line(s)` : ''}${skipped && nonUsd ? '; ' : ''}${nonUsd ? `${nonUsd} row(s) not in USD` : ''}`; }
   return out;
 }

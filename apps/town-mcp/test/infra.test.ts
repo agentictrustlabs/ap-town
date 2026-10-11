@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { TownManifest } from '@ap-town/town-model';
 import { collectCloudflareHourly, deriveCloudflareCost, HOURLY_DATASETS } from '../src/infra/cloudflare';
-import { collectVercelCharges, collectVercelDeployments, parseFocus } from '../src/infra/vercel';
+import { collectVercelCharges, collectVercelDeployments, parseFocus, projectOf } from '../src/infra/vercel';
 import { collectAzureCost, collectAzureHealth, collectAzureVmMetrics } from '../src/infra/azure';
 import { collectGraphdbHealth, collectGraphdbRepositories, parsePrometheus } from '../src/infra/graphdb';
 import { collectCostPass, collectHourlyPass, collectStatusPass, PRICING } from '../src/infra/passes';
@@ -79,6 +79,33 @@ describe('vercel collector', () => {
     expect(parseFocus('[{"BilledCost":1}]').rows).toHaveLength(1);
     const refused = await collectVercelCharges(cfg, 'a', 'b', fetchOf(() => new Response('forbidden', { status: 403 })), AT);
     expect(refused[0]).toMatchObject({ ok: false, complete: false, resource: '*' }); expect(refused[0]!.error).toContain('403');
+  });
+  it('charges: a project is read from Vercel\'s capitalised ProjectName tag, not FOCUS\'s empty ResourceName', () => {
+    // The live stream leaves ResourceName empty on all 7,875 rows and puts the project in Tags.ProjectName.
+    // Reading the lower-case `project` key sent every row to Unattributed while the owner sat right there.
+    expect(projectOf({ Tags: { ProjectId: 'prj_1', ProjectName: 'faithnet-home' }, ServiceName: 'Fluid Provisioned Memory' })).toBe('faithnet-home');
+    expect(projectOf({ Tags: { project: 'legacy-lowercase' }, ServiceName: 'x' })).toBe('legacy-lowercase');
+    // a seat or a plan carries no project and is team-level on purpose, not a failure to attribute
+    expect(projectOf({ Tags: {}, ServiceName: 'Additional Team Seats' })).toBe('Additional Team Seats');
+    expect(projectOf({})).toBe('unattributed');
+  });
+  it('charges: a plan whose usage is inside its allowance reads billed 0 beside a real effective — both bases are kept, labelled, and never summed', async () => {
+    // The shape the live faithnet team returns (2026-10-10): BilledCost 0 on every row, EffectiveCost carrying it.
+    const lines = [
+      { ChargePeriodStart: '2026-10-08T07:00:00Z', BilledCost: 0, EffectiveCost: 0.32, BillingCurrency: 'USD', ServiceName: 'Speed Insights Plus', SkuId: 'si' },
+      { ChargePeriodStart: '2026-10-08T07:00:00Z', BilledCost: 0, EffectiveCost: 1.5, BillingCurrency: 'USD', ServiceName: 'Build CPU Minutes', SkuId: 'bcm', ResourceName: 'faithnet-home' },
+    ].map((x) => JSON.stringify(x)).join('\n');
+    const out = await collectVercelCharges(cfg, '2026-10-03', '2026-10-09', fetchOf(() => new Response(lines, { status: 200 })), AT);
+    expect(out.every((c) => c.basis === 'effective')).toBe(true); // the all-zero billed basis is dropped, not shown as $0.00
+    expect(out.map((c) => c.amountMicroUsd).sort((a, b) => a - b)).toEqual([320_000, 1_500_000]);
+    // when BOTH bases carry a figure, each is its own row and neither absorbs the other
+    const both = await collectVercelCharges(cfg, 'a', 'b', fetchOf(() => new Response(JSON.stringify({ ChargePeriodStart: '2026-10-08T07:00:00Z', BilledCost: 2, EffectiveCost: 5, BillingCurrency: 'USD', ServiceName: 'Pro', SkuId: 'pro' }), { status: 200 })), AT);
+    expect(both).toHaveLength(2);
+    expect(both.find((c) => c.basis === 'billed')!.amountMicroUsd).toBe(2_000_000);
+    expect(both.find((c) => c.basis === 'effective')!.amountMicroUsd).toBe(5_000_000);
+    // a team that genuinely spent nothing keeps both zeroes rather than vanishing
+    const free = await collectVercelCharges(cfg, 'a', 'b', fetchOf(() => new Response(JSON.stringify({ ChargePeriodStart: '2026-10-08T07:00:00Z', BilledCost: 0, EffectiveCost: 0, BillingCurrency: 'USD', ServiceName: 'Pro', SkuId: 'pro' }), { status: 200 })), AT);
+    expect(free.map((c) => c.basis).sort()).toEqual(['billed', 'effective']);
   });
 });
 

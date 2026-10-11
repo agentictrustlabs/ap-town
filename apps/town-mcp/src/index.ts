@@ -48,7 +48,13 @@ export function infraSources(env: InfraEnv): { configured: string[]; unconfigure
 }
 
 export const infraId = (s: InfraSampleV1): string => `${s.platform}|${s.account}|${s.kind}|${s.resource}`;
-export const costId = (c: CostSampleV1): string => `${c.platform}|${c.account}|${c.day}|${c.resource}|${c.sku ?? ''}`;
+/**
+ * The identity of a cost reading. `basis` is PART of it: a later read of the same day supersedes the earlier
+ * one (I1), but only within its own basis — a provider can report a billed and an effective figure for the same
+ * day × resource × sku, and without the basis here the second would silently overwrite the first and one of the
+ * two would vanish from the store.
+ */
+export const costId = (c: CostSampleV1): string => `${c.platform}|${c.account}|${c.day}|${c.resource}|${c.sku ?? ''}|${c.basis}`;
 /** What the store keeps: one row per sample, filed by kind and (for cost) by the day it describes. */
 export interface StoredRow { kind: 'infra' | 'cost'; id: string; at: string; ok: boolean; payload: InfraSampleV1 | CostSampleV1; error?: string }
 export const toRow = (x: InfraSampleV1 | CostSampleV1): StoredRow =>
@@ -76,14 +82,38 @@ export async function runPass(env: Env, which: 'status' | 'hourly' | 'cost', now
     // Yesterday's Cloudflare hourly rows are the meters the derived cost is computed from.
     const dayStart = Math.floor(nowMs / 86_400_000) * 86_400_000 - 86_400_000;
     const prior = store
-      ? ((await (await store.fetch(`https://infra/read?kind=infra&from=${dayStart}&to=${dayStart + 86_400_000 - 1}`)).json()) as StoredRow[]).map((r) => r.payload as InfraSampleV1).filter((s) => s.platform === 'cloudflare')
+      ? ((await (await store.fetch(`https://infra/read?kind=infra&from=${dayStart}&to=${dayStart + 86_400_000 - 1}`)).json()) as StoredRow[])
+          .filter((r) => r.kind === 'infra') // belt and braces: the store is asked for infra, and only infra is read
+          .map((r) => r.payload as InfraSampleV1)
+          .filter((s) => s.platform === 'cloudflare')
       : [];
     pass = await collectCostPass(town, env, fetchImpl, nowMs, prior);
   }
   const rows = [...pass.samples, ...pass.costs].map(toRow);
-  if (store && rows.length) await store.fetch('https://infra/put', { method: 'POST', body: JSON.stringify(rows) });
+  if (store) for (const batch of batched(rows)) await store.fetch('https://infra/put', { method: 'POST', body: JSON.stringify(batch) });
   for (const u of pass.unreadable) console.warn(`[town-mcp:${which}] ${u}`);
   return pass;
+}
+
+/**
+ * Split a write into requests a Durable Object will actually accept. A day of Vercel charges is ~2,000 rows and
+ * ~800 KiB once both cost bases are carried, and sending that as ONE body made the pass answer 500 (2026-10-11;
+ * it had passed at 869 rows, so the ceiling sits between). Chunked by serialised size AND by count, so a town
+ * with more projects or a provider with a fatter row does not rediscover the same wall.
+ */
+export const PUT_MAX_BYTES = 96 * 1024;
+export const PUT_MAX_ROWS = 200;
+export function batched<T>(rows: readonly T[], maxBytes = PUT_MAX_BYTES, maxRows = PUT_MAX_ROWS): T[][] {
+  const out: T[][] = [];
+  let cur: T[] = [];
+  let bytes = 2; // the enclosing []
+  for (const r of rows) {
+    const size = JSON.stringify(r).length + 1;
+    if (cur.length && (cur.length >= maxRows || bytes + size > maxBytes)) { out.push(cur); cur = []; bytes = 2; }
+    cur.push(r); bytes += size;
+  }
+  if (cur.length) out.push(cur);
+  return out;
 }
 
 /** The stored rows for a window, newest-last; the latest of every (kind, id) rides along so a quiet source still shows its last word. */
@@ -94,7 +124,11 @@ async function readRows(env: Env, q: { from: number; to?: number; kind?: string 
   if (q.to !== undefined) u.searchParams.set('to', String(q.to));
   if (q.kind) u.searchParams.set('kind', q.kind);
   const r = await env.INFRA.get(env.INFRA.idFromName(townOf(env).town)).fetch(u.toString());
-  return (await r.json()) as StoredRow[];
+  const rows = (await r.json()) as StoredRow[];
+  // Asked for one kind, read only that kind. The store's own filter once leaked cost rows into an infra read
+  // (the "latest rides along" query ignored it), and an infra caller reading a cost payload crashes on the `at`
+  // a cost sample does not have. Checked here too, so one filter failing cannot reach a tool.
+  return q.kind ? rows.filter((x) => x.kind === q.kind) : rows;
 }
 
 const app = new Hono<{ Bindings: Env }>();
@@ -130,7 +164,7 @@ export const TOOLS = [
   { name: 'infra_status', description: "Every declared platform resource's current status (up · degraded · down · unknown) with the moment the source says it is current to and how stale that can be. A source that could not be read is unreadable with its reason, never zeros.", inputSchema: { type: 'object', properties: { platform: { type: 'string', description: 'Only this platform: cloudflare · vercel · azure · graphdb · chain-node.' } } } },
   { name: 'infra_metrics', description: "The last reading per resource: requests, errors, CPU and wall time for Workers; rows and query time for D1; storage; VM CPU and memory; GraphDB heap and statements. Aggregate infrastructure facts, never a person's record.", inputSchema: { type: 'object', properties: { platform: { type: 'string' }, owner: { type: 'string', description: 'Only resources this estate or service owns, as town.yaml declares it.' } } } },
   { name: 'infra_config', description: "What infrastructure this town or one of its estates, services or applications is CONFIGURED with: the accounts its resources live in (ids and labels, never a credential), the Workers · Pages projects · Vercel projects · Azure resources it declares, which read credentials this deployment holds BY NAME, and which declared resources have no reading yet. An agent's own account of its servers and its security configuration.", inputSchema: { type: 'object', properties: { owner: { type: 'string', description: "Whose configuration: 'town' for the whole town, or 'estate:<id>' / 'service:<id>' / an id on its own." } } } },
-  { name: 'infra_cost', description: 'Cost per day per owner over a window, each row labelled derived (a meter times a published price) or billed (the provider\'s own bill), with how current it is and whether the window is complete. Derived and billed are never summed without the label.', inputSchema: { type: 'object', properties: { window: { type: 'string', description: '24h · 7d · 30d · 90d (default 7d).' }, owner: { type: 'string' } } } },
+  { name: 'infra_cost', description: 'Cost per day per owner over a window, each row labelled with its basis — derived (a meter times a published price, our estimate), billed (what the provider invoiced) or effective (what the period consumed once committed and subscription spend is amortised) — with how current it is and whether the window is complete. The bases are never summed without the label: a provider whose usage sits inside a plan allowance reports billed 0 while effective carries the real figure.', inputSchema: { type: 'object', properties: { window: { type: 'string', description: '24h · 7d · 30d · 90d (default 7d).' }, owner: { type: 'string' } } } },
 ] as const;
 
 function matchOwner(town: TownManifest, s: InfraSampleV1, owner?: string): boolean {
@@ -196,7 +230,7 @@ async function callTool(env: Env, name: string, args: Record<string, unknown>): 
       groups.set(key, g);
     }
     const out = [...groups.values()].map((g) => ({ ...g, days: g.days.size, usd: Number((g.microUsd / 1e6).toFixed(6)) })).sort((a, b) => b.microUsd - a.microUsd);
-    return { window: args.window ?? '7d', rows: out, complete: out.every((r) => r.complete), note: 'derived = a meter times a published unit price, not a bill; billed = the provider\'s own. They are never summed without the label.' };
+    return { window: args.window ?? '7d', rows: out, complete: out.every((r) => r.complete), note: 'derived = a meter times a published unit price, our estimate; billed = what the provider invoiced; effective = what the period consumed once committed and subscription spend is amortised. They are never summed without the label — billed 0 beside a non-zero effective means the usage sat inside a plan allowance, not that it was free.' };
   }
   throw new Error(`no such tool: ${name}`);
 }
@@ -252,8 +286,14 @@ export class InfraDO {
       const rows = kind
         ? this.sql.exec<{ json: string }>('SELECT json FROM rows WHERE kind = ? AND at >= ? AND at <= ? ORDER BY at', kind, from, to).toArray()
         : this.sql.exec<{ json: string }>('SELECT json FROM rows WHERE at >= ? AND at <= ? ORDER BY at', from, to).toArray();
-      // The latest of every (kind, id) rides along even when older than the window, so a quiet source still shows its last word.
-      const latest = this.sql.exec<{ json: string }>('SELECT json FROM rows r WHERE at = (SELECT MAX(at) FROM rows WHERE kind = r.kind AND id = r.id)').toArray();
+      // The latest of every (kind, id) rides along even when older than the window, so a quiet source still shows its
+      // last word — but it must honour the SAME kind filter as the window query. It did not, so a `kind=infra` read
+      // also handed back the latest cost rows; a cost payload has no `at`, and the first caller to touch one threw
+      // `Cannot read properties of undefined (reading 'startsWith')` and failed the whole cost pass (2026-10-11).
+      // Latent until an account had both an infra and a cost row for the same platform.
+      const latest = kind
+        ? this.sql.exec<{ json: string }>('SELECT json FROM rows r WHERE kind = ? AND at = (SELECT MAX(at) FROM rows WHERE kind = r.kind AND id = r.id)', kind).toArray()
+        : this.sql.exec<{ json: string }>('SELECT json FROM rows r WHERE at = (SELECT MAX(at) FROM rows WHERE kind = r.kind AND id = r.id)').toArray();
       const seen = new Set<string>();
       const all = [...rows, ...latest].map((r) => JSON.parse(r.json) as StoredRow).filter((r) => { const k = `${r.kind}|${r.id}|${r.at}`; if (seen.has(k)) return false; seen.add(k); return true; });
       return Response.json(all);

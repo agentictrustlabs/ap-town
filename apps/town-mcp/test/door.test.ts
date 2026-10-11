@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import worker, { TOOLS, authorized, infraSources, toRow, type Env } from '../src/index';
+import worker, { TOOLS, authorized, batched, infraSources, toRow, PUT_MAX_BYTES, PUT_MAX_ROWS, type Env } from '../src/index';
 import type { CostSampleV1, InfraSampleV1 } from '@ap-town/town-model';
 
 const TOKEN = 'town-ops-token-abc';
@@ -88,6 +88,46 @@ describe('the town MCP door (spec 437 §4 — the only thing that holds a platfo
     expect(resources.find((r) => r.resource === 'faithnet-home')).toMatchObject({ platform: 'vercel', lastRead: false });
     const one = await tool(env, 'infra_config', { owner: 'estate:faithnet' });
     expect((one.owners as unknown[]).length).toBe(1);
+  });
+  it('a kind-filtered read never hands back another kind — the cost rows that ride along must not reach an infra caller', async () => {
+    // The store's "latest of every (kind,id) rides along" query ignored the kind filter, so a kind=infra read also
+    // returned the newest cost rows. A CostSampleV1 has `day`/`asOf` and no `at`, so the first infra caller to touch
+    // one threw "Cannot read properties of undefined (reading 'startsWith')" and failed the whole cost pass. The
+    // store answers one kind, and the caller filters again, so neither alone can resurrect the bug.
+    const mixed = [toRow(infra()), toRow(cost())];
+    const onlyInfra = mixed.filter((r) => r.kind === 'infra');
+    expect(onlyInfra).toHaveLength(1);
+    expect((onlyInfra[0]!.payload as { at?: string }).at).toBeTypeOf('string');
+    // every infra payload carries `at`; every cost payload does not — which is why the two must never be mixed
+    expect((toRow(cost()).payload as { at?: string }).at).toBeUndefined();
+    const out = await tool(envOf(mixed), 'infra_status');
+    expect((out.resources as unknown[]).length).toBe(1); // the cost row is not reported as a resource
+  });
+  it('a write is split into batches a Durable Object accepts — by size and by count', () => {
+    // One day of Vercel charges is ~2,000 rows / ~800 KiB once both bases are carried; as a single body the pass
+    // answered 500. It had passed at 869 rows, so the ceiling is somewhere between and must not be guessed at.
+    const many = Array.from({ length: 2016 }, (_, i) => toRow(cost({ day: '2026-10-09', resource: `p${i}`, sku: 's' })));
+    const parts = batched(many);
+    expect(parts.length).toBeGreaterThan(1);
+    expect(parts.flat()).toHaveLength(many.length); // nothing dropped and nothing duplicated
+    expect(parts.flat().map((r) => r.id)).toEqual(many.map((r) => r.id)); // order preserved
+    for (const p of parts) { expect(p.length).toBeLessThanOrEqual(PUT_MAX_ROWS); expect(JSON.stringify(p).length).toBeLessThanOrEqual(PUT_MAX_BYTES); }
+    expect(batched([])).toEqual([]);
+    // a single row larger than the ceiling still goes, alone, rather than being silently dropped
+    const huge = [{ big: 'x'.repeat(PUT_MAX_BYTES * 2) }];
+    expect(batched(huge)).toHaveLength(1);
+  });
+  it('a billed and an effective reading of the same day are two rows, not one overwriting the other', async () => {
+    // costId carries the basis: without it the second write supersedes the first (I1's restatement rule is
+    // per basis) and a Pro team's real effective cost would erase its billed zero, or the reverse.
+    const billed = cost({ day: '2026-10-09', resource: 'faithnet-home', sku: 'pro', basis: 'billed', amountMicroUsd: 0 });
+    const effective = cost({ day: '2026-10-09', resource: 'faithnet-home', sku: 'pro', basis: 'effective', amountMicroUsd: 4_500_000 });
+    expect(toRow(billed).id).not.toBe(toRow(effective).id);
+    const out = await tool(envOf([toRow(billed), toRow(effective)]), 'infra_cost', { window: '7d' });
+    const rows = out.rows as Array<Record<string, unknown>>;
+    expect(rows.map((r) => r.basis).sort()).toEqual(['billed', 'effective']);
+    expect(rows.find((r) => r.basis === 'effective')).toMatchObject({ microUsd: 4_500_000 });
+    expect(String(out.note)).toContain('never summed without the label');
   });
   it('a resource the manifest lists under nobody is reported with a null owner, never dropped', async () => {
     const out = await tool(envOf([toRow(infra({ resource: 'uupg-org' }))]), 'infra_status');
