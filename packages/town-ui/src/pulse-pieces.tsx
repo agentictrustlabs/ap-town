@@ -2,8 +2,20 @@
 // utilisation bar. Plain SVG and CSS — no chart library; every number shown is one the API returned.
 import type { ReactNode } from 'react';
 
-export function Stat({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'ok' | 'warn' | 'bad' | 'muted' }): ReactNode {
-  return <div className={`stat${tone ? ` stat-${tone}` : ''}`}><span className="stat-label">{label}</span><span className="stat-value">{value}</span>{sub !== undefined && <span className="stat-sub">{sub}</span>}</div>;
+/**
+ * One figure. `value={null}` means there is NO figure — not a figure of zero — and `absent` says why in words,
+ * set quietly so it can never be mistaken for the number. A withheld operator amount and an unrecorded metric
+ * are both absences, and both say so rather than printing a word where a number belongs (spec 434 §10).
+ */
+export function Stat({ label, value, sub, tone, absent = 'not recorded yet' }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'ok' | 'warn' | 'bad' | 'muted'; absent?: string }): ReactNode {
+  const none = value === null || value === undefined;
+  return (
+    <div className={`stat${tone ? ` stat-${tone}` : ''}`}>
+      <span className="stat-label">{label}</span>
+      <span className={`stat-value${none ? ' stat-value-none' : ''}`}>{none ? absent : value}</span>
+      {sub !== undefined && <span className="stat-sub">{sub}</span>}
+    </div>
+  );
 }
 
 export function Sparkline({ points, width = 160, height = 36, label }: { points: Array<number | null>; width?: number; height?: number; label?: string }): ReactNode {

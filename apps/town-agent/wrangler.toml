@@ -37,9 +37,11 @@ custom_domain = true
 [env.faithnet.vars]
 TOWN = "faithchain"
 PUBLIC_ORIGIN = "https://town.faithnet.io"
-# The Town Ask (spec 436 §5.5): CONTEXT_AGENTS = {"town":"faith-town.workspace","estates":{"faithnet":"faith-estate.workspace"}} once chartered (T1);
+# The Town Ask (spec 436 §5.5 T1). Both chartered on faithchain 2026-10-11 under demo-admin:
+#   faith-town.workspace   0xabAbAD83E69B4cFbf1B90C1c70561D6D770bEef4
+#   faith-estate.workspace 0x137Bd996eE74c4288DC8EF2ecEAD5Ee5b448a49C
 # secrets CONTEXT_AGENT_CREDENTIALS ({name:{grant,leaf}}) + TOWN_SIGNER_KEY once the stewards issue them (T2).
-CONTEXT_AGENTS = ""
+CONTEXT_AGENTS = "{\"town\":\"faith-town.workspace\",\"estates\":{\"faithnet\":\"faith-estate.workspace\"}}"
 CONTEXT_AGENT_ZONE = "faithnet.ai"
 VAULT_URL = "https://mcp.faithnet.io"
 VAULT_AUDIENCE = "urn:mcp:server:person"

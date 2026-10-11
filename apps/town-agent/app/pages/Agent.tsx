@@ -1,10 +1,22 @@
 // One agent as the registry knows it: the public facts the indexer projected from the chain, the offerings crawled
 // from its card, and the card itself read live from the agent's own host. Public evidence; none of it is authority.
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, Loading, useApi } from '@ap-town/town-ui';
+import { Empty, Link, Loading, SectionHead, useApi } from '@ap-town/town-ui';
 import type { AgentDetail, TownData } from '../types';
 
 const local = (iri: string): string => iri.replace(/^.*[#/]/, '');
+
+/** The registry stores some facts as a unix second. A reader is owed a date, with the raw value kept beside it. */
+const EPOCH_KEYS = new Set(['registeredAt', 'updatedAt', 'createdAt', 'releasedAt']);
+function factValue(key: string, raw: string): ReactNode {
+  if (EPOCH_KEYS.has(key) && /^\d{9,13}$/.test(raw)) {
+    const ms = raw.length > 10 ? Number(raw) : Number(raw) * 1000;
+    const d = new Date(ms);
+    if (!Number.isNaN(d.getTime())) return <>{d.toISOString().slice(0, 16).replace('T', ' ')} UTC <span className="quiet mono">{raw}</span></>;
+  }
+  if (/^https?:/.test(raw)) return <a href={raw} rel="noreferrer">{raw}</a>;
+  return raw;
+}
 
 function LiveCard({ url }: { url: string }): ReactNode {
   const [card, setCard] = useState<{ name?: string; description?: string; skills?: Array<{ id: string; name: string; description?: string }> } | null | 'error'>(null);
@@ -26,7 +38,14 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
   const naming = t.services.find((s) => s.id === 'naming')?.hosts[0];
   return (
     <Loading v={v} what="Asking the registry">{(d) => {
-      if (!d.agent.ok) return <section><h1>{d.key}</h1><p className="lede">The registry knows no agent by that key. <Link href="/find">Find one.</Link></p></section>;
+      if (!d.agent.ok) return (
+        <section className="hero">
+          <h1>{d.key}</h1>
+          <Empty title="The registry knows no agent by that key.">
+            A name it has never seen and a name that does not exist look the same from here. <Link href="/find">Find one →</Link>
+          </Empty>
+        </section>
+      );
       const triples = d.agent.triples ?? [];
       const types = triples.filter((x) => x.p.endsWith('#type')).map((x) => local(x.o));
       const rows = triples.filter((x) => !x.p.endsWith('#type'));
@@ -44,21 +63,24 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
             </div>
           </section>
           <section>
-            <h2>Public facts</h2>
-            <dl className="kv">
-              {rows.map((x, i) => <span key={i} className="contents"><dt>{local(x.p)}</dt><dd className={/^(http|urn:|0x)/.test(x.o) ? 'mono' : ''}>{/^https?:/.test(x.o) ? <a href={x.o} rel="noreferrer">{x.o}</a> : x.o}</dd></span>)}
+            <SectionHead eyebrow="Read from the chain and its own card" title="Public facts">
+              Anyone can reproduce every line of this. None of it is a permission.
+            </SectionHead>
+            <dl className="kv kv-facts">
+              {rows.map((x, i) => { const k = local(x.p); return <span key={i} className="contents"><dt>{k}</dt><dd className={/^(http|urn:|0x)/.test(x.o) ? 'mono' : ''}>{factValue(k, x.o)}</dd></span>; })}
             </dl>
           </section>
           {offerings.length > 0 && (
             <section>
-              <h2>What it offers</h2>
-              <p className="quiet">Crawled from its card into the public graph by the indexer, so the registry can rank over it.</p>
+              <SectionHead eyebrow="From its card" title="What it offers">
+                Crawled from its card into the public graph by the indexer, so the registry can rank over it.
+              </SectionHead>
               <table className="table"><thead><tr><th scope="col">Offering</th><th scope="col">Effect</th><th scope="col">Exposure</th><th scope="col">Status</th></tr></thead>
                 <tbody>{offerings.map((o) => <tr key={o.skillId}><th scope="row">{o.name ?? o.skillId}<span className="record-key mono">{o.skillId}</span></th><td>{o.effect ?? '—'}</td><td>{o.exposure ?? '—'}</td><td>{o.status ?? '—'}</td></tr>)}</tbody>
               </table>
             </section>
           )}
-          {cardUri && <section><h2>Its card, live</h2><LiveCard url={cardUri} /></section>}
+          {cardUri && <section><SectionHead eyebrow="Fetched from the agent's own host, now" title="Its card, live" /><div className="panel"><LiveCard url={cardUri} /></div></section>}
         </>
       );
     }}</Loading>

@@ -25,10 +25,12 @@ export function Health({ s }: { s: ServiceView }): ReactNode {
 }
 
 export function ServiceCard({ s }: { s: ServiceView }): ReactNode {
+  // The description is clamped to three lines so a grid of these reads as a grid rather than as columns of
+  // different heights; the whole description is on the service's own page, one press away.
   return (
     <Link href={`/service/${s.id}`} className="card">
       <span className="card-head"><Glyph kind={shapeOf(s)} on={lit(s)} /><span><span className="card-title">{s.id}</span><br /><span className="card-sub">{s.kind}{s.agentName ? ` · ${s.agentName}` : ''}</span></span></span>
-      <span className="card-sub">{s.description}</span>
+      <span className="card-text">{s.description}</span>
       <span className="card-foot"><Health s={s} />{s.hosts[0] && <span className="mono">{s.hosts[0]}</span>}</span>
     </Link>
   );

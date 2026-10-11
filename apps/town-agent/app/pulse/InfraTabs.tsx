@@ -3,7 +3,7 @@
 // bucket is a list, never hidden (I4); the two halves of performance sit side by side (I5); cost per completed run shows
 // both components (I6). Status is public; amounts and metrics are the operator's (`detail`) — withheld, said so.
 import { useState, type ReactNode } from 'react';
-import { Chip, Stat, Sparkline, LagBadge, BasisBadge, fmtInt, fmtUsd, fmtMs, fmtAgo, fmtBytes, fmtPct } from '@ap-town/town-ui';
+import { Chip, Empty, SectionHead, Stat, Sparkline, LagBadge, BasisBadge, fmtInt, fmtUsd, fmtMs, fmtAgo, fmtBytes, fmtPct } from '@ap-town/town-ui';
 import type { TownData } from '../types';
 import type { PerfViewV1 } from '../../worker/pulse-perf';
 
@@ -65,13 +65,19 @@ export function Sources({ t, perf }: { t: TownData; perf: PerfView }): ReactNode
   );
 }
 
+/** How many of an account's resources are listed before the rest are asked for. */
+const SHOW = 12;
+
 export function InfraTab({ t, perf }: { t: TownData; perf: PerfView }): ReactNode {
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const groups = new Map<string, InfraRow[]>();
   for (const r of perf.infrastructure) { const k = `${r.platform}|${r.account}`; groups.set(k, [...(groups.get(k) ?? []), r]); }
+  const unattributedBy = new Map<string, number>();
+  for (const u of perf.unattributed) { const k = `${u.platform}|${u.account}`; unattributedBy.set(k, (unattributedBy.get(k) ?? 0) + 1); }
   const costTotal = (days: PerfViewV1['cost'][number]['days']) => days.reduce((n, d) => n + d.amountMicroUsd, 0);
   return (
     <section>
-      <h2>Infrastructure</h2>
+      <SectionHead eyebrow="What the town runs on" title="Infrastructure" />
       <p className="lede">The platforms the town runs on — each account read with its own read-only token, each number labelled with how current it can be. Status is public; metrics and cost are the operator's.</p>
       <Sources t={t} perf={perf} />
       <p className="quiet">Collected by the town's own MCP (<span className="mono">faithchain-town-mcp</span>), which holds the read credentials and has no hostname of its own. This page asks it; it never holds a credential and never reaches a provider.</p>
@@ -86,25 +92,40 @@ export function InfraTab({ t, perf }: { t: TownData; perf: PerfView }): ReactNod
               <span className="card-head"><span><span className="card-title">{PLATFORM_LABEL[platform] ?? platform}</span><br /><span className="card-sub mono">{accountLabel(t, platform, account)}</span></span><Chip tone={live.length === rows.length ? 'ok' : live.length ? 'warn' : 'bad'}>{live.length} / {rows.length} readable</Chip></span>
               <table className="table table-tight">
                 <thead><tr><th scope="col">Resource</th><th scope="col">Kind</th><th scope="col">Owner</th><th scope="col">Status</th><th scope="col">As of</th>{perf.detail && <th scope="col">Last reading</th>}</tr></thead>
-                <tbody>{rows.slice(0, 60).map((r) => <tr key={r.resource + r.kind}><th scope="row" className="mono">{r.resource}</th><td>{r.kind}</td><td>{ownerChip(r.owner)}</td><td>{statusChip(r)}{r.latest && !r.latest.ok && <span className="quiet"> {r.latest.error}</span>}</td><td><span className="quiet">{fmtAgo(r.latest?.asOf)}</span> <LagBadge lag={r.latest?.lagClass} /></td>{perf.detail && <td>{keyMetrics(r)}{r.series.length > 1 && (r.series[0]?.metrics.requests !== undefined || r.series[0]?.metrics.cpuPercent !== undefined) && <> <Sparkline points={r.series.map((x) => x.metrics.requests ?? x.metrics.cpuPercent ?? null)} label="over the window" /></>}</td>}</tr>)}</tbody>
+                <tbody>{(expanded.has(k) ? rows : rows.slice(0, SHOW)).map((r) => <tr key={r.resource + r.kind}><th scope="row" className="mono">{r.resource}</th><td>{r.kind}</td><td>{ownerChip(r.owner)}</td><td>{statusChip(r)}{r.latest && !r.latest.ok && <span className="quiet"> {r.latest.error}</span>}</td><td><span className="quiet">{fmtAgo(r.latest?.asOf)}</span> <LagBadge lag={r.latest?.lagClass} /></td>{perf.detail && <td>{keyMetrics(r)}{r.series.length > 1 && (r.series[0]?.metrics.requests !== undefined || r.series[0]?.metrics.cpuPercent !== undefined) && <> <Sparkline points={r.series.map((x) => x.metrics.requests ?? x.metrics.cpuPercent ?? null)} label="over the window" /></>}</td>}</tr>)}</tbody>
               </table>
-              {rows.length > 60 && <p className="quiet">{rows.length - 60} more resources not shown.</p>}
+              {rows.length > SHOW && (
+                <p className="quiet">
+                  <button type="button" className="linkish" onClick={() => setExpanded((e) => { const n = new Set(e); if (n.has(k)) n.delete(k); else n.add(k); return n; })}>
+                    {expanded.has(k) ? `Show the first ${SHOW}` : `Show all ${rows.length}`}
+                  </button>
+                  {!expanded.has(k) && ` · ${rows.length - SHOW} more not shown`}
+                </p>
+              )}
             </article>
           );
         })}
       </div>
-      <h3>Cost over the window</h3>
+      <SectionHead eyebrow="What it costs" title="Cost over the window" />
       {!perf.detail ? <p className="quiet">Cost is the operator's read.</p> : perf.cost.length === 0 ? <p className="quiet">No cost rows yet — the cost pass runs daily at 06:30 UTC (Vercel and Azure billed for the last seven days; Cloudflare derived from yesterday's meters).</p> : (
         <table className="table">
-          <thead><tr><th scope="col">Platform · account</th><th scope="col">Owner</th><th scope="col">Basis</th><th scope="col">Total</th><th scope="col">Days</th><th scope="col">As of</th><th scope="col">Complete</th></tr></thead>
+          <thead><tr><th scope="col">Platform · account</th><th scope="col">Owner</th><th scope="col">Basis</th><th scope="col" className="num">Total</th><th scope="col" className="num">Days</th><th scope="col">As of</th><th scope="col">Complete</th></tr></thead>
           <tbody>{perf.cost.map((c, i) => <tr key={i}><th scope="row">{PLATFORM_LABEL[c.platform] ?? c.platform} <span className="quiet mono">{accountLabel(t, c.platform, c.account)}</span></th><td>{ownerChip(c.owner)}</td><td><BasisBadge basis={c.basis} /></td><td>{fmtUsd(costTotal(c.days))}</td><td>{c.days.length} / {perf.days.length}{c.days.length ? <> <Sparkline points={perf.days.map((d) => c.days.find((x) => x.day === d)?.amountMicroUsd ?? null)} label="per day" /></> : null}</td><td className="quiet">{fmtAgo(c.days[c.days.length - 1]?.asOf)} <LagBadge lag={c.basis === 'derived' ? 'hourly' : 'daily-restated'} /></td><td>{c.days.every((d) => d.complete) ? <Chip tone="ok">complete</Chip> : <Chip tone="warn">partial</Chip>}</td></tr>)}</tbody>
         </table>
       )}
-      <h3>Unattributed</h3>
+      <SectionHead eyebrow="Owned by nobody in the manifest" title="Unattributed" />
       {perf.unattributed.length === 0 ? <p className="quiet">Every readable resource is listed under an estate or a service in <span className="mono">town.yaml</span>.</p> : (
         <>
           <p className="lede">Resources the platforms report that <span className="mono">town.yaml</span> lists under nobody — the inventory-drift detector. They are shown, never hidden; list each under its owner's <span className="mono">workers:</span> / <span className="mono">vercelProjects:</span> / <span className="mono">azureResources:</span>.</p>
-          <ul className="plain">{perf.unattributed.map((u) => <li key={`${u.platform}|${u.account}|${u.kind}|${u.resource}`}><span className="mono">{u.resource}</span> <span className="quiet">{u.kind} · {PLATFORM_LABEL[u.platform] ?? u.platform} · {accountLabel(t, u.platform, u.account)}</span></li>)}</ul>
+          {/* Ninety-odd of these as one line each buried the rest of the page. The count and where they are is the
+              finding; the names are what you need only once you go to fix it, so they are one press away. */}
+          <div className="stats stats-tight">
+            {[...unattributedBy.entries()].map(([k, n]) => { const [pl, acct] = k.split('|') as [string, string]; return <Stat key={k} label={PLATFORM_LABEL[pl] ?? pl} value={n} sub={accountLabel(t, pl, acct)} tone="warn" />; })}
+          </div>
+          <details className="more">
+            <summary>Name all {perf.unattributed.length}</summary>
+            <ul className="namelist">{perf.unattributed.map((u) => <li key={`${u.platform}|${u.account}|${u.kind}|${u.resource}`}><span className="mono">{u.resource}</span> <span className="quiet">{u.kind} · {PLATFORM_LABEL[u.platform] ?? u.platform}</span></li>)}</ul>
+          </details>
         </>
       )}
     </section>
@@ -120,26 +141,40 @@ export function PerformanceTab({ t, perf, chain }: { t: TownData; perf: PerfView
   const vms = perf.infrastructure.filter((r) => r.kind === 'vm' && r.latest?.ok && r.latest.metrics.cpuPercent !== undefined);
   return (
     <section>
-      <h2>Performance</h2>
-      <p className="lede">Two halves, side by side: what the infrastructure took (Worker CPU and wall time, D1 query time, chain upstream, the VM) and what the runs took (ask and run duration, each step, each model call, the wait for a signature) — the second as each estate reports it, aggregate only.</p>
+      <SectionHead eyebrow="The run half and the infrastructure half" title="Performance">
+        Two halves, side by side: what the infrastructure took (Worker CPU and wall time, D1 query time, chain
+        upstream, the VM) and what the runs took (ask and run duration, each step, each model call, the wait for a
+        signature) — the second as each estate reports it, aggregate only.
+      </SectionHead>
       {t.estates.length > 1 && <p className="window-picker" role="group" aria-label="Estate">{t.estates.map((e) => <button key={e.id} type="button" className={`button button-quiet${e.id === estate ? ' is-on' : ''}`} aria-pressed={e.id === estate} onClick={() => setEstate(e.id)}>{e.id}</button>)}</p>}
       <section className="stats">
-        <Stat label="Cost per completed run" value={cpr?.microUsd !== null && cpr?.microUsd !== undefined ? fmtUsd(cpr.microUsd) : perf.detail ? '—' : 'operator'} sub={cpr ? (perf.detail ? `${fmtUsd(cpr.inferenceMicroUsd)} inference + ${cpr.infraMicroUsd === null ? 'infra not attributed' : `${fmtUsd(cpr.infraMicroUsd)} infra (${cpr.infraBasis})`} ÷ ${fmtInt(cpr.completedRuns)} runs${cpr.complete ? '' : ' · incomplete'}` : `${fmtInt(cpr.completedRuns)} completed runs · amounts are the operator's`) : 'no heartbeat'} tone={cpr && !cpr.complete ? 'warn' : undefined} />
-        <Stat label="Runs in the block" value={prov ? fmtInt(prov.runs.total) : '—'} sub={prov ? Object.entries(prov.runs.byOutcome).map(([k, v]) => `${v} ${k}`).join(' · ') : 'no performance block yet'} />
-        <Stat label="Run duration" value={prov ? fmtMs(prov.runDurationMs.p50) : '—'} sub={prov ? `p95 ${fmtMs(prov.runDurationMs.p95)} · ${prov.runDurationMs.count} runs` : undefined} />
-        <Stat label="Waiting for a signature" value={prov && prov.parkedWaitMs.count ? fmtMs(prov.parkedWaitMs.p50) : '—'} sub={prov ? (prov.parkedWaitMs.count ? `p95 ${fmtMs(prov.parkedWaitMs.p95)}` : 'not recorded yet') : undefined} />
-        <Stat label="Vault calls / run" value={prov && prov.vaultCallsPerRun.count ? String(prov.vaultCallsPerRun.p50) : '—'} sub={prov && prov.vaultCallsPerRun.count ? `p95 ${prov.vaultCallsPerRun.p95}` : undefined} />
-        <Stat label="DO requests / run" value={prov && prov.doRequestsPerRun.count ? String(prov.doRequestsPerRun.p50) : '—'} sub={prov && prov.doRequestsPerRun.count ? `p95 ${prov.doRequestsPerRun.p95}` : undefined} />
-        <Stat label="First token" value={prov?.firstTokenMs ? fmtMs(prov.firstTokenMs.p50) : '—'} sub={prov ? (prov.firstTokenMs ? `p95 ${fmtMs(prov.firstTokenMs.p95)}` : 'not recorded yet') : undefined} />
+        <Stat
+          label="Cost per completed run"
+          value={cpr?.microUsd !== null && cpr?.microUsd !== undefined ? fmtUsd(cpr.microUsd) : null}
+          absent={perf.detail ? 'nothing to divide yet' : 'the operator’s to see'}
+          sub={cpr ? (perf.detail ? `${fmtUsd(cpr.inferenceMicroUsd)} inference + ${cpr.infraMicroUsd === null ? 'infra not attributed' : `${fmtUsd(cpr.infraMicroUsd)} infra (${cpr.infraBasis})`} ÷ ${fmtInt(cpr.completedRuns)} runs${cpr.complete ? '' : ' · incomplete'}` : `${fmtInt(cpr.completedRuns)} completed runs`) : 'no heartbeat'}
+          tone={cpr && !cpr.complete ? 'warn' : undefined}
+        />
+        <Stat label="Runs in the block" value={prov ? fmtInt(prov.runs.total) : null} absent="no block yet" sub={prov ? Object.entries(prov.runs.byOutcome).map(([k, v]) => `${v} ${k}`).join(' · ') : 'the estate has not reported one'} />
+        <Stat label="Run duration" value={prov ? fmtMs(prov.runDurationMs.p50) : null} absent="no block yet" sub={prov ? `p95 ${fmtMs(prov.runDurationMs.p95)} · ${prov.runDurationMs.count} runs` : undefined} />
+        <Stat label="Waiting for a signature" value={prov && prov.parkedWaitMs.count ? fmtMs(prov.parkedWaitMs.p50) : null} absent={prov ? 'nothing parked' : 'no block yet'} sub={prov && prov.parkedWaitMs.count ? `p95 ${fmtMs(prov.parkedWaitMs.p95)}` : undefined} />
+        <Stat label="Vault calls / run" value={prov && prov.vaultCallsPerRun.count ? String(prov.vaultCallsPerRun.p50) : null} absent="no block yet" sub={prov && prov.vaultCallsPerRun.count ? `p95 ${prov.vaultCallsPerRun.p95}` : undefined} />
+        <Stat label="DO requests / run" value={prov && prov.doRequestsPerRun.count ? String(prov.doRequestsPerRun.p50) : null} absent="no block yet" sub={prov && prov.doRequestsPerRun.count ? `p95 ${prov.doRequestsPerRun.p95}` : undefined} />
+        <Stat label="First token" value={prov?.firstTokenMs ? fmtMs(prov.firstTokenMs.p50) : null} absent={prov ? 'not streamed' : 'no block yet'} sub={prov?.firstTokenMs ? `p95 ${fmtMs(prov.firstTokenMs.p95)}` : undefined} />
       </section>
       {cpr && <p className="quiet">Lag: {cpr.lag.map((l) => <LagBadge key={l} lag={l} />)} — the heartbeat is sampled every five minutes; billed cost restates for up to 72 h.</p>}
 
-      <h3>Infrastructure latency</h3>
-      {!perf.detail ? <p className="quiet">Infrastructure metrics are the operator's read.</p> : (
+      <SectionHead eyebrow="The infrastructure half" title="Infrastructure latency" />
+      {!perf.detail ? (
+        <Empty title="These are the operator's read.">
+          What the infrastructure took is shown to whoever holds the town's ops token. Status and the estate's own
+          aggregate counts are public and are on this page already.
+        </Empty>
+      ) : (
         <div className="cards">
           <article className="card card-wide">
             <span className="card-head"><span className="card-title">Workers</span><span className="quiet">top by requests, last reading</span></span>
-            {workers.length === 0 ? <p className="quiet">No Worker readings yet (hourly).</p> : <table className="table table-tight"><thead><tr><th scope="col">Script</th><th scope="col">Requests</th><th scope="col">Errors</th><th scope="col">CPU p50 / p99</th><th scope="col">Wall p50 / p99</th></tr></thead><tbody>{workers.map((w) => { const m = w.latest!.metrics; return <tr key={w.resource}><th scope="row" className="mono">{w.resource}</th><td>{fmtInt(m.requests ?? 0)}</td><td>{m.requests ? fmtPct((m.errors ?? 0) / m.requests) : '—'}</td><td>{fmtMs(m.cpuP50Ms)} / {fmtMs(m.cpuP99Ms)}</td><td>{fmtMs(m.wallP50Ms)} / {fmtMs(m.wallP99Ms)}</td></tr>; })}</tbody></table>}
+            {workers.length === 0 ? <p className="quiet">No Worker readings yet (hourly).</p> : <table className="table table-tight"><thead><tr><th scope="col">Script</th><th scope="col" className="num">Requests</th><th scope="col" className="num">Errors</th><th scope="col" className="num">CPU p50 / p99</th><th scope="col" className="num">Wall p50 / p99</th></tr></thead><tbody>{workers.map((w) => { const m = w.latest!.metrics; return <tr key={w.resource}><th scope="row" className="mono">{w.resource}</th><td className="num">{fmtInt(m.requests ?? 0)}</td><td className="num">{m.requests ? fmtPct((m.errors ?? 0) / m.requests) : '—'}</td><td className="num">{fmtMs(m.cpuP50Ms)} / {fmtMs(m.cpuP99Ms)}</td><td className="num">{fmtMs(m.wallP50Ms)} / {fmtMs(m.wallP99Ms)}</td></tr>; })}</tbody></table>}
           </article>
           <article className="card">
             <span className="card-head"><span className="card-title">Chain upstream</span></span>
@@ -156,16 +191,16 @@ export function PerformanceTab({ t, perf, chain }: { t: TownData; perf: PerfView
         </div>
       )}
 
-      <h3>Run latency — {estate}</h3>
+      <SectionHead eyebrow="The run half" title={`Run latency — ${estate}`} />
       {!prov ? <p className="quiet">This estate has not reported a performance block yet. Its runtime rolls the block up from its operator index (runs indexed since the column shipped); until then the Estates tab's ask p95 is the one latency it reports.</p> : (
         <div className="cards">
           <article className="card card-wide">
             <span className="card-head"><span className="card-title">Step duration by capability</span><span className="quiet">{sumQ(prov.stepDuration.map((s) => s.quantiles))} steps</span></span>
-            {prov.stepDuration.length === 0 ? <p className="quiet">No steps in the window.</p> : <table className="table table-tight"><thead><tr><th scope="col">Capability</th><th scope="col">Risk</th><th scope="col">Steps</th><th scope="col">p50</th><th scope="col">p95</th></tr></thead><tbody>{prov.stepDuration.map((s) => <tr key={`${s.capability}|${s.risk}`}><th scope="row" className="mono">{s.capability}</th><td>{s.risk ?? '—'}</td><td>{fmtInt(s.quantiles.count)}</td><td>{fmtMs(s.quantiles.p50)}</td><td>{fmtMs(s.quantiles.p95)}</td></tr>)}</tbody></table>}
+            {prov.stepDuration.length === 0 ? <p className="quiet">No steps in the window.</p> : <table className="table table-tight"><thead><tr><th scope="col">Capability</th><th scope="col">Risk</th><th scope="col" className="num">Steps</th><th scope="col" className="num">p50</th><th scope="col" className="num">p95</th></tr></thead><tbody>{prov.stepDuration.map((s) => <tr key={`${s.capability}|${s.risk}`}><th scope="row" className="mono">{s.capability}</th><td>{s.risk ?? '—'}</td><td className="num">{fmtInt(s.quantiles.count)}</td><td className="num">{fmtMs(s.quantiles.p50)}</td><td className="num">{fmtMs(s.quantiles.p95)}</td></tr>)}</tbody></table>}
           </article>
           <article className="card card-wide">
             <span className="card-head"><span className="card-title">Model latency by provider · profile</span></span>
-            {prov.modelLatencyMs.length === 0 ? <p className="quiet">No model calls in the window.</p> : <table className="table table-tight"><thead><tr><th scope="col">Provider</th><th scope="col">Profile</th><th scope="col">Calls</th><th scope="col">p50</th><th scope="col">p95</th><th scope="col">Failed</th></tr></thead><tbody>{prov.modelLatencyMs.map((m) => <tr key={`${m.provider}|${m.profile}`}><th scope="row">{m.provider}</th><td className="mono">{m.profile ?? '—'}</td><td>{fmtInt(m.quantiles.count)}</td><td>{fmtMs(m.quantiles.p50)}</td><td>{fmtMs(m.quantiles.p95)}</td><td>{m.failed ? <Chip tone="warn">{m.failed}</Chip> : '0'}</td></tr>)}</tbody></table>}
+            {prov.modelLatencyMs.length === 0 ? <p className="quiet">No model calls in the window.</p> : <table className="table table-tight"><thead><tr><th scope="col">Provider</th><th scope="col">Profile</th><th scope="col" className="num">Calls</th><th scope="col" className="num">p50</th><th scope="col" className="num">p95</th><th scope="col" className="num">Failed</th></tr></thead><tbody>{prov.modelLatencyMs.map((m) => <tr key={`${m.provider}|${m.profile}`}><th scope="row">{m.provider}</th><td className="mono">{m.profile ?? '—'}</td><td className="num">{fmtInt(m.quantiles.count)}</td><td className="num">{fmtMs(m.quantiles.p50)}</td><td className="num">{fmtMs(m.quantiles.p95)}</td><td>{m.failed ? <Chip tone="warn">{m.failed}</Chip> : '0'}</td></tr>)}</tbody></table>}
           </article>
           <article className="card">
             <span className="card-head"><span className="card-title">Authority verdicts</span></span>

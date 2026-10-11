@@ -234,7 +234,15 @@ async function api(path: string, url: URL, env: Env, town: TownManifest, selfHos
       const a = await client.ask(q, { timeoutMs: 45_000 });
       const data = (a.task?.artifacts ?? []).flatMap((x: { parts?: Array<{ data?: unknown }> }) => x.parts ?? []).map((p) => p.data).find((d) => d && typeof d === 'object') as { cited?: Array<{ key: string; day?: string }>; runRef?: string } | undefined;
       return json({ ok: true, answer: a.text || '(no words)', agent: name, ...(data?.cited ? { cited: data.cited } : {}), ...(data?.runRef ? { runRef: data.runRef } : {}) });
-    } catch (e) { return json({ ok: false, error: 'unreachable', detail: `${name} at ${host} did not answer: ${e instanceof Error ? e.message : String(e)}` }, 502); }
+    } catch (e) {
+      const why = e instanceof Error ? e.message : String(e);
+      // The agent is chartered and its door answers, but a stranger's plain question is not yet something it
+      // admits: the public lane takes a NAMED public skill, and the town skill plus the records behind it are
+      // spec 436 §5.5 T2/T3. Say that, rather than repeat "not chartered" at a name that now resolves on chain.
+      if (/admits only an authenticated principal/i.test(why))
+        return json({ ok: false, error: 'not_public_yet', detail: `${name} is chartered and its door answers, but it does not yet take a stranger's question — its public town skill and the records behind it are still to come (spec 436 §5.5 T2/T3). The Pulse's tabs show the live numbers meanwhile.` }, 503);
+      return json({ ok: false, error: 'unreachable', detail: `${name} at ${host} did not answer: ${why}` }, 502);
+    }
   }
   return json({ error: 'not found' }, 404);
 }

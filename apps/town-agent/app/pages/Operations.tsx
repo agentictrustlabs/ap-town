@@ -3,7 +3,7 @@
 // the Homes (the estates' run mix), Inference and Chain (the two metered gateways), Applications. Everything here is
 // aggregate and public: probes, rollups, counts. Nothing here is anybody's Home; a person's truth is reached by link.
 import { useEffect, useState, type ReactNode } from 'react';
-import { Link, Loading, useRoute, Chip, Stat, Sparkline, UpStrip, WindowPicker, Bar, fmtInt, fmtUsd, fmtMs, fmtAgo, type Loaded, type PulseWindow } from '@ap-town/town-ui';
+import { Band, Link, Loading, useRoute, Chip, Stat, Sparkline, UpStrip, WindowPicker, Bar, fmtInt, fmtUsd, fmtMs, fmtAgo, type Loaded, type PulseWindow } from '@ap-town/town-ui';
 import { InfraTab, PerformanceTab, type EstatePerf, type PerfView } from '../pulse/InfraTabs';
 import type { TownData } from '../types';
 import type { PulseReadV1 } from '../../worker/pulse';
@@ -60,6 +60,19 @@ export function Operations({ t, tab = 'town' }: { t: TownData; tab?: Tab }): Rea
       <section className="hero">
         <h1>Operations.</h1>
         <p className="lede">How the {t.town} town is doing — now and over the last {window}. One manifest describes it, every service is probed, the two gateways report what they metered, every estate reports its counts. Nothing here is anybody's Home.</p>
+        {pulse.state === 'ready' && (
+          <Band
+            figures={[
+              (() => { const d = t.services.filter((s) => s.signals.healthy === 'down').length; const u = t.services.filter((s) => s.signals.healthy === 'up' || s.signals.healthy === 'self').length; const pr = t.services.filter((s) => s.signals.healthy !== 'unobserved').length;
+                return d > 0 ? { label: 'Services answering', value: `${u} of ${pr}`, sub: `${d} not answering`, tone: 'bad' as const }
+                             : { label: 'Services answering', value: `${u} of ${pr}`, sub: 'probed just now', tone: 'ok' as const }; })(),
+              (() => { const src = pulse.data.performance.sources ?? []; const okN = src.filter((x) => x.ok).length;
+                return { label: 'Infra sources', value: src.length ? `${okN} of ${src.length}` : '—', sub: src.length ? (okN === src.length ? 'all reading' : `${src.length - okN} not configured`) : 'none yet', ...(src.length && okN < src.length ? { tone: 'warn' as const } : {}) }; })(),
+              { label: 'Last sample', value: pulse.data.sampledAt ? fmtAgo(pulse.data.sampledAt) : '—', sub: pulse.data.sampledAt ? 'the sampler runs every 5 min' : 'no sample yet' },
+              { label: 'This window', value: window, sub: pulse.data.performance.detail ? 'operator read' : 'public read' },
+            ]}
+          />
+        )}
       </section>
       <nav className="tabs" aria-label="Pulse">
         {TABS.map(([id, label]) => <Link key={id} href={id === 'town' ? '/operations' : `/operations/${id}`} className={`tab${tab === id ? ' is-on' : ''}`} aria-current={tab === id ? 'page' : undefined}>{label}</Link>)}
