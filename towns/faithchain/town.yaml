@@ -43,6 +43,32 @@ estates:
               demo-a2a, demo-mcp, demo-edge, home-mcp]
     vercelProjects: [faithnet-home]
 
+  # THE SECOND ESTATE on this chain, on default platform names by the owner's instruction (2026-10-11): no
+  # faithnet DNS, so its Home is the Vercel project's own host and its Workers are reached on `workers.dev`.
+  # It has no `agentZone`: per-agent card hosts need a wildcard zone, which a `workers.dev` host cannot give —
+  # its agents are reached through its edge by name instead, which is the routing rule anyway (a name resolves
+  # to an endpoint from the chain; a subdomain is never the authority).
+  - id: imbnet
+    repo: agentictrustlabs/ap-home
+    home: https://imb-home.vercel.app
+    edge: https://imb-edge.richardpedersen3.workers.dev
+    a2a: https://imb-runtime.richardpedersen3.workers.dev
+    lanes:
+      imb-edge.richardpedersen3.workers.dev: imb-edge
+    # The same chain and the same priced roots: an estate is a Home and the people under it, not a namespace.
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
+    # NAMED SO A DASHBOARD IS READABLE. `demo-a2a-faithnet` and `demo-mcp-faithnet` are historical: "demo" says
+    # nothing and "a2a"/"mcp" name a protocol rather than a job. These say what each Worker IS and sort together
+    # under one prefix, which is what you want the moment a list holds two estates' worth of them.
+    #   imb-runtime   the agent runtime — the A2A door and the harness behind it   (faithnet: demo-a2a-faithnet)
+    #   imb-vault     the records: per-agent vaults behind a private MCP           (faithnet: demo-mcp-faithnet)
+    #   imb-edge      admission — the public gate in front of the runtime          (faithnet: demo-edge-faithnet)
+    #   imb-home-mcp  the Home's own MCP, the entrance an outside client uses      (faithnet: home-mcp-faithnet)
+    #   imb-approval  the door a parked act waits at for its signature             (faithnet: harness-approval-faithnet)
+    workers: [imb-runtime, imb-vault, imb-edge, imb-home-mcp, imb-approval]
+    vercelProjects: [imb-home]
+    kms: { tenant: imb }
+
 services:
   # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
   - id: registry

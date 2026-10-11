@@ -65,8 +65,11 @@ describe('generators', () => {
       { binding: 'LANE_FAITHNET_1', service: 'demo-edge-faithnet', pattern: 'edge.faithnet.io', estate: 'faithnet' },
       { binding: 'LANE_FAITHNET_1', service: 'demo-edge-faithnet', pattern: 'demo-edge-faithnet.richardpedersen3.workers.dev', estate: 'faithnet' },
       { binding: 'LANE_FAITHNET_2', service: 'demo-a2a-faithnet', pattern: '*.faithnet.ai', estate: 'faithnet' },
+      // A SECOND ESTATE gets its own binding, numbered within ITS estate: a lane is per estate, so imbnet's
+      // first is _1 beside faithnet's _1 and the two never collide.
+      { binding: 'LANE_IMBNET_1', service: 'imb-edge', pattern: 'imb-edge.richardpedersen3.workers.dev', estate: 'imbnet' },
     ]);
-    expect(laneRoutesVar(town!)).toBe('edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2');
+    expect(laneRoutesVar(town!)).toBe('edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2,imb-edge.richardpedersen3.workers.dev=LANE_IMBNET_1');
   });
 
   it('authorization is never a town signal', () => {

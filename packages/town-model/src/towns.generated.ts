@@ -138,6 +138,40 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "vercelProjects": [
           "faithnet-home"
         ]
+      },
+      {
+        "id": "imbnet",
+        "repo": "agentictrustlabs/ap-home",
+        "home": "https://imb-home.vercel.app",
+        "edge": "https://imb-edge.richardpedersen3.workers.dev",
+        "a2a": "https://imb-runtime.richardpedersen3.workers.dev",
+        "lanes": {
+          "imb-edge.richardpedersen3.workers.dev": "imb-edge"
+        },
+        "nameRoots": [
+          "me",
+          "org",
+          "team",
+          "svc",
+          "workspace",
+          "treasury",
+          "registry",
+          "church",
+          "circle"
+        ],
+        "workers": [
+          "imb-runtime",
+          "imb-vault",
+          "imb-edge",
+          "imb-home-mcp",
+          "imb-approval"
+        ],
+        "vercelProjects": [
+          "imb-home"
+        ],
+        "kms": {
+          "tenant": "imb"
+        }
       }
     ],
     "services": [

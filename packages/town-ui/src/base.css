@@ -374,3 +374,6 @@ ul.plain { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 4px;
 .more > summary:hover { text-decoration: underline; }
 .namelist { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 4px 20px; font-size: .9rem; }
 .namelist li { overflow-wrap: anywhere; }
+
+/* Which estate an Ask is addressed to — a control beside the question, not a setting elsewhere. */
+.ask-estate { font: inherit; font-size: .95rem; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--ink); flex: 0 0 auto; }

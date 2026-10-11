@@ -158,7 +158,7 @@ function EstatesTab({ t, p }: { t: TownData; p: PulseView }): ReactNode {
   return (
     <section>
       <h2>Estates</h2>
-      <Ask scope="estate" />
+      <Ask scope="estate" estates={t.estates} />
       <p className="lede">One card per estate on this chain. Each reports its own counts to the town — agents, homes, runs, spend — over a token the estate issued. The estate's people and their records stay at the estate; a stale card is dark, never guessed.</p>
       <div className="cards">
         {t.estates.map((e) => {
