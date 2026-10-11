@@ -53,8 +53,12 @@ estates:
     home: https://imb-home.vercel.app
     edge: https://imb-edge.richardpedersen3.workers.dev
     a2a: https://imb-runtime.richardpedersen3.workers.dev
+    # A Worker cannot fetch a same-account workers.dev host, and imbnet has no zone — so every host of this
+    # estate that a town Worker must reach is declared here, and `pnpm gen:town` writes the binding. The
+    # runtime is on the list because the town pulls this estate's HEARTBEAT from it.
     lanes:
       imb-edge.richardpedersen3.workers.dev: imb-edge
+      imb-runtime.richardpedersen3.workers.dev: imb-runtime
     # The same chain and the same priced roots: an estate is a Home and the people under it, not a namespace.
     nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
     # NAMED SO A DASHBOARD IS READABLE. `demo-a2a-faithnet` and `demo-mcp-faithnet` are historical: "demo" says

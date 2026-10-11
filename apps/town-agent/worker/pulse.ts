@@ -3,7 +3,7 @@
 // each estate's heartbeat (counts over a token-gated endpoint; never a name). Samples go into `HeartbeatDO` (SQL, 30
 // days, pruned by alarm) — a SERVING PLANE: wiping it loses trend lines, never a record. `/api/pulse` serves the latest
 // sample per kind and the series for a window. Pulled, aggregate, historical; the town never pushes into an estate.
-import type { TownManifest } from '@ap-town/town-model';
+import { laneBindingFor, type TownManifest } from '@ap-town/town-model';
 import { validateEstateHeartbeat, heartbeatIsStale, type EstateHeartbeatV1 } from '@agenticprimitives/harness/heartbeat';
 import type { Probe } from './signals';
 
@@ -34,6 +34,8 @@ export interface PulseEnv {
   TOWN_OPS_TOKEN?: string;
   /** JSON `estate id → token`; an estate without one is sampled as "unreadable", never as zeros. */
   ESTATE_HEARTBEAT_TOKENS?: string;
+  /** Set by `pnpm gen:town` from the manifest's lanes: `<host>=<binding>,…` (see laneBindingFor). */
+  LANE_ROUTES?: string;
   HEARTBEAT?: DurableObjectNamespace;
 }
 
@@ -69,7 +71,14 @@ export async function samplePulse(town: TownManifest, env: PulseEnv, probe: Prob
     const token = tokens[e.id];
     if (!token) { out.push({ kind: 'estate', id: e.id, at, ok: false, payload: null, error: 'no heartbeat token for this estate' }); return; }
     try {
-      const r = await fetchImpl(`${e.a2a.replace(/\/$/, '')}/ops/heartbeat`, { headers: { accept: 'application/json', authorization: `Bearer ${token}`, 'user-agent': 'ap-town-agent' }, signal: AbortSignal.timeout(15_000) });
+      // An estate with no zone of its own answers on a workers.dev host, which a same-account Worker cannot
+      // fetch (the request returns 404 — indistinguishable from "that endpoint is gone", which is how imbnet
+      // first read as down while it was serving). The manifest declares such a host as a public LANE and
+      // `pnpm gen:town` binds it; reach goes through the binding, authority still through the estate's door.
+      const url = `${e.a2a.replace(/\/$/, '')}/ops/heartbeat`;
+      const req = new Request(url, { headers: { accept: 'application/json', authorization: `Bearer ${token}`, 'user-agent': 'ap-town-agent' }, signal: AbortSignal.timeout(15_000) });
+      const lane = laneBindingFor(env, new URL(url).hostname);
+      const r = lane ? await lane.fetch(req) : await fetchImpl(req);
       if (!r.ok) { out.push({ kind: 'estate', id: e.id, at, ok: false, payload: null, error: `answered ${r.status}` }); return; }
       const v = validateEstateHeartbeat(await r.json());
       out.push(v.ok ? { kind: 'estate', id: e.id, at, ok: true, payload: v.heartbeat } : { kind: 'estate', id: e.id, at, ok: false, payload: null, error: `unreadable heartbeat: ${v.errors.join('; ')}` });

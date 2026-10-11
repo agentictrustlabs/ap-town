@@ -26,6 +26,7 @@
     "@agenticprimitives/registry-kit": "0.0.0-alpha.20",
     "@agenticprimitives/types": "1.0.0-alpha.32",
     "@agenticprimitives/verifiable-credentials": "0.0.0-alpha.29",
+    "@ap-town/town-model": "workspace:*",
     "hono": "4.13.0",
     "viem": "2.52.2"
   },

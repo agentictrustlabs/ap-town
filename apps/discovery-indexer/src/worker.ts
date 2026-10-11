@@ -141,18 +141,9 @@ async function agentPassages(env: Env, nodes: AgentNode[]): Promise<number | 'un
 }
 
 /** The service binding that serves `host` per `LANE_ROUTES` (exact host or `*.suffix`), or null for an external host. */
-export function laneBindingFor(env: { LANE_ROUTES?: string }, host: string): Fetcher | null {
-  for (const route of (env.LANE_ROUTES ?? '').split(',').map((r) => r.trim()).filter(Boolean)) {
-    const [pattern, name] = route.split('=').map((x) => x.trim());
-    if (!pattern || !name) continue;
-    const hit = pattern.startsWith('*.') ? host.endsWith(pattern.slice(1)) : host === pattern;
-    if (!hit) continue;
-    const b = (env as unknown as Record<string, unknown>)[name] as Fetcher | undefined;
-    if (!b) throw new Error(`LANE_ROUTES sends ${host} to ${name}, which is not bound`);
-    return b;
-  }
-  return null;
-}
+// The shared resolver (packages/town-model/src/lanes.ts) — re-exported because this app's tests name it here.
+import { laneBindingFor } from '@ap-town/town-model';
+export { laneBindingFor };
 
 function shelfDeps(env: Env): ShelfDeps | null {
   if (!env.AI || !env.KB_VECTORS || !env.INDEXER_STATE) return null;

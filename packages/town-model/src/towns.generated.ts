@@ -146,7 +146,8 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "edge": "https://imb-edge.richardpedersen3.workers.dev",
         "a2a": "https://imb-runtime.richardpedersen3.workers.dev",
         "lanes": {
-          "imb-edge.richardpedersen3.workers.dev": "imb-edge"
+          "imb-edge.richardpedersen3.workers.dev": "imb-edge",
+          "imb-runtime.richardpedersen3.workers.dev": "imb-runtime"
         },
         "nameRoots": [
           "me",

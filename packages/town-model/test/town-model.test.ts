@@ -68,8 +68,11 @@ describe('generators', () => {
       // A SECOND ESTATE gets its own binding, numbered within ITS estate: a lane is per estate, so imbnet's
       // first is _1 beside faithnet's _1 and the two never collide.
       { binding: 'LANE_IMBNET_1', service: 'imb-edge', pattern: 'imb-edge.richardpedersen3.workers.dev', estate: 'imbnet' },
+      // The RUNTIME is a lane too, because imbnet has no zone: the town pulls its heartbeat from that host,
+      // and a same-account Worker cannot fetch a workers.dev one.
+      { binding: 'LANE_IMBNET_2', service: 'imb-runtime', pattern: 'imb-runtime.richardpedersen3.workers.dev', estate: 'imbnet' },
     ]);
-    expect(laneRoutesVar(town!)).toBe('edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2,imb-edge.richardpedersen3.workers.dev=LANE_IMBNET_1');
+    expect(laneRoutesVar(town!)).toBe('edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2,imb-edge.richardpedersen3.workers.dev=LANE_IMBNET_1,imb-runtime.richardpedersen3.workers.dev=LANE_IMBNET_2');
   });
 
   it('authorization is never a town signal', () => {
