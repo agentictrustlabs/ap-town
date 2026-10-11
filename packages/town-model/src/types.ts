@@ -42,7 +42,12 @@ export interface TownEstate {
   agentZone?: string;
   /** The name roots this estate names agents under; the indexer crawls the union over every estate. */
   nameRoots: string[];
-  kms?: { tenant: string };
+  /**
+   * The key-custody service this estate's keys live in. `tenant: null` with `backend` says, in the
+   * manifest itself, that this estate has NO tenant and what it uses instead — so a Pulse reader is not
+   * told an estate has hardware-rooted custody because a name was easier to write than a gap.
+   */
+  kms?: { tenant: string | null; backend?: string };
   /** Spec 437 I4 — the platform resources this estate owns, for the Pulse's attribution (never authority). */
   workers?: string[];
   pagesProjects?: string[];

@@ -67,7 +67,12 @@ estates:
     #   imb-approval  the door a parked act waits at for its signature             (faithnet: harness-approval-faithnet)
     workers: [imb-runtime, imb-vault, imb-edge, imb-home-mcp, imb-approval]
     vercelProjects: [imb-home]
-    kms: { tenant: imb }
+    # NO AKCS TENANT. imbnet's custody root, vault KEKs and service MAC are local-aes with the root an
+    # in-Worker secret — honest for a second demo estate, and a liability a real one would not carry (a
+    # master that cannot be rotated, backed up or recovered). A tenant needs a caller token minted by
+    # `akcs operator bind-caller` on the Azure CVM; naming one here that does not exist would have the
+    # Pulse report custody this estate does not have.
+    kms: { tenant: null, backend: local-aes }
 
 services:
   # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
