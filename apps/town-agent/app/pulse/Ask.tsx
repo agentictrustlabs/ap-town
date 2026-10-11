@@ -12,7 +12,11 @@ export function Ask({ scope }: { scope: 'town' | 'estate'; estate?: string }): R
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [out, setOut] = useState<AskAnswer | null>(null);
-  const examples = scope === 'town' ? ['how is the town doing this week', 'what did inference cost yesterday', 'which services were down in the last 7 days'] : ['how many runs failed this week', 'what is parked for a signature right now', 'how many people joined this month'];
+  // Open-ended, not a menu: the agent answers about anything its records name — a Worker, a service, an
+  // estate, a platform — so the examples show one of each rather than three phrasings of "how is it going".
+  const examples = scope === 'town'
+    ? ['how is the town doing this week', 'tell me about demo-a2a-faithnet', 'is anything broken right now', 'what does the town run on']
+    : ['how many runs failed this week', 'what did the estate spend this week', 'tell me about faithnet-home'];
   const ask = async (text: string) => {
     if (!text.trim() || busy) return;
     setBusy(true); setOut(null);
@@ -23,7 +27,7 @@ export function Ask({ scope }: { scope: 'town' | 'estate'; estate?: string }): R
   return (
     <section className="ask">
       <h2>Ask the {scope}</h2>
-      <p className="lede">Performance, spend, status — answered by the {scope}'s own agent from the records it keeps, with the records named. Counts, never a person.</p>
+      <p className="lede">Ask anything about this deployment — a service, a Worker, an estate, what it cost, what is down. Answered by the {scope}'s own agent from the records it keeps, with the records named. It answers only from those records and says so when they do not hold it. Counts, never a person.</p>
       <form className="ask-row" onSubmit={(e) => { e.preventDefault(); void ask(q); }}>
         <input className="ask-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder={examples[0]} aria-label={`Ask the ${scope}`} disabled={busy} />
         <button type="submit" className="button" disabled={busy || !q.trim()} aria-busy={busy}>{busy ? 'Asking…' : 'Ask'}</button>
