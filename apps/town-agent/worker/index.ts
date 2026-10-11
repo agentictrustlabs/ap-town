@@ -255,8 +255,13 @@ async function api(path: string, url: URL, env: Env, town: TownManifest, selfHos
       // asking for. The portal holds no key and signs nothing; naming a capability is not holding authority, and
       // an agent that does not offer this one simply refuses.
       const sent = await client.sendMessage([{ text: q }, { data: { skill: PULSE_PUBLIC_ASK, question: q } }]);
-      const reply = sent.message ?? (sent.task ? await client.awaitTask(sent.task.id, { timeoutMs: 45_000 }) : null);
-      const parts = sent.message ? (sent.message.parts ?? []) : ((reply as { artifacts?: Array<{ parts?: unknown[] }> } | null)?.artifacts ?? []).flatMap((x) => x.parts ?? []);
+      // THE PUBLIC LANE ANSWERS WITH A MESSAGE AND NO TASK, and a message arrives as the JSON-RPC result ITSELF
+      // rather than under `message` — a reply with `parts` IS the reply. Reading only `sent.message` found
+      // nothing and reported a real answer as "answered without words".
+      const asMessage = sent as unknown as { parts?: unknown[] };
+      const direct = Array.isArray(asMessage.parts) ? asMessage.parts : sent.message?.parts;
+      const task = direct ? null : sent.task ? await client.awaitTask(sent.task.id, { timeoutMs: 45_000 }) : null;
+      const parts = direct ?? ((task?.artifacts ?? []) as Array<{ parts?: unknown[] }>).flatMap((x) => x.parts ?? []);
       const textOf = (ps: unknown[]): string => ps.map((x) => (x as { text?: string }).text ?? '').filter(Boolean).join(' ').trim();
       const data = parts.map((x) => (x as { data?: unknown }).data).find((d) => d && typeof d === 'object') as { answer?: string; cited?: Array<{ key: string; day?: string }>; read?: boolean; window?: unknown; runRef?: string } | undefined;
       const words = data?.answer || textOf(parts);
