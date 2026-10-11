@@ -76,10 +76,13 @@ estates:
     # master that cannot be rotated, backed up or recovered). A tenant needs a caller token minted by
     # `akcs operator bind-caller` on the Azure CVM; naming one here that does not exist would have the
     # Pulse report custody this estate does not have.
-    # NOT its own tenant: the house pattern is one tenant, many least-privilege callers (skills-a2a and
-    # faithnet-b both sit in `faithnet` with their own). imbnet's two callers are not bound yet, so its
-    # vault KEK path is off and every person's storage stays unprovisioned — stated, not implied.
-    kms: { tenant: faithnet, backend: pending-callers }
+    # ITS OWN TENANT. An AKCS tenant is a derivation root — "MAC keys are derived from the tenant root"
+    # — so a tenant is an ESTATE boundary. faithnet-b and skills-a2a share `faithnet` because they are a
+    # second deployment OF faithnet and a service WITHIN it; imbnet is a different estate, and its whole
+    # defining property is that its persons are different Smart Agents, which comes from a separate root.
+    # Not provisioned yet, so its vault KEK path is off and every person's storage stays unprovisioned —
+    # stated, not implied.
+    kms: { tenant: imb, backend: pending }
 
 services:
   # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
