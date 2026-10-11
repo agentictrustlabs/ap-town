@@ -31,8 +31,10 @@ Described in one file, [`towns/faithchain/town.yaml`](towns/faithchain/town.yaml
 | Key custody (AKCS) | `faithkms` | `akcs-pilot.faithnet.io` |
 | Game Night | `pokernight` | `gamenight.faithnet.io` |
 
-Estates: **Faithnet** ([`ap-home`](https://github.com/agentictrustlabs/ap-home)). The Base Sepolia demo town is in
-[`towns/base-sepolia`](towns/base-sepolia/town.yaml).
+Estates: **Faithnet** and **imbnet** (both [`ap-home`](https://github.com/agentictrustlabs/ap-home)). The Base Sepolia demo town is in
+[`towns/base-sepolia`](towns/base-sepolia/town.yaml). To add an estate to a town — the row, the lanes, the gateway token, the
+KMS tenant, the naming gate, the heartbeat — follow [`operations/runbooks/publish-an-estate.md`](operations/runbooks/publish-an-estate.md)
+(rung 3 of the [operator's ladder](https://github.com/agentictrustlabs/agenticprimitives/blob/master/docs/operators/README.md)).
 
 ## Layout
 
