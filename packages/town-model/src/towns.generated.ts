@@ -171,8 +171,8 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "imb-home"
         ],
         "kms": {
-          "tenant": null,
-          "backend": "local-aes"
+          "tenant": "faithnet",
+          "backend": "pending-callers"
         }
       }
     ],
