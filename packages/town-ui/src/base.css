@@ -326,8 +326,11 @@ a.card:hover, button.card:hover { border-color: var(--accent); box-shadow: var(-
 .stats-tight { grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px; margin: 10px 0; }
 .stat { display: flex; flex-direction: column; gap: 5px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); min-width: 0; box-shadow: var(--shadow); }
 .stat-label { font-size: 0.73rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; line-height: 1.35; }
-.stat-value { font-size: 1.7rem; font-weight: 680; line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; margin-top: auto; }
+/* `overflow-wrap: anywhere` is for a long NUMBER or hash, which may break anywhere; a word may not.
+   In a narrow card it split the cost basis into "operato / r", which reads as a typo rather than a word. */
+.stat-value { font-size: 1.7rem; font-weight: 680; line-height: 1.15; letter-spacing: -0.02em; overflow-wrap: break-word; word-break: normal; hyphens: none; font-variant-numeric: tabular-nums; margin-top: auto; }
 /* A figure withheld or not yet taken is not a small figure — it is set quiet so it never reads as zero. */
+.stat-value-word { font-size: 1.15rem; font-weight: 650; letter-spacing: 0; }
 .stat-value-none { font-size: 1.05rem; font-weight: 600; color: var(--muted); letter-spacing: 0; }
 .stat-sub { font-size: 0.82rem; color: var(--muted); line-height: 1.4; }
 .stat-ok .stat-value { color: var(--ok); } .stat-warn .stat-value { color: var(--warn); } .stat-bad .stat-value { color: var(--bad); } .stat-muted .stat-value { color: var(--muted); }

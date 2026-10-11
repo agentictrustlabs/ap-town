@@ -9,10 +9,14 @@ import type { ReactNode } from 'react';
  */
 export function Stat({ label, value, sub, tone, absent = 'not recorded yet' }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'ok' | 'warn' | 'bad' | 'muted'; absent?: string }): ReactNode {
   const none = value === null || value === undefined;
+  // A value that is a WORD rather than a figure ("operator", "withheld") is set smaller, because a card
+  // sized for a four-digit count is not wide enough for one at the figure size: `operator` was breaking
+  // across lines as "operato / r", which reads as a typo and not as a word.
+  const word = !none && typeof value === 'string' && /^[A-Za-z][A-Za-z ']*$/.test(value);
   return (
     <div className={`stat${tone ? ` stat-${tone}` : ''}`}>
       <span className="stat-label">{label}</span>
-      <span className={`stat-value${none ? ' stat-value-none' : ''}`}>{none ? absent : value}</span>
+      <span className={`stat-value${none ? ' stat-value-none' : ''}${word ? ' stat-value-word' : ''}`}>{none ? absent : value}</span>
       {sub !== undefined && <span className="stat-sub">{sub}</span>}
     </div>
   );
