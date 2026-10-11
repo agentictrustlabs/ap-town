@@ -82,7 +82,7 @@ estates:
     # defining property is that its persons are different Smart Agents, which comes from a separate root.
     # Not provisioned yet, so its vault KEK path is off and every person's storage stays unprovisioned —
     # stated, not implied.
-    kms: { tenant: imb, backend: pending }
+    kms: { tenant: imb, backend: akcs   # tenant imb, callers imb-vault-2 / imb-runtime-2, CVM levels only (2026-10-11) }
 
 services:
   # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
