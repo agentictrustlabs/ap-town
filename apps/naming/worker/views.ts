@@ -71,12 +71,18 @@ const ATL_HOMEPAGE = keccak256(new TextEncoder().encode('atl:homepage'));
  */
 export async function estateOfAgent(ctx: Ctx, agent: Address | null): Promise<EstateOfAgent | null> {
   if (!agent) return null;
+  try { return await readEstateOfAgent(ctx, agent); } catch { return null; }
+}
+async function readEstateOfAgent(ctx: Ctx, agent: Address): Promise<EstateOfAgent | null> {
   const name = (await ctx.chain.profile<string>('getStringProperty', [agent, ATL_ESTATE]).catch(() => '')).trim();
   if (!name) return null;
   const known = ctx.town.estates.find((e) => e.estateName?.toLowerCase() === name.toLowerCase());
-  // The estate agent is resolved through the registry like any other name; a name that resolves to
-  // nothing yet still answers, because what the person's agent DECLARED is the fact being reported.
-  const estateAgent = nz(await ctx.chain.ur<Address>('resolveName', [namehash(name) as Hex]).catch(() => ZERO));
+  // NAMEHASHED HERE, not by the naming package: its `namehash` validates the suffix against the TLDs it
+  // knows and throws `unknown_tld` for a root added after that package was published — which is every
+  // new root, including `.estate`. A node is keccak over the labels and nothing else; what the agent
+  // DECLARED is the fact being reported, and this read must not depend on a package's root list.
+  const node = name.split('.').reverse().reduce<Hex>((acc, label) => keccak256(concat([acc, keccak256(new TextEncoder().encode(label))])) as Hex, `0x${'0'.repeat(64)}` as Hex);
+  const estateAgent = nz(await ctx.chain.ur<Address>('resolveName', [node]).catch(() => ZERO));
   const home = estateAgent ? (await ctx.chain.profile<string>('getStringProperty', [estateAgent, ATL_HOMEPAGE]).catch(() => '')).trim() : '';
   return { name, id: known?.id ?? null, home: home || null, agent: estateAgent };
 }
