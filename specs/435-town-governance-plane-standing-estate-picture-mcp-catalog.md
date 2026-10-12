@@ -231,6 +231,23 @@ countersignature instead of a click.
 | **W2** | ap-home | the Standing page: publish / renew / revoke as a two-role ceremony; connectors exposed to the steward through `/connect/*` under grant; `/estate` gains the checklist and the manifest export; the runtime refuses a drifted manifest at call time | one real `TownStanding` on faithchain (ruth.me ↔ scripture-resolver.svc); a drifted test MCP is refused with the reason in the run |
 | **W3** | ap-town | `discovery-indexer` projects standings, manifests, derived `inEstate` (the only writer, chain-derivable only — ADR-0040 holds: a standing is on chain, a manifest is a signed public document) · `discovery-mcp` tools · `town-model` `TownEstatePicture`, `AgentStanding`, `McpCatalogEntry` | the KB answers `get_standing` for the W2 attestation; reading the whole KB still reveals nothing the chain would not |
 | **W4** | ap-town | `/estate/:id`, `/agent/:id` Standing section, `/mcp`, the three A2A skills; the scene lights by standing | the public pages render with no session; inferred and attested are visibly different |
+
+**W4 landed in part, 2026-10-12** — everything that stands on the manifest and the chain, with the attested half
+named as absent rather than faked:
+
+| Built | Still W1/W3 |
+| --- | --- |
+| `/estate/:id` — where it lives, name roots + naming gate, custody, its MCP servers, its agents grouped by ADR-0046 class, what it runs, and the estate's own agent answering questions on the page | the Standing chips (custody *n*, steward disclosed, admission current, card released) and the scene lighting by standing |
+| `/mcp` — the census at three scales, with `exposure` per server and probes where declared | trust level, manifest digest, tool names — all of which need the signed `McpToolManifestV1` |
+| `/agent/:id` — "The tools it serves": its own `atl:mcpEndpoint`, and the plain statement that what it has ATTACHED is in its owner's vault and cannot be shown here | the Standing section |
+| the manifest declares MCP servers (`services[].mcp`, `services[].mcpServers`, `estates[].mcpServers`); `binding` + a url is refused | the catalog as a REGISTRY QUERY over `mcp` surfaces, which is what §5 actually specifies |
+| placement by endpoint (`estate-placement.ts`), `how` on every row, inferred never promoted | `TownStanding` → attested placement |
+| `GET /roster` on the registry — every row with its endpoints, so a census is one read rather than 212 | — |
+
+**One deviation from §4, deliberate.** The name-root rung is NOT used for placement. This town's two estates share
+nine roots (`me`, `org`, `team`, `svc`, `workspace`, `treasury`, `registry`, `church`, `circle`), so a root places an
+agent in both estates at once — not an inference but a coin toss with a citation. It is used only to say an agent is
+nameable in this town. In a one-estate town the rung is sound and can be added behind that condition.
 | **W5** | ap-town · ap-home | `/estate/:id/admin` and the `town-portal` Ask scope: private legs by reference, re-attest list, quarantine, bundle attach, manifest export | a quarantine shows as two parked acts at Home; a non-steward gets the public lens only; the export verifies against the chain |
 
 W1 can run beside 434's W1; W2 needs W1; W3–W5 need W2's first attestation to have something to show.
