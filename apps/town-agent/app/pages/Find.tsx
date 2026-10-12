@@ -92,6 +92,11 @@ export function Find({ t }: { t: TownData }): ReactNode {
                 title={`${r.results.length} of ${r.matched ?? r.results.length} matched`}
               >
                 Ordered by fit and public evidence — never by trust.{droppedNote ? ` ${droppedNote[0]!.toUpperCase()}${droppedNote.slice(1)}.` : ''}
+                {/* WHAT WAS READ, not just what came back. The registry ranks a page of the knowledge base, and
+                    the base is bigger than the page — so a list that says only "11 of 11" reads as the whole
+                    field when it is a third of it. The words' own narrow read is counted separately, because
+                    that is what puts an agent you NAMED in front of you. */}
+                {r.page ? <>{' '}<span className="quiet">Read {r.page.returned} agent{r.page.returned === 1 ? '' : 's'} from the knowledge base{r.page.truncated ? ` (it holds more than this page of ${r.page.limit})` : ''}{r.page.named ? `, ${r.page.named} of them found by the words you used` : ''}.</span></> : null}
               </SectionHead>
               {r.results.length === 0 ? (
                 <Empty title="Nothing in the registry matches that.">

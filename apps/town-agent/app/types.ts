@@ -31,7 +31,14 @@ export interface FindHit {
   agentType?: string | null; tld?: string | null; kind?: string; facets?: string[]; capabilityIds?: string[];
   offerings?: Array<{ skillId?: string; name?: string | null }>; validAttestations?: number; activeRelationships?: number;
 }
-export interface FindResult { ok: boolean; query: string; type: string; registered: boolean; matched?: number; droppedBy?: Record<string, number>; results: FindHit[]; error?: string }
+export interface FindResult {
+  ok: boolean; query: string; type: string; registered: boolean; matched?: number;
+  droppedBy?: Record<string, number>;
+  /** What the registry READ, so "nothing matched" is distinguishable from "the page did not reach it": the broad
+   *  page's size, whether the knowledge base held more, and how many rows the question's own words added. */
+  page?: { limit: number; returned: number; truncated: boolean; named: number };
+  results: FindHit[]; error?: string;
+}
 export interface Facets { ok: boolean; agentTypes: Array<{ value: string; count: number }>; kinds: Array<{ value: string; count: number }>; capabilityIds: Array<{ value: string; count: number }>; undeclaredType?: number }
 export interface AgentDetail {
   key: string;

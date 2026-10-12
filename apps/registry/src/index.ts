@@ -610,12 +610,42 @@ function matchCandidate(a: AgentResult, intent: Intent, satisfiedMandates: strin
 // {query} still works (free-text), so existing callers (the Registry tab's loadRegistry) are unaffected.
 /** The discovery pipeline (spec 281): fetch → enrich → HARD mandates → SOFT rank. Shared by `/discover` and the
  *  ARD `/search` surface so both rank the same way; only the response envelope differs. */
-async function runDiscovery(env: Env, args: { q: string; intent: Intent; mandates?: Mandates; limit?: number }): Promise<{ ok: true; ranked: ReturnType<typeof matchCandidate>[]; candidates: AgentResult[]; dropped: number; droppedBy: Partial<Record<MandateKey, number>> } | { ok: false; error: string }> {
+async function runDiscovery(env: Env, args: { q: string; intent: Intent; mandates?: Mandates; limit?: number }): Promise<{ ok: true; ranked: ReturnType<typeof matchCandidate>[]; candidates: AgentResult[]; dropped: number; droppedBy: Partial<Record<MandateKey, number>>; page: { limit: number; returned: number; truncated: boolean; named: number } } | { ok: false; error: string }> {
   const { intent, mandates, q } = args;
   const limit = args.limit ?? (q ? 25 : 100);
   const mcp = await mcpGet(env, `/search?q=${encodeURIComponent(q)}&limit=${limit}`).catch((e) => ({ ok: false, error: String(e) }));
   if (!mcp?.ok) return { ok: false, error: mcp?.error ?? 'discovery MCP unavailable' };
-  const candidates = mcp.results as AgentResult[];
+  // A COPY, because the narrow read below pushes onto this and `mcp.results` is the same array: counting the
+  // broad page afterwards reported 101 rows read from a 100-row page.
+  const candidates = [...(mcp.results as AgentResult[])];
+  const broad = candidates.length;
+  // ── RETRIEVAL IS NOT RANKING, BUT IT HAS TO SEE WHAT THE QUESTION NAMED ──────────────────────────────
+  //
+  // An intent-driven call sends no `query`, so the broad page is the KB's first `limit` rows in no
+  // particular order of relevance — and the KB is bigger than the page (305 agents to a 100-row page on
+  // 2026-10-12). An agent whose NAME was the question could therefore never be scored at all: `imb-estate`
+  // ranked eleven workspaces and not `imb-estate.workspace`, which sat past the cut. `fitScore` already
+  // gives a name match the top of its range; it was never handed the row.
+  //
+  // So the words get a second, NARROW read: the KB's own substring filter, as the whole phrase and as each
+  // identifier-shaped token in it, merged in by Smart Agent. The broad page is not filtered and not
+  // reordered — nothing is taken away, and what the question named can no longer be missing. At most
+  // three extra bounded reads, and a failure adds nothing rather than failing the call.
+  const words = ((intent.need ?? '').trim() || (intent.skills ?? []).join(' ').trim()).slice(0, 120);
+  let named = 0;
+  if (!q && words) {
+    const toks = [...new Set([words, ...words.toLowerCase().split(/[\s,]+/).filter((t) => t.length >= 3)])].slice(0, 3);
+    const have = new Set(candidates.map((a) => (a.smartAgent ?? '').toLowerCase()));
+    const pages = await Promise.all(toks.map((t) => mcpGet(env, `/search?q=${encodeURIComponent(t)}&limit=25`).catch(() => null)));
+    for (const page of pages) {
+      if (!page?.ok) continue;
+      for (const a of (page.results ?? []) as AgentResult[]) {
+        const k = (a.smartAgent ?? '').toLowerCase();
+        if (!k || have.has(k)) continue;
+        have.add(k); candidates.push(a); named += 1;
+      }
+    }
+  }
   const needsOfferings = !!(mandates?.requireSkillId || mandates?.requireSkill || intent.skills?.length);
   if (needsOfferings) await enrichOfferings(env, candidates);
   const needsEndorsements = !!(intent.capabilityIds?.length || mandates?.requireCapabilityId);
@@ -630,7 +660,9 @@ async function runDiscovery(env: Env, args: { q: string; intent: Intent; mandate
       || y.regionHits - x.regionHits
       || Number(x.lexicalOnly) - Number(y.lexicalOnly)
       || (x.name ?? '').localeCompare(y.name ?? ''));
-  return { ok: true, ranked, candidates, dropped, droppedBy };
+  // A PARTIAL READ IS PARTIAL. The MCP says when its page was cut; throwing that away let the surface
+  // report "11 of 11 matched" over a field it had only seen a third of.
+  return { ok: true, ranked, candidates, dropped, droppedBy, page: { limit, returned: broad, truncated: Boolean(mcp.truncated), named } };
 }
 
 app.post('/discover', async (c) => {
@@ -645,7 +677,7 @@ app.post('/discover', async (c) => {
   // intent-driven and lets the matcher rank it (see runDiscovery for the ordering rules).
   const run = await runDiscovery(c.env, { q, intent, mandates, limit: body.limit });
   if (!run.ok) return c.json({ ok: false, error: run.error }, 502);
-  const { ranked, dropped, droppedBy } = run;
+  const { ranked, dropped, droppedBy, page } = run;
   return c.json({
     ok: true,
     '@context': { apdisc: APDISC, ap: AP, sh: 'http://www.w3.org/ns/shacl#' },
@@ -654,6 +686,9 @@ app.post('/discover', async (c) => {
     intent,
     mandates: mandates ?? null,
     matched: ranked.length,
+    // What was READ, so a caller can tell "nothing matched" from "the page did not reach it" (ADR-0013):
+    // the broad page's size, whether the KB had more, and how many rows the question's own words added.
+    page,
     droppedByMandates: dropped,
     // Per-mandate elimination counts so a UI can say WHICH filter emptied the list (design 2026-08-30).
     droppedBy,
