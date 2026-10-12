@@ -376,6 +376,21 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     const lastRecord = store ? await (await store.fetch('https://pulse/record-outcome')).json().catch(() => null) : null;
     return json({ ok: true, service: 'town-agent', town: town.town, pulseRecord: pulseRecordReadiness(env as PulseRecordEnv), lastRecord, contextAgents: contextAgents(env as PulseRecordEnv), townMcp: env.INFRA ? 'bound' : 'not bound on this deployment' });
   }
+  // WHICH HOME A NAME IS ON (spec 346 §5) — the lookup behind Connect. A chain carries more than one
+  // estate and they share these contracts, so two people named under the same root can belong to different
+  // Homes, and sending someone to the wrong one does not fail: it mints a DIFFERENT Smart Agent for their
+  // credential under that estate's custody root. The agent itself says which estate is its own; the naming
+  // service reads that off the chain. The town relays the answer and guesses nothing when there is none.
+  if (path === '/home-for') {
+    const name = (url.searchParams.get('name') ?? '').trim().toLowerCase();
+    if (!name) return json({ ok: false, error: 'say which name' }, 400);
+    if (!/^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+$/.test(name)) return json({ ok: false, error: 'not_a_name', detail: `"${name}" is not a name this town can look up — try the whole name, like yourname.me` }, 400);
+    const r = await ask<{ status?: string; estate?: { id?: string | null; name?: string; home?: string | null } | null }>(env.NAMING, `https://naming/api/name/${encodeURIComponent(name)}`);
+    if (!r) return json({ ok: false, error: 'unreachable', detail: 'the naming service could not be asked just now' }, 502);
+    if (r.status !== 'registered') return json({ ok: false, error: 'not_registered', detail: `${name} is not registered on this chain, so no Home holds it.` }, 404);
+    if (!r.estate?.home) return json({ ok: false, error: 'no_estate', detail: `${name} is registered but declares no estate, so this town cannot say which Home is its own — pick the estate you have an account at.` }, 404);
+    return json({ ok: true, name, estate: { id: r.estate.id ?? null, name: r.estate.name ?? null, home: r.estate.home } }, 200, { 'cache-control': 'public, max-age=60' });
+  }
   if (path === '/estates') return json(townSummary(town).estates);
   // ── ONE ESTATE, ON ITS OWN PAGE (spec 435 §4) ──────────────────────────────────────────────────────────
   // Everything an estate declares in the manifest, its MCP servers, and the agents this town can PLACE in it
@@ -513,11 +528,14 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
   // the answer and names who said it. No key, no session, no rewrite here. Until the agent is chartered: said so.
   if (path === '/ask') {
     const q = (url.searchParams.get('q') ?? '').trim();
-    const scope = url.searchParams.get('scope') === 'estate' ? 'estate' : 'town';
+    const rawScope = url.searchParams.get('scope');
+    const scope = rawScope === 'estate' ? 'estate' : rawScope === 'agent' ? 'agent' : 'town';
     if (!q) return json({ ok: false, error: 'say what you want to know' }, 400);
     // THE TOWN AGENT ANSWERS ITS OWN QUESTIONS (spec 435 §7). Decided here, before either agent is asked, and
     // the reply names who answered — see `claimedByTown` for why the claim is as narrow as it is.
-    const mine = claimedByTown(q, town);
+    // NOT WHEN ONE AGENT WAS NAMED. The town answering for itself is right when the town was asked; it is
+    // an interception when somebody asked people-groups.svc and got the town's census instead.
+    const mine = scope === 'agent' ? null : claimedByTown(q, town);
     if (mine && (mine.skill === 'town.mcp' || mine.skill === 'town.estate')) {
       const v = mine.skill === 'town.mcp'
         ? await mcpCensusView(town, fetchProbe, rosterOf(env), mine.estate)
@@ -529,7 +547,15 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     }
     const cfg = contextAgents(env as PulseRecordEnv);
     const estateId = url.searchParams.get('estate') ?? town.estates[0]?.id ?? '';
-    const name = scope === 'town' ? cfg.town : cfg.estates[estateId];
+    // ASKING ONE AGENT, BY NAME. The town and estate asks go to a CONTEXT agent this deployment configures;
+    // this one goes to whichever agent the page is about. Same door, same public lane: a question from a
+    // stranger, answered from what that agent has made public — and from the asker's own standing when
+    // they brought a session of their own (`authorization`, relayed unchanged; the town holds no key).
+    const asked = (url.searchParams.get('agent') ?? '').trim().toLowerCase();
+    if (scope === 'agent' && !/^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+$/.test(asked)) {
+      return json({ ok: false, error: 'not_a_name', detail: 'say which agent to ask, by its name on the chain' }, 400);
+    }
+    const name = scope === 'town' ? cfg.town : scope === 'estate' ? cfg.estates[estateId] : asked;
     if (!name) return json({ ok: false, error: 'not_configured', detail: `the ${scope} context agent is not chartered yet (spec 436 §5.5 T1: ${scope === 'town' ? 'faith-town.workspace' : `${estateId}'s estate agent`} under demo-admin) — the Pulse's tabs show the live numbers meanwhile` }, 503);
     const zone = env.CONTEXT_AGENT_ZONE ?? town.estates[0]?.agentZone ?? '';
     // The same derivation the portal shows beside the agent's name (`agentCardHost`), so the door named on the
@@ -538,7 +564,25 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     if (!host) return json({ ok: false, error: 'not_configured', detail: `no agent zone is configured for the ${scope} context, so ${name}'s card host cannot be derived` }, 503);
     try {
       const resolved = await resolveAgentCard(`https://${host}/.well-known/agent-card.json`, fetch);
-      const client = createStandardA2aClient({ endpoint: resolved.endpoint, fetch });
+      // THE ASKER'S OWN SESSION, RELAYED UNCHANGED AND NEVER KEPT.
+      //
+      // Connected, the caller's Home issued them a session and the page sends it along; the agent's own
+      // door resolves it to their Smart Agent (`principalBySchemes` … `bearer: verifySession`) and decides
+      // from their standing. Unconnected, nothing is added and the question arrives as a stranger's, which
+      // is what the public lane is for. Either way this Worker holds no key, mints nothing, stores nothing,
+      // and cannot widen what the caller already had: D2 is not bent by carrying somebody's envelope.
+      //
+      // The TOWN OPS TOKEN is deliberately not accepted here. It unlocks a read of the town's own cost and
+      // metrics; it is not a person, and relaying it as one would let a deployment secret pass for an
+      // identity at somebody else's Home.
+      const relay = (authorization ?? '').trim();
+      const carry = /^Bearer\s+[\w-]+\.[\w-]+\.[\w-]+$/i.test(relay) && !operatorAuthorized(env.TOWN_OPS_TOKEN, authorization) ? relay : null;
+      const client = createStandardA2aClient({
+        endpoint: resolved.endpoint,
+        fetch: carry
+          ? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers).entries()), authorization: carry } }))
+          : fetch,
+      });
       // THE QUESTION GOES AS A STRANGER (spec 436 §5.5 T4). A stranger's message is admitted only on the public
       // lane, which takes a NAMED capability — so the question travels as words AND as the one capability it is
       // asking for. The portal holds no key and signs nothing; naming a capability is not holding authority, and
@@ -557,7 +601,7 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
       // AN ANSWER THAT CITES NOTHING IS NOT AN ANSWER (436 §5.5): the agent answers from records it keeps, so a
       // reply with no record behind it is relayed as the refusal it is, never dressed up as a finding.
       if (!words) return json({ ok: false, error: 'no_answer', detail: `${name} answered without words.` }, 502);
-      return json({ ok: true, answer: words, agent: name, ...(data?.cited ? { cited: data.cited } : {}), ...(data?.window ? { window: data.window } : {}), ...(data?.read === false ? { read: false } : {}), ...(data?.runRef ? { runRef: data.runRef } : {}) });
+      return json({ ok: true, answer: words, agent: name, asked: carry ? 'as you' : 'as a stranger', ...(data?.cited ? { cited: data.cited } : {}), ...(data?.window ? { window: data.window } : {}), ...(data?.read === false ? { read: false } : {}), ...(data?.runRef ? { runRef: data.runRef } : {}) });
     } catch (e) {
       const why = e instanceof Error ? e.message : String(e);
       // The agent is chartered and its door answers, but a stranger's plain question is not yet something it

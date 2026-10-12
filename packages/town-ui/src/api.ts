@@ -4,9 +4,11 @@ import { useEffect, useState } from 'react';
 export interface ApiError { error: string; detail?: string }
 export type Loaded<T> = { state: 'loading' } | { state: 'ready'; data: T } | { state: 'error'; error: ApiError; status: number };
 
-export async function getJson<T>(path: string): Promise<{ ok: true; data: T } | { ok: false; error: ApiError; status: number }> {
+/** `headers` carries the CALLER's own credential when they brought one (their Home session). It is put on
+ *  the request and nowhere else — nothing here stores or inspects it. */
+export async function getJson<T>(path: string, headers?: Record<string, string>): Promise<{ ok: true; data: T } | { ok: false; error: ApiError; status: number }> {
   let res: Response;
-  try { res = await fetch(path, { headers: { accept: 'application/json' } }); }
+  try { res = await fetch(path, { headers: { accept: 'application/json', ...headers } }); }
   catch (e) { return { ok: false, status: 0, error: { error: 'unreachable', detail: String((e as Error).message) } }; }
   const body = (await res.json().catch(() => null)) as T | ApiError | null;
   if (!res.ok || !body) return { ok: false, status: res.status, error: (body as ApiError | null) ?? { error: `http_${res.status}` } };

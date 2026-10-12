@@ -4,6 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Empty, Link, Loading, SectionHead, useApi } from '@ap-town/town-ui';
 import type { AgentDetail, TownData } from '../types';
 import { EndpointPanel } from './EndpointPanel';
+import { Ask } from '../pulse/Ask';
 
 const local = (iri: string): string => iri.replace(/^.*[#/]/, '');
 
@@ -57,6 +58,16 @@ function LiveCard({ url }: { url: string }): ReactNode {
   );
 }
 
+/**
+ * WHAT TO SUGGEST ASKING, taken from what the agent itself advertises and never invented. Its own skills are
+ * the only honest source: the town does not know what an agent is for, and a made-up example that the agent
+ * refuses teaches a reader the wrong thing about it. Nothing offered ⇒ nothing suggested.
+ */
+function askExamples(d: AgentDetail): string[] | undefined {
+  const offered = (d.offerings?.offerings ?? []).map((o) => o.name || o.skillId).filter(Boolean).slice(0, 3);
+  return offered.length ? offered.map((x) => `what can you tell me about ${x}?`) : undefined;
+}
+
 export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
   const v = useApi<AgentDetail>(`/api/agent/${encodeURIComponent(id)}`);
   const naming = t.services.find((s) => s.id === 'naming')?.hosts[0];
@@ -84,6 +95,10 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
       const mcpEndpoint = triples.find((x) => local(x.p) === MCP_KEY)?.o;
       const a2aEndpoint = triples.find((x) => local(x.p) === 'a2aEndpoint')?.o;
       const address = (d.agent.agent ?? '').split(':').pop() ?? '';
+      // THE NAME IS WHAT AN ASK TRAVELS TO. `d.key` may be an address (the page takes either), and an ask
+      // needs the chain name: the agent's card host derives from it. No name on chain ⇒ no Ask offered,
+      // which is honest — there is no door this page could name.
+      const name = triples.find((x) => local(x.p) === 'name')?.o ?? (/^[a-z0-9][a-z0-9-]*\.[a-z0-9-]+$/i.test(d.key) ? d.key.toLowerCase() : '');
       const offerings = d.offerings?.offerings ?? [];
       return (
         <>
@@ -94,6 +109,11 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
               {address.startsWith('0x') && naming && <p className="quiet"><a href={`https://${naming}/address/${address}`} rel="noreferrer">Its names and what it presents →</a></p>}
             </div>
           </section>
+          {/* ASK IT, before the facts rather than after them — you came with a question, and the chain facts
+              below are the evidence for whatever it answers. A stranger's question reaches the agent's PUBLIC
+              lane and gets what it has made public; connect in the corner and it arrives as you, with the
+              agent deciding from your own standing. The town relays and decides nothing either way. */}
+          {name && <Ask scope="agent" agent={name} examples={askExamples(d)} />}
           <section>
             <SectionHead eyebrow="From the chain" title="How to reach it">
               Where this agent listens, as its own on-chain records say. An endpoint is an address, never an

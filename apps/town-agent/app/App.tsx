@@ -7,6 +7,7 @@ import { Find } from './pages/Find';
 import { Service } from './pages/Service';
 import { Operations, type Tab } from './pages/Operations';
 import { AgentPage } from './pages/Agent';
+import { ConnectButton } from './Connect';
 import { Estate } from './pages/Estate';
 import { Mcp } from './pages/Mcp';
 
@@ -42,6 +43,10 @@ function Shell(): ReactNode {
           {skills && <a href={`https://${skills}`} rel="noreferrer">Skills</a>}
           <Link href="/operations">Pulse</Link>
         </nav>
+        {/* WHO IS ASKING, in the corner, because it changes what every answer on every page can be. It is
+            not a sign-in TO the town: the town has no account to hold. It is the session your own Home
+            issued, relayed by this page to whichever agent you ask. */}
+        <span className="top-right">{town && <ConnectButton estates={town.estates} />}</span>
       </header>
       <main id="main"><Loading v={v} what="Reading the town">{(t) => <Page t={t} />}</Loading></main>
       <footer className="foot">
