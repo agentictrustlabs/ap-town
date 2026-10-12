@@ -19,6 +19,70 @@ import { Chip } from '@ap-town/town-ui';
 
 const KEY = 'ap-town.home-session';
 const EVENT = 'ap-town:connection';
+/** The leg in flight: which Home, and the PKCE verifier only this tab knows. Dropped the moment it lands. */
+const PENDING = 'ap-town.connecting';
+const CLIENT_ID = 'town-app';
+const REDIRECT = () => `${window.location.origin}/connected`;
+
+/** PKCE S256 (spec 230 §4.3). The verifier never leaves this tab; the Home only ever sees its hash. */
+async function pkce(): Promise<{ verifier: string; challenge: string }> {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  const b64url = (b: ArrayBuffer | Uint8Array): string =>
+    btoa(String.fromCharCode(...new Uint8Array(b as ArrayBuffer))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const verifier = b64url(bytes);
+  const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  return { verifier, challenge };
+}
+
+/**
+ * Leave for the Home, and come back here. The person signs in at their OWN Home — the town has no account
+ * to hold and never sees a credential — and returns with a code this tab alone can redeem.
+ */
+export async function goToHome(home: string, hint?: string): Promise<void> {
+  // WHERE THEY WERE. Connecting is something you do in the middle of reading a page, and landing back on
+  // the front page afterwards loses the agent you were looking at.
+  try { sessionStorage.setItem('ap-town.return-to', `${window.location.pathname}${window.location.search}`); } catch { /* the front page, then */ }
+  const { verifier, challenge } = await pkce();
+  const state = crypto.randomUUID();
+  try { sessionStorage.setItem(PENDING, JSON.stringify({ home, verifier, state, at: Date.now() })); } catch { /* no storage ⇒ the round trip cannot be completed, and the callback says so */ }
+  const u = new URL('/authorize', home);
+  u.searchParams.set('client_id', CLIENT_ID);
+  u.searchParams.set('redirect_uri', REDIRECT());
+  u.searchParams.set('response_type', 'code');
+  u.searchParams.set('scope', 'openid agent');
+  u.searchParams.set('code_challenge', challenge);
+  u.searchParams.set('code_challenge_method', 'S256');
+  u.searchParams.set('state', state);
+  // SITE-LOGIN, and nothing wider. It asserts who someone is; it carries no authority to act for them.
+  u.searchParams.set('delegation_template', 'site-login');
+  if (hint) u.searchParams.set('agent_name', hint);
+  window.location.assign(u.toString());
+}
+
+/** Redeem the code this tab asked for. Single-use, PKCE-bound, and the token never appeared in a URL. */
+export async function completeConnection(params: URLSearchParams): Promise<{ ok: true } | { ok: false; error: string }> {
+  let pending: { home: string; verifier: string; state: string } | null = null;
+  try { pending = JSON.parse(sessionStorage.getItem(PENDING) ?? 'null'); } catch { pending = null; }
+  try { sessionStorage.removeItem(PENDING); } catch { /* nothing to clear */ }
+  const err = params.get('error');
+  if (err) return { ok: false, error: params.get('error_description') ?? err };
+  const code = params.get('code');
+  if (!code) return { ok: false, error: 'your Home sent no code back' };
+  if (!pending) return { ok: false, error: 'this tab did not start that sign-in, so it cannot finish it' };
+  // STATE IS CHECKED, because a code this tab did not ask for is somebody else's.
+  if (params.get('state') !== pending.state) return { ok: false, error: 'that sign-in does not match the one this tab started' };
+  try {
+    const r = await fetch(new URL('/token', pending.home).toString(), {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ grant_type: 'authorization_code', code, code_verifier: pending.verifier, client_id: CLIENT_ID, redirect_uri: REDIRECT() }),
+    });
+    const b = (await r.json().catch(() => ({}))) as { id_token?: string; error?: string; error_description?: string };
+    if (!r.ok || !b.id_token) return { ok: false, error: b.error_description ?? b.error ?? `your Home refused the exchange (${r.status})` };
+    const c = claimsOf(b.id_token);
+    write({ token: b.id_token, name: c.name, agent: c.agent, home: pending.home });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: `your Home could not be reached: ${(e as Error).message}` }; }
+}
 
 export interface Connection { token: string; name: string | null; agent: string | null; home: string }
 
@@ -95,19 +159,13 @@ export function ConnectButton({ estates }: { estates: Array<{ id: string; home: 
       const b = (await r.json().catch(() => ({}))) as { ok?: boolean; estate?: { id: string | null; home: string }; detail?: string; error?: string };
       if (!r.ok || !b.ok || !b.estate) { setErr(b.detail ?? b.error ?? 'that name could not be looked up'); return; }
       setHome(b.estate);
+      // The name said which Home; there is nothing left to choose, so go.
+      leave(b.estate.home, n);
     } catch { setErr('the town could not be asked just now'); }
     finally { setBusy(false); }
   };
 
-  const connect = (at: string) => {
-    const token = draft.trim();
-    if (!token) { setErr('Paste the session your Home gave you.'); return; }
-    // A JWT has three dot-separated parts. Saying so beats relaying a typo and showing an agent's 401.
-    if (token.split('.').length !== 3) { setErr('That does not look like a session \u2014 a Home issues a three-part token.'); return; }
-    const c = claimsOf(token);
-    set({ token, name: c.name, agent: c.agent, home: at });
-    close();
-  };
+  const leave = (home: string, hint?: string) => { setBusy(true); void goToHome(home, hint); };
 
   if (conn && !open) {
     return (
@@ -145,7 +203,7 @@ export function ConnectButton({ estates }: { estates: Array<{ id: string; home: 
           <p className="quiet">or</p>
           {estates.map((e) => (
             <p key={e.id} style={{ margin: '.25rem 0' }}>
-              <a className="button" href={e.home} target="_blank" rel="noreferrer" onClick={() => setHome({ id: e.id, home: e.home })}>Continue with {e.id}</a>
+              <button type="button" className="button" disabled={busy} onClick={() => leave(e.home)}>Continue with {e.id}</button>
             </p>
           ))}
           <p className="quiet">
@@ -155,19 +213,7 @@ export function ConnectButton({ estates }: { estates: Array<{ id: string; home: 
         </>
       )}
 
-      {chosen && (
-        <>
-          <p>
-            {home ? <>That name is on <strong>{home.id ?? 'an estate'}</strong>. </> : null}
-            <a href={chosen.home} target="_blank" rel="noreferrer">Open {new URL(chosen.home).host}</a>, sign in, and paste the session it gives you.
-          </p>
-          <form className="ask-row" onSubmit={(e) => { e.preventDefault(); connect(chosen.home); }}>
-            <label className="sr" htmlFor="connect-token">Your Home session</label>
-            <input id="connect-token" className="ask-q" value={draft} onChange={(e) => { setDraft(e.target.value); setErr(null); }} placeholder="the session from your Home" autoComplete="off" />
-            <button type="submit" className="button" disabled={!draft.trim()}>Connect</button>
-          </form>
-        </>
-      )}
+      {busy && <p className="quiet">Taking you to {chosen ? new URL(chosen.home).host : 'your Home'}…</p>}
 
       {err && <p className="banner banner-warn" style={{ marginBottom: 0 }}>{err}</p>}
       <p className="quiet"><button type="button" className="linkish" onClick={close}>\u2190 Back</button></p>

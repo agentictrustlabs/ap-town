@@ -8,6 +8,7 @@ import { Service } from './pages/Service';
 import { Operations, type Tab } from './pages/Operations';
 import { AgentPage } from './pages/Agent';
 import { ConnectButton } from './Connect';
+import { Connected } from './pages/Connected';
 import { Estate } from './pages/Estate';
 import { Mcp } from './pages/Mcp';
 
@@ -16,6 +17,7 @@ function Page({ t }: { t: TownData }): ReactNode {
   let m: RegExpMatchArray | null;
   if (path === '/' || path === '') return <Overview t={t} />;
   if (path === '/find') return <Find t={t} />;
+  if (path === '/connected') return <Connected />;
   if (path === '/operations') return <Operations t={t} />;
   if ((m = path.match(/^\/operations\/(estates|homes|inference|chain|apps|infra|performance)$/))) return <Operations t={t} tab={m[1] as Tab} />;
   if (path === '/mcp') return <Mcp t={t} />;
