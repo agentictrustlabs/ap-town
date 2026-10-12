@@ -611,6 +611,32 @@ function matchCandidate(a: AgentResult, intent: Intent, satisfiedMandates: strin
 //   mandates = HARD filters (drop failures) · intent = SOFT rank (0.6·fit + 0.4·trust) · evidence path out.
 // `intent` may be a structured object {need,skills?,geo?} OR a bare string (legacy = the need); a bare
 // {query} still works (free-text), so existing callers (the Registry tab's loadRegistry) are unaffected.
+/** THE WORDS A NARROW READ SPENDS ITS BUDGET ON.
+ *
+ * The narrow read has a small, fixed number of extra lookups, and it used to take the first three words of
+ * the question in order. "find an agent that offers people group counts" therefore spent all three on the
+ * whole phrase, "agent" and "that" — and `people`, the only word any description actually holds, was never
+ * read. The registry answered "nothing matched" about an agent whose own description is about people groups.
+ *
+ * So: the whole phrase first (it is the most specific thing anybody said, and the store's filter now requires
+ * every one of its words), then the question's own vocabulary — the words that are not the furniture of
+ * asking a question. The stop list is small and deliberately about ASKING, not about any subject: `agent`,
+ * `registry` and `find` are in every question put to a registry and in almost no description, so they narrow
+ * nothing while costing a read.
+ */
+const NARROW_STOP = new Set([
+  'the', 'and', 'for', 'with', 'that', 'this', 'what', 'which', 'who', 'whom', 'whose', 'can', 'any', 'all',
+  'are', 'has', 'have', 'does', 'offers', 'offer', 'about', 'from', 'into', 'some', 'find', 'finds', 'search',
+  'agent', 'agents', 'registry', 'please', 'tell', 'know', 'knows', 'answer', 'answers', 'questions', 'question',
+]);
+const NARROW_READS = 6;
+export function narrowReadTokens(words: string): string[] {
+  const own = words.toLowerCase().split(/[\s,]+/).filter((t) => t.length >= 3 && !NARROW_STOP.has(t));
+  // The phrase leads; its own vocabulary follows. If every word was furniture, the phrase alone is the read —
+  // widening to the furniture would match on words that are in nothing and say nothing about the question.
+  return [...new Set([words, ...own])].slice(0, NARROW_READS);
+}
+
 /** The discovery pipeline (spec 281): fetch → enrich → HARD mandates → SOFT rank. Shared by `/discover` and the
  *  ARD `/search` surface so both rank the same way; only the response envelope differs. */
 async function runDiscovery(env: Env, args: { q: string; intent: Intent; mandates?: Mandates; limit?: number }): Promise<{ ok: true; ranked: ReturnType<typeof matchCandidate>[]; candidates: AgentResult[]; dropped: number; droppedBy: Partial<Record<MandateKey, number>>; page: { limit: number; returned: number; truncated: boolean; named: number } } | { ok: false; error: string }> {
@@ -637,7 +663,7 @@ async function runDiscovery(env: Env, args: { q: string; intent: Intent; mandate
   const words = ((intent.need ?? '').trim() || (intent.skills ?? []).join(' ').trim()).slice(0, 120);
   let named = 0;
   if (!q && words) {
-    const toks = [...new Set([words, ...words.toLowerCase().split(/[\s,]+/).filter((t) => t.length >= 3)])].slice(0, 3);
+    const toks = narrowReadTokens(words);
     const have = new Set(candidates.map((a) => (a.smartAgent ?? '').toLowerCase()));
     const pages = await Promise.all(toks.map((t) => mcpGet(env, `/search?q=${encodeURIComponent(t)}&limit=25`).catch(() => null)));
     for (const page of pages) {
