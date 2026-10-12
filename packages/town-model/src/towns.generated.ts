@@ -121,6 +121,8 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "circle",
           "impact"
         ],
+        "estateName": "faithnet.estate",
+        "namingGate": "0x640D577Bcb3fd860743ED315620085704c1483E9",
         "kms": {
           "tenant": "faithnet"
         },
@@ -160,6 +162,8 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "church",
           "circle"
         ],
+        "estateName": "imbnet.estate",
+        "namingGate": "0xb59e824C77c5969312De54130935478b8f38aF85",
         "workers": [
           "imb-runtime",
           "imb-vault",
@@ -172,7 +176,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         ],
         "kms": {
           "tenant": "imb",
-          "backend": "pending"
+          "backend": "akcs"
         }
       }
     ],

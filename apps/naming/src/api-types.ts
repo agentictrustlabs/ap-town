@@ -17,6 +17,13 @@ export interface Banner { tone: 'warn' | 'info'; title: string; body: string }
 
 export interface EstateRef { id: string; home: string; naming: string }
 
+/** WHICH ESTATE an agent belongs to — the Home that custodies it, read from the chain (spec 429 D2).
+ *  `name` is the estate agent's name (`imbnet.estate`), the stable handle the agent's own profile carries;
+ *  `home` is that estate agent's `atl:homepage`, which moves when the Home moves. `id` is the town's id for
+ *  it, present only when the manifest knows an estate by that name. Absent (`null` on the view) = the agent
+ *  declares no estate — which is an answer, never a licence to guess one. */
+export interface EstateOfAgent { name: string; id: string | null; home: string | null; agent: Address | null }
+
 /** What a free name costs here (spec 431): whole coins, and the domain that protects the label, if any. */
 export interface NamePrice { coins: number; coin: string; protectedBy: string | null; dnsUnknown: boolean }
 /** What a registered name was bought for, when it was bought (read from the priced subregistry, never a log). */
@@ -122,6 +129,8 @@ export interface NameView extends Stamp {
   price: NamePrice | null;
   /** For a registered name bought through the priced subregistry. */
   purchase: Purchase | null;
+  /** The estate this name's agent declares (`atl:estate` → that estate agent's `atl:homepage`). */
+  estate: EstateOfAgent | null;
   estates: EstateRef[];
 }
 

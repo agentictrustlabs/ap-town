@@ -43,6 +43,25 @@ export interface TownEstate {
   /** The name roots this estate names agents under; the indexer crawls the union over every estate. */
   nameRoots: string[];
   /**
+   * THE ESTATE'S NAME ON THIS CHAIN — `<label>.estate`, the agent that IS this estate (spec 429 D2).
+   * An agent says which estate is its own by carrying this name in `atl:estate`, and that estate agent
+   * carries the Home's URL in `atl:homepage`: the name is stable, the URL moves. The manifest records it
+   * only so a reader can put the town's `id` on a name the CHAIN gave — never to decide the estate.
+   */
+  estateName?: string;
+  /**
+   * THE ESTATE'S NAMING GATE — the key whose signature authorizes a priced registration from this
+   * estate's Home (`PricedSubregistry.claim(t, gateSig)`; one gate per Home, allowed by the town on
+   * every priced root and revocable alone). It is what makes "which estate is this name's?" a question
+   * the CHAIN answers: recover the ticket's signer from the registering transaction and it is this
+   * address. The allowance itself is public (`GateSet`), so a reader can check the claim without
+   * trusting this file — the manifest only says whose gate it is.
+   *
+   * Absent = this estate has no gate of its own (its names carry no estate signal, and the naming
+   * service answers `estate: null` for them rather than guessing one).
+   */
+  namingGate?: string;
+  /**
    * The key-custody service this estate's keys live in. `tenant: null` with `backend` says, in the
    * manifest itself, that this estate has NO tenant and what it uses instead — so a Pulse reader is not
    * told an estate has hardware-rooted custody because a name was easier to write than a gap.

@@ -28,7 +28,15 @@ export interface Chain {
   reg<T>(fn: string, args?: readonly unknown[]): Promise<T>;
   ur<T>(fn: string, args?: readonly unknown[]): Promise<T>;
   sub<T>(address: Address, fn: string, args?: readonly unknown[]): Promise<T>;
+  /** The AgentProfileResolver — SA-keyed public properties (`atl:estate`, `atl:homepage`). */
+  profile<T>(fn: string, args?: readonly unknown[]): Promise<T>;
 }
+
+/** Only what this service reads: the two string accessors. An app-declared fragment, as elsewhere here. */
+const profileResolverAbi = [
+  { type: 'function', name: 'getStringProperty', stateMutability: 'view', inputs: [{ name: 'agent', type: 'address' }, { name: 'predicate', type: 'bytes32' }], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'isRegistered', stateMutability: 'view', inputs: [{ name: 'agent', type: 'address' }], outputs: [{ type: 'bool' }] },
+] as const;
 
 export function chainFor(town: TownManifest, rpcUrl: string): Chain {
   const d = { ...(getDeployments(town.chain.deployment as Parameters<typeof getDeployments>[0]) as object), ...(town.chain.deploymentOverlay ?? {}) } as unknown as {
@@ -49,6 +57,7 @@ export function chainFor(town: TownManifest, rpcUrl: string): Chain {
   return {
     client, naming, registry: d.agentNameRegistry, resolver: d.agentNameUniversalResolver, subregistries, open,
     priced, pricedSet: new Set(Object.values(priced)), coin, feeTreasury: d.namingFeeTreasury ? (d.namingFeeTreasury.toLowerCase() as Address) : null,
+    profile: read(d.agentProfileResolver, profileResolverAbi),
     reg: read(d.agentNameRegistry, agentNameRegistryAbi),
     ur: read(d.agentNameUniversalResolver, agentNameUniversalResolverAbi),
     sub: (address, fn, args = []) => read(address, permissionlessSubregistryAbi)(fn, args),

@@ -7,8 +7,8 @@ import {
 import type { TownManifest } from '@ap-town/town-model';
 import { concat, isAddress, keccak256 } from 'viem';
 import type {
-  Address, AddressView, Banner, CanRow, DisplayView, EstateRef, Hex, NameRow, NameView, RecordRow, RootPage, RootView,
-  SearchRow, SearchView, Signal, Stamp, TownView,
+  Address, AddressView, Banner, CanRow, DisplayView, EstateOfAgent, EstateRef, Hex, NameRow, NameView, RecordRow,
+  RootPage, RootView, SearchRow, SearchView, Signal, Stamp, TownView,
 } from '../src/api-types';
 import { ZERO, ZERO_NODE, type Chain } from './chain';
 import { NOUN, RECORD_LABEL, RULE_WORDS, kindOfTld, kindOfType, nounOfTld, typeOfTld } from './words';
@@ -50,6 +50,36 @@ const lower = (a: string): Address => a.toLowerCase() as Address;
 const nz = (a: string | null | undefined): Address | null => (a && a !== ZERO ? lower(a) : null);
 
 export const estatesOf = (town: TownManifest): EstateRef[] => town.estates.map((e) => ({ id: e.id, home: e.home, naming: `${e.home.replace(/\/$/, '')}/naming` }));
+
+/** `keccak256("atl:estate")` / `keccak256("atl:homepage")` — the two profile predicates this read uses. */
+const ATL_ESTATE = keccak256(new TextEncoder().encode('atl:estate'));
+const ATL_HOMEPAGE = keccak256(new TextEncoder().encode('atl:homepage'));
+
+/**
+ * WHICH ESTATE AN AGENT BELONGS TO, in two calls and no history.
+ *
+ * A chain carries more than one estate, and they share these contracts — so two people named under the
+ * same root can belong to different Homes, and sending someone to the wrong one does not fail: it mints a
+ * different Smart Agent for their credential under that estate's custody root. The agent therefore SAYS
+ * which estate is its own (`atl:estate`, the estate agent's NAME — stable), and that estate agent says
+ * where its Home is today (`atl:homepage` — movable). Both are plain `eth_call` reads of public profile
+ * state: no log scan (ADR-0012), no index between this answer and the chain.
+ *
+ * An agent that declares nothing gets `null`. That is the honest answer and the only safe one — the town
+ * manifest is consulted ONLY to put a local id on a name the chain already gave, never to guess an estate
+ * for an agent that named none.
+ */
+export async function estateOfAgent(ctx: Ctx, agent: Address | null): Promise<EstateOfAgent | null> {
+  if (!agent) return null;
+  const name = (await ctx.chain.profile<string>('getStringProperty', [agent, ATL_ESTATE]).catch(() => '')).trim();
+  if (!name) return null;
+  const known = ctx.town.estates.find((e) => e.estateName?.toLowerCase() === name.toLowerCase());
+  // The estate agent is resolved through the registry like any other name; a name that resolves to
+  // nothing yet still answers, because what the person's agent DECLARED is the fact being reported.
+  const estateAgent = nz(await ctx.chain.ur<Address>('resolveName', [namehash(name) as Hex]).catch(() => ZERO));
+  const home = estateAgent ? (await ctx.chain.profile<string>('getStringProperty', [estateAgent, ATL_HOMEPAGE]).catch(() => '')).trim() : '';
+  return { name, id: known?.id ?? null, home: home || null, agent: estateAgent };
+}
 
 async function stamp(ctx: Ctx): Promise<Stamp> {
   return { town: ctx.town.town, chainId: ctx.town.chain.id, block: Number(await ctx.chain.client.getBlockNumber()) };
@@ -224,7 +254,7 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
   const blank = (over: Partial<NameView>): NameView => ({
     ...s, input: raw, status: 'invalid', name: raw.toLowerCase(), onChainName: raw.toLowerCase(), form: 'canonical', tld: null, kind: 'legacy', names: null,
     legacy: false, node: ZERO_NODE, agent: null, displayName: null, owner: null, ownerName: null, presented: null, presentsThis: false, declared: null,
-    typeCheck: null, records: [], signals: null, banners: [], can: [], children: [], childCount: 0, details: null, availability: null, price: null, purchase: null, estates, ...over,
+    typeCheck: null, records: [], signals: null, banners: [], can: [], children: [], childCount: 0, details: null, availability: null, price: null, purchase: null, estate: null, estates, ...over,
   });
 
   let p: ParsedAgentName;
@@ -289,6 +319,8 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
     Number(childCount) ? rowsUnder(ctx, p.onChainName, 0, CHILD_CAP) : Promise.resolve({ rows: [], total: 0 }),
     agent ? ctx.listed(agent) : Promise.resolve(false),
   ]);
+  // Two more calls, batched with the rest of the page's reads by the transport.
+  const estate = await estateOfAgent(ctx, agent);
   const presented = presentedRaw ? displayOf(presentedRaw) : null;
   const presentsThis = !!presentedRaw && presentedRaw.toLowerCase() === p.onChainName;
   const ownerName = ownerNameRaw === null ? presented : ownerNameRaw ? displayOf(ownerNameRaw) : null;
@@ -343,7 +375,7 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
     declared: declared ? { agentType: declared.agentType, noun: declared.agentType ? NOUN[declared.agentType] ?? null : null, serviceRole: declared.serviceRole, agentKind: declared.agentKind, agentSubtype: declared.agentSubtype } : null,
     typeCheck, records: recordRows(records), signals, banners,
     can: capabilities({ name: p.normalized, tld, owner, ownerName, agent, presented, subregistry: sub, open, priced: !!sub && chain.pricedSet.has(sub), legacy: !!p.legacy }),
-    children: kids.rows, childCount: Number(childCount), details: details(records), purchase,
+    children: kids.rows, childCount: Number(childCount), details: details(records), purchase, estate,
   });
 }
 

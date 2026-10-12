@@ -35,6 +35,13 @@ estates:
       demo-edge-faithnet.richardpedersen3.workers.dev: demo-edge-faithnet
       "*.faithnet.ai": demo-a2a-faithnet
     nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle, impact]
+    # The estate's own agent on this chain. A person's agent carries this NAME in `atl:estate`, and this
+    # agent carries the Home's URL in `atl:homepage` — the name is stable, the URL moves.
+    estateName: faithnet.estate
+    # The gate whose signature authorizes a priced registration from this Home (allowed on every priced
+    # root at block 78766; it signed nate-the-baker, richcanvas45, x102abc, nate-trial-889 while it was
+    # the only gate on the chain). This is what makes the estate a question the CHAIN answers.
+    namingGate: "0x640D577Bcb3fd860743ED315620085704c1483E9"
     kms: { tenant: faithnet }
     # Spec 437 I4 — the estate's own Cloudflare Workers (its A2A runtime, its vault, its edge, its Home MCP, its
     # approval door) and its Vercel project (the Home itself). The unsuffixed twins are the same apps' dev
@@ -61,6 +68,10 @@ estates:
       imb-runtime.richardpedersen3.workers.dev: imb-runtime
     # The same chain and the same priced roots: an estate is a Home and the people under it, not a namespace.
     nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
+    estateName: imbnet.estate
+    # Allowed at block 88347 — hours before it signed `imbrichgoogle.me` at 88482, the first name bought
+    # on this estate. One gate per Home: an imbnet name and a faithnet name differ on chain by this.
+    namingGate: "0xb59e824C77c5969312De54130935478b8f38aF85"
     # NAMED SO A DASHBOARD IS READABLE. `demo-a2a-faithnet` and `demo-mcp-faithnet` are historical: "demo" says
     # nothing and "a2a"/"mcp" name a protocol rather than a job. These say what each Worker IS and sort together
     # under one prefix, which is what you want the moment a list holds two estates' worth of them.

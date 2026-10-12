@@ -32,6 +32,7 @@ export function validateTown(raw: unknown): TownValidation {
   if (estates.length === 0) errors.push('estates: a town has at least one estate');
   const estateIds = new Set<string>();
   const laneOwner = new Map<string, string>();
+  const gateOwner = new Map<string, string>();
   for (const [i, e] of estates.entries()) {
     const at = `estates[${i}]${e?.id ? ` (${e.id})` : ''}`;
     if (!e || typeof e.id !== 'string' || !ID.test(e.id)) { errors.push(`${at}.id: a lower-case id`); continue; }
@@ -41,6 +42,18 @@ export function validateTown(raw: unknown): TownValidation {
     if (typeof e.repo !== 'string' || !e.repo) errors.push(`${at}.repo: required`);
     if (!Array.isArray(e.nameRoots) || e.nameRoots.length === 0 || !e.nameRoots.every((r) => typeof r === 'string' && ID.test(r))) {
       errors.push(`${at}.nameRoots: one or more lower-case roots`);
+    }
+    // A GATE IS AN ADDRESS, AND NO TWO ESTATES SHARE ONE: the whole use of the field is to tell one
+    // estate's names from another's, so a duplicate would make the naming service answer confidently
+    // with the wrong estate — the failure this field exists to prevent.
+    if (e.namingGate !== undefined) {
+      if (typeof e.namingGate !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(e.namingGate)) errors.push(`${at}.namingGate: a 0x address`);
+      else {
+        const g = e.namingGate.toLowerCase();
+        const prior = gateOwner.get(g);
+        if (prior) errors.push(`${at}.namingGate: ${e.namingGate} is already ${prior}'s gate`);
+        gateOwner.set(g, e.id);
+      }
     }
     for (const [pattern, worker] of Object.entries(e.lanes ?? {})) {
       if (!HOST.test(pattern)) errors.push(`${at}.lanes: "${pattern}" is not a host pattern`);
