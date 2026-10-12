@@ -11,7 +11,7 @@
 //   GET  everything else                   the Town portal (the built app in ./dist)
 import { createStandardA2aServer, type AgentCardV1, type MessageV1, type PartV1 } from '@agenticprimitives/a2a/standard';
 import { TOWNS, type TownManifest } from '@ap-town/town-model';
-import { describe, serviceViews, townSummary, type Probe, type ServiceView } from './signals';
+import { agentCardHost, contextAgentViews, describe, serviceViews, townSummary, type Probe, type ServiceView } from './signals';
 import { samplePulse, readPulse, type PulseSampleV1, type PulseEnv } from './pulse';
 import { recordDay, pulseRecordReadiness, contextAgents, type PulseRecordEnv } from './pulse-record';
 import { PERF_WINDOWS, operatorAuthorized, readPerformance, type InfraRowV1, type PerfWindow } from './pulse-perf';
@@ -185,7 +185,10 @@ async function api(path: string, url: URL, env: Env, town: TownManifest, selfHos
   if (path === '/config') return json(await infraConfigFrom(env, url.searchParams.get('owner') ?? undefined), 200, { 'cache-control': 'public, max-age=60' });
   if (path === '/town') {
     const [services, names] = await Promise.all([serviceViews(town, fetchProbe, selfHost), ask<unknown>(env.NAMING, 'https://naming/api/town')]);
-    return json({ ...townSummary(town), services, names, card: `${origin}/.well-known/agent-card.json` }, 200, { 'cache-control': 'public, max-age=30' });
+    // WHO ANSWERS FOR EACH CONTEXT (spec 436 §5.5): the town's agent and each estate's, by name and by card.
+    // The portal shows the door it would send a question to, which is the only honest way to show the Ask.
+    const agents = contextAgentViews(town, contextAgents(env as PulseRecordEnv), env.CONTEXT_AGENT_ZONE);
+    return json({ ...townSummary(town), services, names, agents, card: `${origin}/.well-known/agent-card.json` }, 200, { 'cache-control': 'public, max-age=30' });
   }
   if (path === '/services') return json(await serviceViews(town, fetchProbe, selfHost));
   const m = path.match(/^\/services\/([a-z0-9-]+)$/);
@@ -246,7 +249,10 @@ async function api(path: string, url: URL, env: Env, town: TownManifest, selfHos
     const name = scope === 'town' ? cfg.town : cfg.estates[estateId];
     if (!name) return json({ ok: false, error: 'not_configured', detail: `the ${scope} context agent is not chartered yet (spec 436 §5.5 T1: ${scope === 'town' ? 'faith-town.workspace' : `${estateId}'s estate agent`} under demo-admin) — the Pulse's tabs show the live numbers meanwhile` }, 503);
     const zone = env.CONTEXT_AGENT_ZONE ?? town.estates[0]?.agentZone ?? '';
-    const host = `${name.split('.')[0]}-${name.split('.')[1]}.${zone}`;
+    // The same derivation the portal shows beside the agent's name (`agentCardHost`), so the door named on the
+    // page is the door the question actually goes to.
+    const host = agentCardHost(name, zone);
+    if (!host) return json({ ok: false, error: 'not_configured', detail: `no agent zone is configured for the ${scope} context, so ${name}'s card host cannot be derived` }, 503);
     try {
       const resolved = await resolveAgentCard(`https://${host}/.well-known/agent-card.json`, fetch);
       const client = createStandardA2aClient({ endpoint: resolved.endpoint, fetch });

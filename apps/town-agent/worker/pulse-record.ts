@@ -1,9 +1,10 @@
 // THE PULSE'S RECORD — spec 436 §5.5. `HeartbeatDO` is the cache; the record is a day's rollup written into the TOWN
 // CONTEXT AGENT's vault (`faith-town.workspace`, `pulse.day:<date>`) and each estate's slice into ITS context agent's,
 // through the estate vault's native door AS THAT AGENT (the inference.svc shape: a scoped grant to the vault's
-// interactions service + a DEL-001 leaf to this Worker's own signing key, a token per write, a per-call proof). Until
-// the agents are chartered and the credentials provisioned (T1/T2) this module says so on `/api/health` and writes
-// nothing — never a DO row dressed as a vault record.
+// interactions service + a DEL-001 leaf to this Worker's own signing key, a token per write, a per-call proof). An
+// agent not yet chartered, or whose credentials are not provisioned (T1/T2), is said so on `/api/health` and written
+// nothing — never a DO row dressed as a vault record. PER AGENT: one estate's missing wire leaves THAT estate
+// without a record for the day and takes nothing else down with it (see `agentRecordReadiness`).
 import { mintDelegationToken, buildInvocationProof, type Delegation } from '@agenticprimitives/delegation';
 import { hashMessage, type Address, type Hex } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
@@ -45,22 +46,64 @@ export function contextAgents(env: PulseRecordEnv): ContextAgentsConfig {
   try { const j = JSON.parse(env.CONTEXT_AGENTS ?? '{}') as Partial<ContextAgentsConfig>; return { ...(j.town ? { town: j.town } : {}), estates: j.estates ?? {} }; } catch { return { estates: {} }; }
 }
 
-export type RecordReadiness = { ready: true; agents: string[] } | { ready: false; reason: string };
-export function pulseRecordReadiness(env: PulseRecordEnv): RecordReadiness {
-  if (!env.VAULT_URL) return { ready: false, reason: 'VAULT_URL unset' };
-  if (!env.TOWN_SIGNER_KEY || !/^0x[0-9a-fA-F]{64}$/.test(env.TOWN_SIGNER_KEY)) return { ready: false, reason: 'TOWN_SIGNER_KEY unset' };
+/** The half of readiness that is the ENVIRONMENT's, shared by every agent: the vault, the signer key, the names. */
+function envReadiness(env: PulseRecordEnv): { ok: true; names: string[]; creds: Record<string, { grant?: unknown; leaf?: unknown }> } | { ok: false; reason: string } {
+  if (!env.VAULT_URL) return { ok: false, reason: 'VAULT_URL unset' };
+  if (!env.TOWN_SIGNER_KEY || !/^0x[0-9a-fA-F]{64}$/.test(env.TOWN_SIGNER_KEY)) return { ok: false, reason: 'TOWN_SIGNER_KEY unset' };
   const cfg = contextAgents(env);
   const names = [...(cfg.town ? [cfg.town] : []), ...Object.values(cfg.estates)];
-  if (!names.length) return { ready: false, reason: 'CONTEXT_AGENTS names no context agent (spec 436 §5.5 T1: charter faith-town.workspace / faith-estate.workspace)' };
+  if (!names.length) return { ok: false, reason: 'CONTEXT_AGENTS names no context agent (spec 436 §5.5 T1: charter faith-town.workspace / faith-estate.workspace)' };
   let creds: Record<string, { grant?: unknown; leaf?: unknown }>;
-  try { creds = JSON.parse(contextAgentCredentialsRaw(env) || '{}'); } catch { return { ready: false, reason: 'CONTEXT_AGENT_CREDENTIALS is not JSON (all parts joined)' }; }
-  const missing = names.filter((n) => !isWireDoc(creds[n]?.grant) || !isWireDoc(creds[n]?.leaf));
-  if (missing.length) return { ready: false, reason: `no vault credentials for ${missing.join(', ')} (T2: the steward issues the grant + leaf)` };
-  return { ready: true, agents: names };
+  try { creds = JSON.parse(contextAgentCredentialsRaw(env) || '{}'); } catch { return { ok: false, reason: 'CONTEXT_AGENT_CREDENTIALS is not JSON (all parts joined)' }; }
+  return { ok: true, names, creds };
+}
+
+/**
+ * WHETHER ONE AGENT CAN BE WRITTEN — per agent, deliberately.
+ *
+ * This was a single all-or-nothing gate, and on 2026-10-12 it cost the town every record it had: a second
+ * estate was chartered, its steward had not issued its wires yet, and `no vault credentials for
+ * imb-estate.workspace` made the whole pass not-ready — so the TOWN's own record, whose credentials were
+ * minted and working, was never written either, and the Ask truthfully answered "I have no record for the
+ * last 7 days" about a town it was sampling every five minutes.
+ *
+ * An estate whose wires are not issued is a gap in THAT estate's record. It is not a reason to keep no
+ * record of anything: each agent is asked on its own, and `recordDay` reports what did not land.
+ */
+export function agentRecordReadiness(env: PulseRecordEnv, agentName: string): { ready: true } | { ready: false; reason: string } {
+  const e = envReadiness(env);
+  if (!e.ok) return { ready: false, reason: e.reason };
+  if (!e.names.includes(agentName)) return { ready: false, reason: `${agentName} is not a context agent in CONTEXT_AGENTS` };
+  const c = e.creds[agentName];
+  return isWireDoc(c?.grant) && isWireDoc(c?.leaf)
+    ? { ready: true }
+    : { ready: false, reason: `no vault credentials for ${agentName} (T2: the steward issues the grant + leaf)` };
+}
+
+/**
+ * The deployment's readiness: ready when AT LEAST ONE context agent can be written, with the ones that
+ * cannot named beside it. `/api/health` prints the whole of this, so a missing wire is visible as the one
+ * agent it belongs to rather than as a dead pass.
+ */
+export type RecordReadiness =
+  | { ready: true; agents: string[]; notReady: Array<{ agent: string; reason: string }> }
+  | { ready: false; reason: string; agents: string[]; notReady: Array<{ agent: string; reason: string }> };
+export function pulseRecordReadiness(env: PulseRecordEnv): RecordReadiness {
+  const e = envReadiness(env);
+  if (!e.ok) return { ready: false, reason: e.reason, agents: [], notReady: [] };
+  const agents: string[] = [];
+  const notReady: Array<{ agent: string; reason: string }> = [];
+  for (const n of e.names) {
+    const r = agentRecordReadiness(env, n);
+    if (r.ready) agents.push(n); else notReady.push({ agent: n, reason: r.reason });
+  }
+  return agents.length
+    ? { ready: true, agents, notReady }
+    : { ready: false, reason: notReady.map((x) => x.reason).join('; '), agents, notReady };
 }
 
 /** The day's rollup: the latest sample per source on that day plus how many samples were taken — counts, never a person. */
-export function dayRollup(samples: PulseSampleV1[], day: string, town?: TownManifest, infraRows: InfraRowV1[] = []): { type: 'ap.town-pulse.v1'; day: string; samples: number; services: Record<string, { samples: number; up: number }>; chain: unknown; inference: unknown; estates: Record<string, unknown>; pulse?: unknown } {
+export function dayRollup(samples: PulseSampleV1[], day: string, town?: TownManifest, infraRows: InfraRowV1[] = []): { type: 'ap.town-pulse.v1'; day: string; samples: number; services: Record<string, { samples: number; up: number }>; chain: unknown; inference: unknown; names: unknown; estates: Record<string, unknown>; pulse?: unknown } {
   const onDay = samples.filter((s) => s.at.startsWith(day));
   // Spec 437 §5 — the day's infra status per resource, its cost rows, cost per completed run and the unattributed list, lag labels intact
   // (no series: the record is the day's word, the DO keeps the curve).
@@ -71,12 +114,14 @@ export function dayRollup(samples: PulseSampleV1[], day: string, town?: TownMani
   const latest = (kind: PulseSampleV1['kind'], id?: string) => { const xs = onDay.filter((x) => x.kind === kind && x.ok && (!id || x.id === id)); return xs.length ? xs[xs.length - 1]!.payload : null; };
   const estates: Record<string, unknown> = {};
   for (const s of onDay.filter((x) => x.kind === 'estate' && x.ok)) estates[s.id] = s.payload;
-  return { type: 'ap.town-pulse.v1', day, samples: onDay.length, services, chain: latest('chain'), inference: latest('inference'), estates, ...(pulse ? { pulse } : {}) };
+  // THE TOWN OF NAMES, in the day's word: the last good sample's count per root (spec 430). The day a question
+  // like "how many people are named here?" became answerable from a record instead of only from a live read.
+  return { type: 'ap.town-pulse.v1', day, samples: onDay.length, services, chain: latest('chain'), inference: latest('inference'), names: latest('names', 'naming'), estates, ...(pulse ? { pulse } : {}) };
 }
 
 /** Write one record into one context agent's vault as that agent. `{ ok }` or the vault's reason — never silent. */
 export async function writeContextRecord(env: PulseRecordEnv, agentName: string, recordType: string, data: unknown, fetchImpl: typeof fetch = fetch): Promise<{ ok: true } | { ok: false; error: string }> {
-  const ready = pulseRecordReadiness(env);
+  const ready = agentRecordReadiness(env, agentName);
   if (!ready.ready) return { ok: false, error: ready.reason };
   const creds = (JSON.parse(contextAgentCredentialsRaw(env)) as Record<string, { grant: WireDoc; leaf: WireDoc }>)[agentName];
   if (!creds) return { ok: false, error: `no credentials for ${agentName}` };
@@ -110,6 +155,9 @@ export async function recordDay(env: PulseRecordEnv, samples: PulseSampleV1[], d
   for (const [estate, agent] of Object.entries(cfg.estates)) {
     const p = roll.pulse as { infrastructure?: Array<{ owner: { kind: string; id: string } | null }>; cost?: Array<{ owner: { kind: string; id: string } | null }>; costPerCompletedRun?: Record<string, unknown> } | undefined;
     const mine = (o: { kind: string; id: string } | null) => o?.kind === 'estate' && o.id === estate;
+    // NO `names` IN AN ESTATE'S SLICE. The town of names is counted per ROOT and a root is shared by every
+    // estate that names under it, so a town-wide count in one estate's record would read as that estate's own.
+    // A question about names is the TOWN agent's to answer, from the town's record.
     const slice = { type: 'ap.town-pulse.v1', day, estate, samples: roll.samples, heartbeat: roll.estates[estate] ?? null, chain: roll.chain, inference: roll.inference, ...(p ? { pulse: { infrastructure: (p.infrastructure ?? []).filter((r) => mine(r.owner)), cost: (p.cost ?? []).filter((c) => mine(c.owner)), costPerCompletedRun: p.costPerCompletedRun?.[estate] ?? null } } : {}) };
     const r = await writeContextRecord(env, agent, `pulse.day:${day}`, slice, fetchImpl);
     out.push({ agent, recordType: `pulse.day:${day}`, ok: r.ok, ...(r.ok ? {} : { error: r.error }) });

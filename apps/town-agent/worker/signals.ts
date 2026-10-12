@@ -52,10 +52,53 @@ export function townSummary(town: TownManifest) {
   return {
     town: town.town, status: town.status,
     chain: { id: town.chain.id, generation: town.chain.generation, rpc: town.chain.rpc },
-    estates: town.estates.map((e) => ({ id: e.id, home: e.home, edge: e.edge, nameRoots: e.nameRoots, repo: e.repo })),
+    // `estateName` and `a2a` ride along so a reader can see WHO answers for an estate and WHERE — the estate's
+    // own name on the chain, and the door its agents are reached through. Both are facts the manifest records;
+    // neither is authority (spec 429 D2), and the name is the stable one of the two (the URL moves).
+    estates: town.estates.map((e) => ({
+      id: e.id, home: e.home, edge: e.edge, a2a: e.a2a, nameRoots: e.nameRoots, repo: e.repo,
+      ...(e.estateName ? { estateName: e.estateName } : {}),
+      ...(e.agentZone ? { agentZone: e.agentZone } : {}),
+    })),
     // Spec 437 I4 — account ids and labels only; the tokens are the Worker's secrets.
     accounts: town.accounts ?? null,
   };
+}
+
+// ── WHO ANSWERS, AND AT WHICH DOOR ────────────────────────────────────────────────────────────
+
+/**
+ * An agent's card host, per spec 346 §5: `<label>-<type>.<zone>` — `faith-town.workspace` on `faithnet.ai`
+ * is `faith-town-workspace.faithnet.ai`. ONE definition, used both by the Ask that sends the question and by
+ * the page that shows where it goes: two spellings of this drifting apart is a page that names a door nobody
+ * is listening at.
+ */
+export function agentCardHost(name: string, zone: string): string | null {
+  const [label, type] = name.split('.');
+  return label && type && zone ? `${label}-${type}.${zone}` : null;
+}
+
+/** The agent that answers for one context (spec 436 §5.5): its name on the chain and the card that names its door. */
+export interface ContextAgentView { context: 'town' | 'estate'; estate?: string; name: string; card: string | null; cardHost: string | null }
+
+/**
+ * The context agents, as the Ask resolves them: the town's, and one per estate. `CONTEXT_AGENTS` is the one
+ * place that says which name answers for which context — an unconfigured context is `null` here and the page
+ * says the Ask is not chartered for it, rather than showing a name that answers nothing.
+ */
+export function contextAgentViews(
+  town: TownManifest,
+  cfg: { town?: string; estates: Record<string, string> },
+  zone: string | undefined,
+): { town: ContextAgentView | null; estates: Record<string, ContextAgentView> } {
+  const z = zone ?? town.estates[0]?.agentZone ?? '';
+  const view = (name: string, context: 'town' | 'estate', estate?: string): ContextAgentView => {
+    const host = agentCardHost(name, z);
+    return { context, ...(estate ? { estate } : {}), name, cardHost: host, card: host ? `https://${host}/.well-known/agent-card.json` : null };
+  };
+  const estates: Record<string, ContextAgentView> = {};
+  for (const e of town.estates) { const n = cfg.estates[e.id]; if (n) estates[e.id] = view(n, 'estate', e.id); }
+  return { town: cfg.town ? view(cfg.town, 'town') : null, estates };
 }
 
 /** A plain-language line per service — what a person reading the reply sees first. */

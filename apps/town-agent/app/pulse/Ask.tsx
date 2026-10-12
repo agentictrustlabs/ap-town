@@ -5,6 +5,7 @@
 // says so.
 import { useState, type ReactNode } from 'react';
 import { getJson } from '@ap-town/town-ui';
+import type { ContextAgentView } from '../types';
 
 export interface AskAnswer { ok: boolean; answer?: string; agent?: string; cited?: Array<{ key: string; day?: string }>; runRef?: string; error?: string; detail?: string }
 
@@ -14,16 +15,26 @@ export interface AskAnswer { ok: boolean; answer?: string; agent?: string; cited
  * first one in the manifest and never saying which. The estate travels to `/api/ask?estate=<id>`, which has
  * always taken it; what was missing was any way to say it, and any sign of which one answered.
  */
-export function Ask({ scope, estates = [] }: { scope: 'town' | 'estate'; estates?: Array<{ id: string }> }): ReactNode {
+export function Ask({ scope, estates = [], agents }: {
+  scope: 'town' | 'estate';
+  estates?: Array<{ id: string }>;
+  /** Who answers for each context, from `/api/town` — so the page names the door before the question is sent. */
+  agents?: { town: ContextAgentView | null; estates: Record<string, ContextAgentView> };
+}): ReactNode {
   const [q, setQ] = useState('');
   const [busy, setBusy] = useState(false);
   const [out, setOut] = useState<AskAnswer | null>(null);
   const [estate, setEstate] = useState(estates[0]?.id ?? '');
   const who = scope === 'estate' && estate ? `the ${estate} estate` : scope === 'estate' ? 'the estate' : 'the town';
+  // WHICH AGENT, NAMED BEFORE YOU ASK. An answer already says who said it; this says who WILL — the name on the
+  // chain and the card that names its door — so an unanswered question is read as a door, not as a mystery.
+  const asked = scope === 'town' ? agents?.town ?? null : estate ? agents?.estates[estate] ?? null : null;
   // Open-ended, not a menu: the agent answers about anything its records name — a Worker, a service, an
   // estate, a platform — so the examples show one of each rather than three phrasings of "how is it going".
+  // The TOWN keeps the town of names (spec 430), so a names question is on its examples and not an estate's:
+  // a root is shared by every estate that names under it, and no estate's record carries the count.
   const examples = scope === 'town'
-    ? ['how is the town doing this week', 'tell me about demo-a2a-faithnet', 'is anything broken right now', 'what does the town run on']
+    ? ['how is the town doing this week', 'how many people are named here', 'tell me about demo-a2a-faithnet', 'is anything broken right now']
     : ['how many runs failed this week', 'what did it spend this week', 'is anything broken right now'];
   const ask = async (text: string) => {
     if (!text.trim() || busy) return;
@@ -36,6 +47,9 @@ export function Ask({ scope, estates = [] }: { scope: 'town' | 'estate'; estates
     <section className="ask">
       <h2>Ask {who}</h2>
       <p className="lede">Ask anything about this deployment — a service, a Worker, an estate, what it cost, what is down. Answered by {who}'s own agent from the records it keeps, with the records named. It answers only from those records and says so when they do not hold it. Counts, never a person.</p>
+      {agents && (asked
+        ? <p className="quiet">Asked of <span className="mono">{asked.name}</span>{asked.card ? <> · <a href={asked.card} rel="noreferrer">its agent card</a></> : null} — the door this question goes to.</p>
+        : <p className="quiet">No agent is chartered to answer for {who} yet (spec 436 §5.5 T1), so this will say so rather than guess.</p>)}
       <form className="ask-row" onSubmit={(e) => { e.preventDefault(); void ask(q); }}>
         {/* Shown only when there IS a choice: one estate needs no picker, and a picker with one option reads
             like a setting rather than the fact that there is only one estate. */}

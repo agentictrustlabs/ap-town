@@ -1,6 +1,6 @@
 // THE PULSE — spec 434 §10 / spec 436 §5.3. Every five minutes the town SAMPLES what it can read without holding
-// anyone's record: each listed service's probe, the chain gateway's ops summary, the model gateway's ops summary, and
-// each estate's heartbeat (counts over a token-gated endpoint; never a name). Samples go into `HeartbeatDO` (SQL, 30
+// anyone's record: each listed service's probe, the chain gateway's ops summary, the model gateway's ops summary, the
+// town of names in counts per root, and each estate's heartbeat (counts over a token-gated endpoint; never a name). Samples go into `HeartbeatDO` (SQL, 30
 // days, pruned by alarm) — a SERVING PLANE: wiping it loses trend lines, never a record. `/api/pulse` serves the latest
 // sample per kind and the series for a window. Pulled, aggregate, historical; the town never pushes into an estate.
 import { laneBindingFor, type TownManifest } from '@ap-town/town-model';
@@ -14,10 +14,37 @@ export const COST_RETENTION_MS = 400 * 86_400_000;
 
 /** Spec 437 adds `infra` (an `InfraSampleV1` per platform resource) and `cost` (a `CostSampleV1` per source per day). The
  *  performance block rides on the estate heartbeat (`payload.performance`) — a separate kind would be a copy. */
-export type PulseKind = 'service' | 'chain' | 'inference' | 'estate' | 'infra' | 'cost';
+export type PulseKind = 'service' | 'chain' | 'inference' | 'estate' | 'infra' | 'cost' | 'names';
 export interface PulseSampleV1 { kind: PulseKind; id: string; at: string; ok: boolean; payload: unknown; error?: string }
 
 export interface PulseServiceSample { status: number | null; up: boolean; ms: number }
+/**
+ * THE TOWN OF NAMES, SAMPLED (spec 430). The naming service is probed like every other service — up or down —
+ * and that is all the Pulse used to keep of it, so "how many people are named here?" was a question the town
+ * could answer live and could not answer from a record. This is the answer in counts: one row per root, the
+ * ending, what it names and how many names are under it. No name and no owner: a count, never a person.
+ */
+export interface PulseNamesSample { chainId: number | null; block: number | null; total: number; roots: Array<{ tld: string; kind: string | null; names: string | null; count: number }> }
+
+/** The naming service's own town summary, as much of it as the Pulse keeps. */
+export function namesSampleOf(data: unknown): PulseNamesSample {
+  const d = (data ?? {}) as { chainId?: unknown; block?: unknown; roots?: unknown };
+  const roots = (Array.isArray(d.roots) ? d.roots : []).map((r) => {
+    const x = (r ?? {}) as { tld?: unknown; kind?: unknown; names?: unknown; count?: unknown };
+    return {
+      tld: String(x.tld ?? ''),
+      kind: typeof x.kind === 'string' ? x.kind : null,
+      names: typeof x.names === 'string' ? x.names : null,
+      count: typeof x.count === 'number' && Number.isFinite(x.count) ? x.count : 0,
+    };
+  }).filter((r) => r.tld);
+  return {
+    chainId: typeof d.chainId === 'number' ? d.chainId : null,
+    block: typeof d.block === 'number' ? d.block : null,
+    total: roots.reduce((n, r) => n + r.count, 0),
+    roots,
+  };
+}
 export interface PulseReadV1 {
   town: string;
   sampledAt: string | null;
@@ -26,11 +53,14 @@ export interface PulseReadV1 {
   chain: { latest: PulseSampleV1 | null; series: Array<{ at: string; requests: number; denied: number; upstreamErrors: number; p95Ms: number | null }> };
   inference: { latest: PulseSampleV1 | null; series: Array<{ at: string; requests: number; costMicroUsd: number; fallbacks: number; failed: number }> };
   estates: Record<string, { latest: PulseSampleV1 | null; stale: boolean; series: Array<{ at: string; runsCompleted: number; runsFailed: number; runsParked: number; modelCalls: number; vaultCalls: number; askP95Ms: number | null }> }>;
+  names: { latest: PulseSampleV1 | null; series: Array<{ at: string; total: number }> };
 }
 
 export interface PulseEnv {
   CHAIN?: { fetch(req: Request): Promise<Response> };
   INFERENCE?: { fetch(req: Request): Promise<Response> };
+  /** The naming service, for the town of names in counts. Public and keyless — the same read the portal does. */
+  NAMING?: { fetch(req: Request): Promise<Response> };
   TOWN_OPS_TOKEN?: string;
   /** JSON `estate id → token`; an estate without one is sampled as "unreadable", never as zeros. */
   ESTATE_HEARTBEAT_TOKENS?: string;
@@ -66,6 +96,9 @@ export async function samplePulse(town: TownManifest, env: PulseEnv, probe: Prob
   out.push({ kind: 'chain', id: 'chain-gateway', at, ok: chain.ok, payload: chain.ok ? chain.data : null, ...(chain.ok ? {} : { error: chain.error }) });
   const inf = await readJson<unknown>(env.INFERENCE, 'https://inference/v1/ops/summary?window=24h', env.TOWN_OPS_TOKEN);
   out.push({ kind: 'inference', id: 'inference', at, ok: inf.ok, payload: inf.ok ? inf.data : null, ...(inf.ok ? {} : { error: inf.error }) });
+  // The town of names, in counts (spec 430). Keyless: `/api/town` is the naming service's own public summary.
+  const names = await readJson<unknown>(env.NAMING, 'https://naming/api/town');
+  out.push({ kind: 'names', id: 'naming', at, ok: names.ok, payload: names.ok ? namesSampleOf(names.data) : null, ...(names.ok ? {} : { error: names.error }) });
   const tokens = (() => { try { return JSON.parse(env.ESTATE_HEARTBEAT_TOKENS ?? '{}') as Record<string, string>; } catch { return {}; } })();
   await Promise.all(town.estates.map(async (e) => {
     const token = tokens[e.id];
@@ -120,8 +153,10 @@ export function readPulse(town: TownManifest, samples: PulseSampleV1[], window: 
     const hb = latest?.ok ? (latest.payload as EstateHeartbeatV1) : null;
     estates[e.id] = { latest, stale: !hb || heartbeatIsStale(hb, nowMs, SAMPLE_INTERVAL_MS), series: byBucket(xs, (bs, at) => { const h = bs[bs.length - 1]!.payload as EstateHeartbeatV1; return { at, runsCompleted: h.runs.completed, runsFailed: h.runs.failed, runsParked: h.runs.parked, modelCalls: h.modelCalls, vaultCalls: h.vaultCalls, askP95Ms: h.askLatencyP95Ms }; }) };
   }
+  const nameXs = inWin.filter((x) => x.kind === 'names' && x.ok);
+  const names = { latest: latestOf('names', 'naming'), series: byBucket(nameXs, (bs, at) => ({ at, total: num((bs[bs.length - 1]!.payload as PulseNamesSample | null)?.total) })) };
   const last = samples.length ? samples.reduce((a, b) => (a.at > b.at ? a : b)).at : null;
-  return { town: town.town, sampledAt: last, window: { from: new Date(from).toISOString(), to: new Date(nowMs).toISOString(), stepMs }, services, chain, inference, estates };
+  return { town: town.town, sampledAt: last, window: { from: new Date(from).toISOString(), to: new Date(nowMs).toISOString(), stepMs }, services, chain, inference, estates, names };
 }
 
 // ── The store ──────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -44,20 +44,28 @@ export function Overview({ t }: { t: TownData }): ReactNode {
 
       <section>
         <SectionHead eyebrow="Who lives here" title={t.estates.length === 1 ? 'The estate' : 'Estates'} action={<Link href="/operations/estates">How each estate is doing →</Link>}>
-          An estate is one Home, one gate and the people and agents under it. The town lists it; the estate runs itself.
+          An estate is one Home, one gate and the people and agents under it, with its own name on the chain and its own
+          agent that answers for it. The town lists it; the estate runs itself.
         </SectionHead>
         <div className="cards cards-roomy">
-          {t.estates.map((e) => (
+          {t.estates.map((e) => {
+            const agent = t.agents?.estates[e.id] ?? null;
+            return (
             <div key={e.id} className="card">
               <span className="card-head"><Glyph kind="org" /><span><span className="card-title">{e.id}</span><br /><span className="card-sub">an estate on this chain</span></span></span>
               <dl className="kv">
                 <dt>Home</dt><dd><a href={e.home} rel="noreferrer">{new URL(e.home).host}</a></dd>
                 <dt>Gate</dt><dd className="mono">{new URL(e.edge).host}</dd>
+                {/* The estate's name on the chain, and the agent that answers for it — the name is the stable
+                    one of the two, the card is where its A2A door is named (spec 436 §5.5). */}
+                {e.estateName && <><dt>Name on chain</dt><dd className="mono">{e.estateName}</dd></>}
+                {agent && <><dt>Answers for it</dt><dd>{agent.card ? <a href={agent.card} rel="noreferrer" className="mono">{agent.name}</a> : <span className="mono">{agent.name}</span>}</dd></>}
                 <dt>Names under</dt><dd>{e.nameRoots.map((r) => `.${r}`).join(' ')}</dd>
                 <dt>Repository</dt><dd><a href={`https://github.com/${e.repo}`} rel="noreferrer">{e.repo}</a></dd>
               </dl>
             </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 

@@ -5,7 +5,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Band, Link, Loading, useRoute, Chip, Stat, Sparkline, UpStrip, WindowPicker, Bar, fmtInt, fmtUsd, fmtMs, fmtAgo, type Loaded, type PulseWindow } from '@ap-town/town-ui';
 import { InfraTab, PerformanceTab, type EstatePerf, type PerfView } from '../pulse/InfraTabs';
-import type { TownData } from '../types';
+import type { ContextAgentView, TownData } from '../types';
 import type { PulseReadV1 } from '../../worker/pulse';
 import { Health } from '../ui';
 import { Ask } from '../pulse/Ask';
@@ -106,7 +106,7 @@ function TownTab({ t, p }: { t: TownData; p: PulseReadV1 }): ReactNode {
         <Stat label="Names" value={t.names ? fmtInt(t.names.total) : '—'} sub={t.names ? `across ${t.names.roots.length} roots` : 'the naming service did not answer'} />
         <Stat label="Last sample" value={fmtAgo(p.sampledAt)} sub="every 5 minutes" tone={p.sampledAt && Date.now() - Date.parse(p.sampledAt) < 12 * 60_000 ? 'ok' : 'warn'} />
       </section>
-      <Ask scope="town" />
+      <Ask scope="town" agents={t.agents} />
       <section>
         <h2>Every listed service</h2>
         <table className="table">
@@ -136,7 +136,11 @@ function TownTab({ t, p }: { t: TownData; p: PulseReadV1 }): ReactNode {
           <dt>Contract generation</dt><dd>{t.chain.generation}</dd>
           <dt>Public RPC</dt><dd className="mono">{t.chain.rpc} <span className="quiet">(per-app tokens; read-only by default — the Chain tab shows their use)</span></dd>
           <dt>Estates</dt><dd>{t.estates.map((e) => <Link key={e.id} href="/operations/estates">{e.id}</Link>)}</dd>
-          <dt>The town's agent</dt><dd><a href={t.card} rel="noreferrer" className="mono break">{t.card}</a></dd>
+          {/* TWO DIFFERENT AGENTS, and reading them as one is how "ask the town" ends up pointed at the portal.
+              The portal's card is this Worker: it describes the town and holds no record. The context agent is
+              the one with a vault and a day's record in it, and the one the Ask talks to. */}
+          <dt>The portal's agent card</dt><dd><a href={t.card} rel="noreferrer" className="mono break">{t.card}</a> <span className="quiet">(this Worker — it describes the town; it keeps no record)</span></dd>
+          <dt>The town's context agent</dt><dd>{t.agents?.town ? <>{<span className="mono">{t.agents.town.name}</span>}{t.agents.town.card ? <> · <a href={t.agents.town.card} rel="noreferrer">its agent card</a></> : null}</> : <span className="quiet">not chartered yet (spec 436 §5.5 T1)</span>}</dd>
         </dl>
       </section>
       <section>
@@ -154,13 +158,67 @@ function TownTab({ t, p }: { t: TownData; p: PulseReadV1 }): ReactNode {
   );
 }
 
+/**
+ * WHO ANSWERS FOR A CONTEXT, AND AT WHICH DOOR — spec 436 §4/§5.5. One operator, four contexts, and each one
+ * answers for itself through an agent of its own: the question is not "which server is this" but "whose record
+ * is this, and who speaks from it". So the name on the chain comes first (it is the stable one), the card that
+ * names the A2A door second, and the door itself third. `null` says not chartered — never a name that answers nothing.
+ */
+function WhoAnswers({ agent, name, nameLabel, a2a, note }: {
+  agent: ContextAgentView | null;
+  name?: string | undefined;
+  nameLabel: string;
+  a2a?: string | undefined;
+  note?: string | undefined;
+}): ReactNode {
+  return (
+    <>
+      <dl className="kv">
+        <dt>{nameLabel}</dt><dd>{name ? <span className="mono">{name}</span> : <span className="quiet">not named in the manifest</span>}</dd>
+        <dt>Answers the Ask</dt><dd>{agent ? <span className="mono">{agent.name}</span> : <span className="quiet">no context agent chartered yet (spec 436 §5.5 T1)</span>}</dd>
+        <dt>Agent card</dt><dd>{agent?.card ? <a href={agent.card} rel="noreferrer" className="mono break">{agent.card}</a> : <span className="quiet">—</span>}</dd>
+        {a2a ? <><dt>A2A door</dt><dd className="mono break">{a2a}</dd></> : null}
+      </dl>
+      {note ? <p className="quiet">{note}</p> : null}
+    </>
+  );
+}
+
+/**
+ * THE TOWN, ON THE SAME PAGE AS ITS ESTATES and in the same shape — because it is one more context with one
+ * more record and one more agent, not the frame the others sit in. What it keeps that no estate does: the
+ * services every estate shares, and the town of names.
+ */
+function TownCard({ t, p }: { t: TownData; p: PulseView }): ReactNode {
+  const up = t.services.filter((s) => s.signals.healthy === 'up' || s.signals.healthy === 'self').length;
+  const probed = t.services.filter((s) => s.signals.healthy !== 'unobserved').length;
+  const fresh = p.sampledAt !== null && Date.now() - Date.parse(p.sampledAt) < 12 * 60_000;
+  return (
+    <article className="card estate-card">
+      <span className="card-head">
+        <span><span className="card-title">{t.town}</span><br /><span className="card-sub">the town — what every estate here shares</span></span>
+        {fresh ? <Chip tone="ok">live · {fmtAgo(p.sampledAt)}</Chip> : <Chip tone="muted">{p.sampledAt ? `stale · ${fmtAgo(p.sampledAt)}` : 'no sample yet'}</Chip>}
+      </span>
+      <div className="stats stats-tight">
+        <Stat label="Chain" value={t.chain.id} sub={`generation ${t.chain.generation}`} />
+        <Stat label="Services answering" value={`${up} / ${probed}`} sub={`${t.services.length} listed`} tone={probed && up === probed ? 'ok' : 'warn'} />
+        <Stat label="Names" value={t.names ? fmtInt(t.names.total) : '—'} sub={t.names ? `under ${t.names.roots.filter((r) => r.count > 0).length} endings` : 'the naming service did not answer'} />
+        <Stat label="Estates" value={t.estates.length} sub={t.estates.map((e) => e.id).join(' · ')} />
+      </div>
+      <WhoAnswers agent={t.agents?.town ?? null} name={t.town} nameLabel="Town" />
+      <span className="card-foot"><a href={t.card} rel="noreferrer">The portal's own agent card</a><span className="mono">agentictrustlabs/ap-town</span></span>
+    </article>
+  );
+}
+
 function EstatesTab({ t, p }: { t: TownData; p: PulseView }): ReactNode {
   return (
     <section>
       <h2>Estates</h2>
-      <Ask scope="estate" estates={t.estates} />
-      <p className="lede">One card per estate on this chain. Each reports its own counts to the town — agents, homes, runs, spend — over a token the estate issued. The estate's people and their records stay at the estate; a stale card is dark, never guessed.</p>
+      <Ask scope="estate" estates={t.estates} agents={t.agents} />
+      <p className="lede">The town and one card per estate on this chain — each a context with its own record and its own agent (spec 436 §4). Each estate reports its own counts to the town — agents, homes, runs, spend — over a token the estate issued. The estate's people and their records stay at the estate; a stale card is dark, never guessed.</p>
       <div className="cards">
+        <TownCard t={t} p={p} />
         {t.estates.map((e) => {
           const st = p.estates[e.id];
           const hb = st?.latest?.ok ? (st.latest.payload as Heartbeat) : null;
@@ -186,6 +244,15 @@ function EstatesTab({ t, p }: { t: TownData; p: PulseView }): ReactNode {
               ) : (
                 <p className="quiet">{st?.latest?.error ?? 'This estate has not reported yet. Its runtime answers GET /ops/heartbeat under a token the town holds (spec 434 §10.2).'}</p>
               )}
+              <WhoAnswers
+                agent={t.agents?.estates[e.id] ?? null}
+                name={e.estateName}
+                nameLabel="Estate name on chain"
+                a2a={e.a2a}
+                note={e.agentZone
+                  ? undefined
+                  : `This estate serves no agent zone of its own, so its agents are reached through its edge by name; the card above is on the zone the Ask is configured with, not ${e.id}'s.`}
+              />
               <span className="card-foot"><a href={e.home} rel="noreferrer">Open the estate's Home</a><span className="mono">{e.repo}</span></span>
             </article>
           );
