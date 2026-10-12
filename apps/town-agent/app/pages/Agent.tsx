@@ -152,6 +152,19 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
               deliberately not a score: the registry lists what the chain shows and leaves the reading to you.
               An edge count is a shape of the graph, never a measure of whether to rely on this agent.
             </SectionHead>
+            {/* THE ONE PLACEMENT THE TOWN CAN COMPUTE. Which estate an agent belongs to is a public-graph
+                question a reader arrives with, and the chain's relationship edges do not answer it — this is
+                read from the agent's OWN endpoint against the hosts the manifest declares, and it says so. */}
+            {d.placement && (
+              <dl className="kv kv-facts">
+                <dt>Estate</dt>
+                <dd>
+                  {d.placement.estate
+                    ? <><Link href={`/estate/${d.placement.estate}`}>{d.placement.estate}</Link> <span className="quiet">&mdash; inferred from its own endpoint, not attested</span></>
+                    : <span className="quiet">not placed &mdash; its records name no endpoint this town recognises</span>}
+                </dd>
+              </dl>
+            )}
             {graph.length > 0 ? (
               <dl className="kv kv-facts">
                 {graph.map((x, i) => {
