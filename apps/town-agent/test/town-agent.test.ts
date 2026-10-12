@@ -98,6 +98,9 @@ d('the estate page', () => {
     expect(e.estateName).toBe('imbnet.estate');
     expect(e.agentZone).toBeUndefined();
     expect((r.body.mcpServers as Array<{ id: string; estate: string }>).map((m) => m.id)).toEqual(['vault', 'home']);
+    // The estate page probes the same doors the census does. Two pages disagreeing about one door — "answers"
+    // on /mcp and "not probed" here — is worse than neither saying anything, and that is what shipped first.
+    expect((r.body.mcpServers as Array<{ up: boolean | null }>).map((m) => m.up)).toEqual([true, true]);
   });
 });
 

@@ -72,6 +72,19 @@ export async function infraConfigFrom(env: Env, owner?: string): Promise<unknown
   } catch (e) { return { ok: false, error: `the town MCP could not be asked: ${e instanceof Error ? e.message : String(e)}` }; }
 }
 
+/** Knock on every declared MCP door, in parallel and ONCE each. `up: null` where no probe is declared, which
+ *  is a DIFFERENT answer from down: a binding-only server has no door to knock on and is not therefore broken.
+ *  Shared by the census and the estate page so the same server never reads "answers" on one and "not probed"
+ *  on the other — two pages disagreeing about a door is worse than neither saying anything. */
+async function probeMcp<T extends { probe?: string }>(servers: T[], probe: Probe): Promise<Array<T & { up: boolean | null; status?: number }>> {
+  return Promise.all(servers.map(async (m) => {
+    if (!m.probe) return { ...m, up: null };
+    const r = await probe(m.probe);
+    const status = 'status' in r ? r.status : 0;
+    return { ...m, up: status >= 200 && status < 400, status };
+  }));
+}
+
 const VERSION = '0.1.0';
 
 export function townOf(env: Env): TownManifest {
@@ -203,7 +216,7 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
       ? { ...estateRoster(roster.rows, town, estate.id), truncated: !!roster.truncated, read: roster.returned ?? roster.rows.length }
       : { unavailable: 'the registry could not be asked just now, so this estate\u2019s agents are unknown rather than none' };
     return json({
-      estate, mcpServers: estateMcpServers(town, estate.id), agents,
+      estate, mcpServers: await probeMcp(estateMcpServers(town, estate.id), probe), agents,
       agent: contextAgentViews(town, contextAgents(env as PulseRecordEnv), env.CONTEXT_AGENT_ZONE).estates[estate.id] ?? null,
       chain: town.chain, town: town.town,
     }, 200, { 'cache-control': 'public, max-age=60' });
@@ -215,14 +228,7 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
   if (path === '/mcp') {
     const roster = await ask<{ ok?: boolean; rows?: AgentRosterRow[]; truncated?: boolean }>(env.REGISTRY, 'https://registry/roster?limit=500');
     const servers = allMcpServers(town);
-    // Probed where a probe is declared, in parallel and ONCE each; `null` where none is declared, which is a
-    // different answer from down — a binding-only server has no door to knock on and is not therefore broken.
-    const probed = await Promise.all(servers.map(async (m) => {
-      if (!m.probe) return { ...m, up: null };
-      const r = await probe(m.probe);
-      const status = 'status' in r ? r.status : 0;
-      return { ...m, up: status >= 200 && status < 400, status };
-    }));
+    const probed = await probeMcp(servers, probe);
     const agentDoors = roster?.ok && Array.isArray(roster.rows)
       ? { rows: placeAgents(roster.rows.filter((r) => !!r.mcpEndpoint), town), read: roster.rows.length, truncated: !!roster.truncated }
       : { unavailable: 'the registry could not be asked just now, so which agents serve a door of their own is unknown rather than none' };
