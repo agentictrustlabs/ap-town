@@ -253,6 +253,37 @@ services:
     description: Key custody (AKCS) — a tenant per estate; keys are delegates, never identities.
 
   # ── Applications ──────────────────────────────────────────────────────────────────────────────────────────
+  # LISTED, NEVER MOVED (spec 429 §1) — the people-group MCP beside `people-groups.svc`, deployed from ap-demos
+  # on the richcanvas account. It is here so the town can say WHAT serves that hostname: without a declaration
+  # the agent page reads "this town's manifest declares nothing that serves this host", which is the honest
+  # answer to an undeclared host and a useless one for a host somebody in this town does declare an endpoint at.
+  # A hostname that looks like a Worker name is not a declaration — so this is the declaration.
+  - id: people-groups-mcp
+    kind: application
+    repo: agentictrustlabs/ap-demos
+    worker: demo-gc-pg
+    hosts: [demo-gc-pg.r-pedersen.workers.dev]
+    probe: https://demo-gc-pg.r-pedersen.workers.dev/health
+    estates: [faithnet]
+    workers: [demo-gc-pg]
+    mcpServers:
+      - id: people-groups
+        agentName: people-groups.svc
+        worker: demo-gc-pg
+        # OPEN, and said so rather than implied: it answers an anonymous MCP client with public counts.
+        # ADR-0057 makes an MCP endpoint a private capability interface by default and absent from every
+        # Agent Card; this one is a read-only interop surface, which the enum has a word for.
+        exposure: open
+        url: https://demo-gc-pg.r-pedersen.workers.dev/mcp
+        probe: https://demo-gc-pg.r-pedersen.workers.dev/health
+        description: >-
+          People-group counts from the Global.Church graph, by list (Joshua Project, IMB, the UUPG+ Base List)
+          for a country, with religion and affinity-bloc filters. The MCP `people-groups.svc` names in its own
+          `atl:mcpEndpoint` record, which is how the harness binds its `peoplegroup.*` reads — by record, never
+          by hostname. Counts with their publisher named; no authority, no sessions, no write.
+    description: >-
+      The people-group MCP beside the Global.Church people-groups service agent — public counts from the GC
+      graph through the GC gateway. The gateway credential lives on the Worker alone, never in the agent.
   - id: gamenight
     kind: application
     repo: agentictrustlabs/pokernight

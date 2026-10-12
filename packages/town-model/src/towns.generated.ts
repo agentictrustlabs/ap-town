@@ -388,6 +388,34 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "description": "Key custody (AKCS) — a tenant per estate; keys are delegates, never identities."
       },
       {
+        "id": "people-groups-mcp",
+        "kind": "application",
+        "repo": "agentictrustlabs/ap-demos",
+        "worker": "demo-gc-pg",
+        "hosts": [
+          "demo-gc-pg.r-pedersen.workers.dev"
+        ],
+        "probe": "https://demo-gc-pg.r-pedersen.workers.dev/health",
+        "estates": [
+          "faithnet"
+        ],
+        "workers": [
+          "demo-gc-pg"
+        ],
+        "mcpServers": [
+          {
+            "id": "people-groups",
+            "agentName": "people-groups.svc",
+            "worker": "demo-gc-pg",
+            "exposure": "open",
+            "url": "https://demo-gc-pg.r-pedersen.workers.dev/mcp",
+            "probe": "https://demo-gc-pg.r-pedersen.workers.dev/health",
+            "description": "People-group counts from the Global.Church graph, by list (Joshua Project, IMB, the UUPG+ Base List) for a country, with religion and affinity-bloc filters. The MCP `people-groups.svc` names in its own `atl:mcpEndpoint` record, which is how the harness binds its `peoplegroup.*` reads — by record, never by hostname. Counts with their publisher named; no authority, no sessions, no write."
+          }
+        ],
+        "description": "The people-group MCP beside the Global.Church people-groups service agent — public counts from the GC graph through the GC gateway. The gateway credential lives on the Worker alone, never in the agent."
+      },
+      {
         "id": "gamenight",
         "kind": "application",
         "repo": "agentictrustlabs/pokernight",

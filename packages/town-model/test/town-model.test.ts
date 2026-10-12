@@ -84,7 +84,9 @@ describe('the MCP census — declared, never inferred (spec 435 §5)', () => {
   it('reads the town’s servers off the services that declare one, not off Worker names', () => {
     const { town } = parseTown(faithchain);
     const rows = townMcpServers(town!);
-    expect(rows.map((r) => r.id).sort()).toEqual(['discovery-connector', 'discovery-mcp', 'skills', 'town-mcp']);
+    // `people-groups` joined the census when the manifest declared the Worker behind people-groups.svc's
+    // own `atl:mcpEndpoint` (2026-10-12) — a declared server, which is the only way into this list.
+    expect(rows.map((r) => r.id).sort()).toEqual(['discovery-connector', 'discovery-mcp', 'people-groups', 'skills', 'town-mcp']);
     // `demo-discovery-indexer-faithnet` is not here, and neither is any other Worker whose name ends in -mcp
     // without a declaration. The census is what the manifest asserts.
     expect(rows.every((r) => r.scale === 'town')).toBe(true);
@@ -188,9 +190,14 @@ describe('what serves this endpoint — declared, never derived from the hostnam
   });
 
   it('says UNATTRIBUTED for a host the manifest never declared — it does not split the name on a dot', () => {
-    // The temptation this refuses: `demo-gc-pg.r-pedersen.workers.dev` looks exactly like a Worker name and is
-    // on an account this town does not list. A convention that is right four times in six is two falsehoods.
-    const a = attributeEndpoint(t(), 'https://demo-gc-pg.r-pedersen.workers.dev/mcp');
+    // The temptation this refuses: `demo-gc-pg-staging.r-pedersen.workers.dev` looks exactly like a Worker
+    // name. A convention that is right four times in six is two falsehoods.
+    //
+    // The example used to be `demo-gc-pg.…` itself, until the manifest DECLARED that host (people-groups-mcp,
+    // 2026-10-12) and this test started passing for the wrong reason — a declared host attributes because it
+    // was declared, which is the opposite of what is being tested here. Its staging twin is undeclared and
+    // identically shaped, so the test asks the question it means to ask.
+    const a = attributeEndpoint(t(), 'https://demo-gc-pg-staging.r-pedersen.workers.dev/mcp');
     expect(a.how).toBe('unattributed');
     expect(a.worker).toBeUndefined();
     expect(a.note).toMatch(/does not guess/);

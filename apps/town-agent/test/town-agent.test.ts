@@ -111,7 +111,7 @@ d('the MCP census', () => {
   it('lists the town’s and every estate’s, and probes only where a probe is declared', async () => {
     const r = await call('/mcp', rosterOf([]));
     const servers = r.body.servers as Array<{ id: string; scale: string; estate?: string; up: boolean | null; probe?: string }>;
-    expect(servers.filter((m) => m.scale === 'town').map((m) => m.id).sort()).toEqual(['discovery-connector', 'discovery-mcp', 'skills', 'town-mcp']);
+    expect(servers.filter((m) => m.scale === 'town').map((m) => m.id).sort()).toEqual(['discovery-connector', 'discovery-mcp', 'people-groups', 'skills', 'town-mcp']);
     expect(servers.filter((m) => m.estate === 'faithnet').map((m) => m.id)).toEqual(['vault', 'home']);
     // A binding-only server has no door to knock on: `null`, never false, which would read as down.
     expect(servers.find((m) => m.id === 'town-mcp')!.up).toBeNull();
@@ -217,7 +217,7 @@ d('town.mcp says what is here, what is deliberately not, and that a door is not 
   it('lists the town’s and the estates’ declared servers with their exposure', async () => {
     const ps = await partsOf(dataMsg({ skill: 'town.mcp' }));
     const v = dataOf(ps) as { servers: Array<{ id: string; scale: string }> };
-    expect(v.servers.filter((m) => m.scale === 'town').map((m) => m.id).sort()).toEqual(['discovery-connector', 'discovery-mcp', 'skills', 'town-mcp']);
+    expect(v.servers.filter((m) => m.scale === 'town').map((m) => m.id).sort()).toEqual(['discovery-connector', 'discovery-mcp', 'people-groups', 'skills', 'town-mcp']);
     expect(v.servers.some((m) => m.scale === 'estate' && m.id === 'vault')).toBe(true);
     expect(textOf(ps)).toMatch(/no door — only a Worker bound to it can reach it/);
   });
@@ -278,7 +278,7 @@ d('what serves an endpoint (spec 437 I4)', () => {
   });
 
   it('says UNATTRIBUTED, and reads nothing, for a host the manifest never declared', async () => {
-    const r = await call('/endpoint?url=https%3A%2F%2Fdemo-gc-pg.r-pedersen.workers.dev%2Fmcp', rosterOf([]));
+    const r = await call('/endpoint?url=https%3A%2F%2Fdemo-gc-pg-staging.r-pedersen.workers.dev%2Fmcp', rosterOf([]));
     expect((r.body.attribution as { how: string }).how).toBe('unattributed');
     expect(r.body.reading).toBeNull();
     expect(r.body.source).toBeNull();
