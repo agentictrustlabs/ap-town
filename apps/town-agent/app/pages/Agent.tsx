@@ -6,6 +6,25 @@ import type { AgentDetail, TownData } from '../types';
 
 const local = (iri: string): string => iri.replace(/^.*[#/]/, '');
 
+/** HOW TO REACH IT. Pulled out of the flat fact list because "where do I send an A2A message" is the question
+ *  people actually arrive with, and it was a row among thirteen. Still public, still not a permission: an
+ *  endpoint says where an agent listens, never that you may use it. */
+const REACH_KEYS = ['a2aEndpoint', 'mcpEndpoint', 'cardUri', 'cardHash', 'serviceUrl', 'siteUrl'] as const;
+
+/** THE PUBLIC GRAPH. Who this agent is connected to, as the chain shows it. Separate signals, never a score:
+ *  a registry lists, it does not rank trust (ADR-0038 / spec 429 D2), and an edge count is a shape of the
+ *  graph, not a measure of whether anyone should rely on this agent. */
+const GRAPH_KEYS = ['hasRelationship', 'relatedAgent', 'edgeCount', 'activeEdgeCount', 'edgeDirection'] as const;
+
+const REACH_LABEL: Record<string, string> = {
+  a2aEndpoint: 'A2A endpoint — where another agent sends it a message',
+  mcpEndpoint: 'MCP endpoint — the tools it serves behind its own door',
+  cardUri: 'Agent card — what it says about itself, at its own host',
+  cardHash: 'Card hash — the digest the chain holds for that card',
+  serviceUrl: 'Service URL',
+  siteUrl: 'Site',
+};
+
 /** The registry stores some facts as a unix second. A reader is owed a date, with the raw value kept beside it. */
 const EPOCH_KEYS = new Set(['registeredAt', 'updatedAt', 'createdAt', 'releasedAt']);
 function factValue(key: string, raw: string): ReactNode {
@@ -49,6 +68,12 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
       const triples = d.agent.triples ?? [];
       const types = triples.filter((x) => x.p.endsWith('#type')).map((x) => local(x.o));
       const rows = triples.filter((x) => !x.p.endsWith('#type'));
+      // The same facts, grouped by the question a reader came with. Nothing is hidden: what is not reach and
+      // not graph still shows under Public facts below.
+      const isIn = (keys: readonly string[]) => (x: { p: string }) => keys.includes(local(x.p));
+      const reach = rows.filter(isIn(REACH_KEYS));
+      const graph = rows.filter(isIn(GRAPH_KEYS));
+      const rest = rows.filter((x) => !isIn(REACH_KEYS)(x) && !isIn(GRAPH_KEYS)(x));
       const conforms = triples.find((x) => x.p.endsWith('shacl#conforms'))?.o;
       const cardUri = triples.find((x) => local(x.p) === 'cardUri')?.o;
       const address = (d.agent.agent ?? '').split(':').pop() ?? '';
@@ -63,11 +88,57 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
             </div>
           </section>
           <section>
+            <SectionHead eyebrow="From the chain" title="How to reach it">
+              Where this agent listens, as its own on-chain records say. An endpoint is an address, never an
+              invitation: being able to reach an agent is not being allowed to use it.
+            </SectionHead>
+            {reach.length > 0 ? (
+              <dl className="kv kv-facts">
+                {reach.map((x, i) => { const k = local(x.p); return <span key={i} className="contents"><dt>{REACH_LABEL[k] ?? k}</dt><dd className="mono">{factValue(k, x.o)}</dd></span>; })}
+              </dl>
+            ) : (
+              <Empty title="It publishes no endpoint.">
+                Nothing on chain says where to reach this agent — no A2A endpoint, no card, no MCP. That is a fact
+                about its records, not a judgement about the agent: an agent is chartered with its endpoints written,
+                and one without them cannot be engaged by anybody who only has its name.
+              </Empty>
+            )}
+          </section>
+          <section>
+            <SectionHead eyebrow="From the chain" title="Its public graph">
+              Who it is connected to, and how many of those connections are live. These are SEPARATE SIGNALS and
+              deliberately not a score: the registry lists what the chain shows and leaves the reading to you.
+              An edge count is a shape of the graph, never a measure of whether to rely on this agent.
+            </SectionHead>
+            {graph.length > 0 ? (
+              <dl className="kv kv-facts">
+                {graph.map((x, i) => {
+                  const k = local(x.p);
+                  const related = k === 'relatedAgent' && /^0x[0-9a-fA-F]{40}$/.test(x.o);
+                  return (
+                    <span key={i} className="contents">
+                      <dt>{k}</dt>
+                      <dd className={/^(http|urn:|0x)/.test(x.o) ? 'mono' : ''}>
+                        {related ? <Link href={`/agent/${x.o}`}>{x.o}</Link> : factValue(k, x.o)}
+                      </dd>
+                    </span>
+                  );
+                })}
+              </dl>
+            ) : (
+              <Empty title="The chain shows no connections for it.">
+                No relationship, no edge. Either nobody has recorded one, or the ones that exist are private — a
+                relationship held in somebody&rsquo;s vault is theirs, and the public graph is not told about it
+                (ADR-0025). Absence here is not evidence of isolation.
+              </Empty>
+            )}
+          </section>
+          <section>
             <SectionHead eyebrow="Read from the chain and its own card" title="Public facts">
               Anyone can reproduce every line of this. None of it is a permission.
             </SectionHead>
             <dl className="kv kv-facts">
-              {rows.map((x, i) => { const k = local(x.p); return <span key={i} className="contents"><dt>{k}</dt><dd className={/^(http|urn:|0x)/.test(x.o) ? 'mono' : ''}>{factValue(k, x.o)}</dd></span>; })}
+              {rest.map((x, i) => { const k = local(x.p); return <span key={i} className="contents"><dt>{k}</dt><dd className={/^(http|urn:|0x)/.test(x.o) ? 'mono' : ''}>{factValue(k, x.o)}</dd></span>; })}
             </dl>
           </section>
           {offerings.length > 0 && (
