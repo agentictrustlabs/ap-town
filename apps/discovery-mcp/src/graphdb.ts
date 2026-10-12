@@ -310,6 +310,11 @@ export interface AgentResult {
   /** spec 280 — the agent's A2A host (`approf:a2aEndpoint`, node-keyed on the name resolver, projected onto
    *  the agent node). The live card lives at `<a2aEndpoint>/.well-known/agent-card.json`. */
   a2aEndpoint: string | null;
+  /** spec 280 / 435 §5 — the agent's own MCP door (`approf:mcpEndpoint`, node-keyed like `a2aEndpoint`).
+   *  Bound on the row because "which agents here serve an MCP door" is a census question and reading 212
+   *  agents one at a time to answer it is not a census. Single-valued per agent, so it adds no fan-out.
+   *  An endpoint says where a server listens; it never says a caller may use it (ADR-0057). */
+  mcpEndpoint: string | null;
   /** Agent-kind subclass local name ('PersonAgent' | 'OrganizationAgent' | 'ServiceAgent') or null.
    *  Projected from the on-chain agentKind (ADR-0046 trichotomy); needed so the matcher's `requireKind`
    *  mandate (G7) can filter instead of merely recording a satisfied string. */
@@ -386,15 +391,42 @@ export async function lookupAgents(env: Env, smartAgents: string[]): Promise<Age
 export { parseCapabilityIds } from '@agenticprimitives/capability-claims';
 import { parseCapabilityIds } from '@agenticprimitives/capability-claims';
 
+/** THE FREE-TEXT FILTER, word by word rather than phrase by phrase.
+ *
+ * It used to CONTAINS the whole query string, so it could only ever match text holding that exact phrase:
+ * "global church people groups" matched nothing in a registry whose agents describe themselves in
+ * sentences, and the honest-but-useless answer was "no agent's name or declared capabilities matched".
+ * Every word must now appear SOMEWHERE in the agent's public text (AND over words, OR over fields) —
+ * strictly wider than the phrase match it replaces, since a phrase that is present brings all its words
+ * with it, and still precise, because one shared word is not a match. Words of two characters or fewer
+ * are dropped: they are in everything.
+ *
+ * NO RANKING IS INTRODUCED. The caller's order stays ORDER BY ?name — a registry lists, it does not score
+ * (ADR-0038). Relevance, where it is wanted, is the matcher's job downstream and is never trust.
+ *
+ * Exported for its tests only; the SPARQL it builds escapes every literal through `esc`.
+ */
+export function searchFilterClause(q: string): string {
+  const words = [...new Set(q.trim().toLowerCase().split(/[^a-z0-9]+/i).filter((w) => w.length > 2))];
+  const anyField = (w: string): string => {
+    const lit = `LCASE("${esc(w)}")`;
+    return `( CONTAINS(LCASE(STR(?name)), ${lit}) || CONTAINS(LCASE(STR(?dn)), ${lit}) || CONTAINS(LCASE(STR(?desc)), ${lit})`
+      + ` || CONTAINS(LCASE(STR(?ndesc)), ${lit}) || CONTAINS(LCASE(STR(?skills)), ${lit}) || CONTAINS(LCASE(STR(?focus)), ${lit}) )`;
+  };
+  if (words.length) return `FILTER( ${words.map(anyField).join(' && ')} )`;
+  // A query of nothing but short words ("in", "a") is still a query, and matching everything would be a
+  // lie about what was asked. Fall back to the literal phrase: it finds what it finds, and usually none.
+  if (!q.trim()) return '';
+  return `FILTER( CONTAINS(LCASE(STR(?name)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?dn)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?desc)), LCASE("${esc(q)}")) )`;
+}
+
 /** The one agent-row query both `searchAgentsPage` and `lookupAgents` use, so the two paths can never
  *  drift in which facets they expose. `extraClause` is trusted, caller-built SPARQL (never user text). */
 async function runAgentQuery(env: Env, q: string, extraClause: string, limit: number): Promise<AgentResult[]> {
   // `focusAreas` joins the free-text OR (it is descriptive subject-domain text, and widening an OR can only
   // ADD candidates — it is never a filter). `languages`/`regions` deliberately do NOT: they are code lists
   // that the matcher scores structurally, and substring-matching codes produces nonsense hits ("es" ⊂ "test").
-  const filter = q.trim()
-    ? `FILTER( CONTAINS(LCASE(STR(?name)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?dn)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?desc)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?skills)), LCASE("${esc(q)}")) || CONTAINS(LCASE(STR(?focus)), LCASE("${esc(q)}")) )`
-    : '';
+  const filter = searchFilterClause(q);
   // Every bound var here is SINGLE-VALUED per agent, so this stays one row per agent with no GROUP BY and
   // no DISTINCT (the per-agent `SELECT DISTINCT ?p` fan-out previously blew GraphDB's group-by heap guard).
   // Multivalued trust-fabric detail (the individual edges) is a drill-down: `getRelationships`.
@@ -407,7 +439,7 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
   // every consumer gets identical parsing instead of reimplementing it. The triples remain in the graph
   // for SPARQL consumers that want to query BY capability rather than read an agent row.
   const rows = await sparqlSelect(env, `
-    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?ndesc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?dist ?a2a ?edges ?atts ?vatts ?iendorse ?kind ?atype ?tld ?srole WHERE {
+    SELECT ?a ?sa ?name ?conforms ?dn ?desc ?ndesc ?status ?skills ?ctx ?role ?svc ?site ?langs ?regions ?focus ?dist ?a2a ?mcp ?edges ?atts ?vatts ?iendorse ?kind ?atype ?tld ?srole WHERE {
       ?a a ap:Agent ; ap:smartAgent ?sa .
       ${extraClause}
       OPTIONAL { ?a apnam:name ?name }
@@ -425,6 +457,7 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
       # data object on the agent node (G8 guard keeps their IRIs disjoint).
       OPTIONAL { ?a approf:distribution ?dist }
       OPTIONAL { ?a approf:a2aEndpoint ?a2a }
+      OPTIONAL { ?a approf:mcpEndpoint ?mcp }
       OPTIONAL { ?a apdisc:appContext ?ctx }
       OPTIONAL { ?a apdisc:orgRole ?role }
       OPTIONAL { ?a apdisc:serviceUrl ?svc }
@@ -478,6 +511,7 @@ async function runAgentQuery(env: Env, q: string, extraClause: string, limit: nu
       focusAreas: r.focus?.value ?? null,
       distribution: decodeDistribution(r.dist?.value),
       a2aEndpoint: r.a2a?.value ?? null,
+      mcpEndpoint: r.mcp?.value ?? null,
       appContext: r.ctx?.value ?? null,
       orgRole: r.role?.value ?? null,
       serviceUrl: r.svc?.value ?? null,
