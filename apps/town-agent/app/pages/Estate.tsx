@@ -19,6 +19,7 @@ import { Chip, Empty, Link, Loading, SectionHead, Stat, useApi } from '@ap-town/
 import type { EstateDetail, PlacedAgentRow, TownData } from '../types';
 import { Ask } from '../pulse/Ask';
 import { McpList } from './McpList';
+import { EndpointPanel } from './EndpointPanel';
 
 const repoUrl = (repo: string): string => (repo === 'ap-town' ? 'https://github.com/agentictrustlabs/ap-town' : `https://github.com/${repo}`);
 
@@ -95,6 +96,11 @@ export function Estate({ t, id }: { t: TownData; id: string }): ReactNode {
               <dt>Repository</dt><dd><a href={repoUrl(e.repo)} rel="noreferrer">{e.repo}</a></dd>
               <dt>Chain</dt><dd>{d.chain.id} · contracts generation {d.chain.generation}</dd>
             </dl>
+            {/* WHAT RUNS AT EACH DOOR — the Worker the manifest declares for it, the repository it is deployed
+                from, and the town MCP's latest reading. The readings are the operator's; status is public. */}
+            <EndpointPanel url={e.a2a} label="A2A door" />
+            <EndpointPanel url={e.edge} label="Gate" />
+            <EndpointPanel url={e.home} label="Home" />
           </section>
 
           <section>

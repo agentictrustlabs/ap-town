@@ -3,6 +3,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Empty, Link, Loading, SectionHead, useApi } from '@ap-town/town-ui';
 import type { AgentDetail, TownData } from '../types';
+import { EndpointPanel } from './EndpointPanel';
 
 const local = (iri: string): string => iri.replace(/^.*[#/]/, '');
 
@@ -81,6 +82,7 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
       const conforms = triples.find((x) => x.p.endsWith('shacl#conforms'))?.o;
       const cardUri = triples.find((x) => local(x.p) === 'cardUri')?.o;
       const mcpEndpoint = triples.find((x) => local(x.p) === MCP_KEY)?.o;
+      const a2aEndpoint = triples.find((x) => local(x.p) === 'a2aEndpoint')?.o;
       const address = (d.agent.agent ?? '').split(':').pop() ?? '';
       const offerings = d.offerings?.offerings ?? [];
       return (
@@ -98,9 +100,15 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
               invitation: being able to reach an agent is not being allowed to use it.
             </SectionHead>
             {reach.length > 0 ? (
-              <dl className="kv kv-facts">
-                {reach.map((x, i) => { const k = local(x.p); return <span key={i} className="contents"><dt>{REACH_LABEL[k] ?? k}</dt><dd className="mono">{factValue(k, x.o)}</dd></span>; })}
-              </dl>
+              <>
+                <dl className="kv kv-facts">
+                  {reach.map((x, i) => { const k = local(x.p); return <span key={i} className="contents"><dt>{REACH_LABEL[k] ?? k}</dt><dd className="mono">{factValue(k, x.o)}</dd></span>; })}
+                </dl>
+                {/* WHAT IS BEHIND THE DOOR. The chain says where to send a message; the town's manifest says
+                    which Worker answers there and from which repository, and the town's MCP says how it is
+                    doing. Shown here because this is where a reader meets the URL. */}
+                {a2aEndpoint && <EndpointPanel url={a2aEndpoint} label="A2A endpoint" />}
+              </>
             ) : (
               <Empty title="It publishes no endpoint.">
                 Nothing on chain says where to reach this agent — no A2A endpoint and no card. That is a fact
@@ -117,9 +125,12 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
               door you may open.
             </SectionHead>
             {mcpEndpoint ? (
-              <dl className="kv kv-facts">
-                <dt>MCP endpoint</dt><dd className="mono break">{factValue('mcpEndpoint', mcpEndpoint)}</dd>
-              </dl>
+              <>
+                <dl className="kv kv-facts">
+                  <dt>MCP endpoint</dt><dd className="mono break">{factValue('mcpEndpoint', mcpEndpoint)}</dd>
+                </dl>
+                <EndpointPanel url={mcpEndpoint} label="MCP endpoint" />
+              </>
             ) : (
               <Empty title="Its name record publishes no MCP endpoint.">
                 It serves no tools behind a door of its own &mdash; or it serves them somewhere its records do not
@@ -157,10 +168,13 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
                 })}
               </dl>
             ) : (
-              <Empty title="The chain shows no connections for it.">
-                No relationship, no edge. Either nobody has recorded one, or the ones that exist are private — a
-                relationship held in somebody&rsquo;s vault is theirs, and the public graph is not told about it
-                (ADR-0025). Absence here is not evidence of isolation.
+              <Empty title="No agent-to-agent relationship has been recorded on chain for it.">
+                This section lists one thing only: <code>AgentRelationship</code> edges somebody wrote on chain.
+                <strong> Custody and stewardship are not among them.</strong> Who holds this agent, and who stewards
+                it, are records in that person&rsquo;s own vault under their own grant (ADR-0025) &mdash; which is why
+                their Home can show a steward for this agent while the town, reading only the chain, truthfully shows
+                no edge. Neither view is wrong; they are different tiers, and the private one is theirs to show.
+                Absence here is not evidence of isolation.
               </Empty>
             )}
           </section>

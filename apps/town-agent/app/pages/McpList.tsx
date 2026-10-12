@@ -15,6 +15,7 @@
 import type { ReactNode } from 'react';
 import { Chip, Empty, SectionHead } from '@ap-town/town-ui';
 import type { McpServerRow } from '../types';
+import { EndpointPanel } from './EndpointPanel';
 
 const EXPOSURE_WORDS: Record<McpServerRow['exposure'], string> = {
   binding: 'no door — only a Worker bound to it can reach it',
@@ -61,6 +62,9 @@ export function McpList({ servers, eyebrow, title, children, note = true }: {
                 {m.worker ? <> · Worker <span className="mono">{m.worker}</span></> : null}
                 {' · '}<Door m={m} />
               </p>
+              {/* A server WITH a door gets the full reading: which Worker, which repository, how it is doing.
+                  A binding-only server has no url to attribute, and its Worker is already on the line above. */}
+              {m.url && <EndpointPanel url={m.url} label={`${m.id} MCP`} />}
             </li>
           ))}
         </ul>

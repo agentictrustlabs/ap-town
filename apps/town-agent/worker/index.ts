@@ -10,7 +10,7 @@
 //   GET  /api/town · /api/services · /api/services/:id · /api/estates · /api/find?q= · /api/health
 //   GET  everything else                   the Town portal (the built app in ./dist)
 import { createStandardA2aServer, type AgentCardV1, type MessageV1, type PartV1 } from '@agenticprimitives/a2a/standard';
-import { TOWNS, allMcpServers, estateMcpServers, estateOf, estateRoster, placeAgents, type AgentRosterRow, type TownManifest } from '@ap-town/town-model';
+import { TOWNS, allMcpServers, attributeEndpoint, estateMcpServers, estateOf, estateRoster, placeAgent, placeAgents, sourceUrlOf, type AgentRosterRow, type InfraSampleV1, type TownManifest } from '@ap-town/town-model';
 import { agentCardHost, contextAgentViews, describe, serviceViews, townSummary, type Probe, type ServiceView } from './signals';
 import { samplePulse, readPulse, type PulseSampleV1, type PulseEnv } from './pulse';
 import { recordDay, pulseRecordReadiness, contextAgents, type PulseRecordEnv } from './pulse-record';
@@ -393,6 +393,46 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
       chain: town.chain, town: town.town,
     }, 200, { 'cache-control': 'public, max-age=60' });
   }
+  // ── WHAT SERVES THIS ENDPOINT (spec 437 I4, asked the other way round) ────────────────────────────────
+  // A reader on an agent's page holds a URL the chain gave them and wants to know what is behind it: which
+  // Worker, from which repository, and how it is doing. The attribution is the manifest's (declared, never
+  // derived from the hostname); the reading is the town MCP's, which is the only thing holding a platform
+  // credential. Status is public and metrics are the operator's, exactly as on the Pulse — withheld with the
+  // reason, never zeroed, because a zero looks like a measurement and gets believed.
+  if (path === '/endpoint') {
+    const target = (url.searchParams.get('url') ?? '').trim();
+    if (!target) return json({ error: 'say which endpoint' }, 400);
+    const attribution = attributeEndpoint(town, target);
+    const source = sourceUrlOf(attribution);
+    const detail = operatorAuthorized(env.TOWN_OPS_TOKEN, authorization);
+    // No Worker named ⇒ nothing to read, and that is the answer rather than an empty reading.
+    if (!attribution.worker && !attribution.vercelProject) {
+      return json({ attribution, source, reading: null, detail }, 200, { 'cache-control': 'public, max-age=300' });
+    }
+    const from = Date.now() - 24 * 3600_000;
+    const infra = await infraRowsFrom(env, from);
+    const resource = attribution.worker ?? attribution.vercelProject!;
+    const samples = infra.rows
+      .filter((r) => r.kind === 'infra')
+      .map((r) => r.payload as InfraSampleV1)
+      .filter((p) => p.resource === resource);
+    const latest = samples.length ? samples.reduce((a, b) => (Date.parse(b.at) > Date.parse(a.at) ? b : a)) : null;
+    return json({
+      attribution, source, detail,
+      reading: latest
+        ? {
+            resource, platform: latest.platform, account: latest.account, kind: latest.kind,
+            status: latest.status, asOf: latest.asOf, lagClass: latest.lagClass, ok: latest.ok,
+            ...(latest.error ? { error: latest.error } : {}),
+            // SPEC 437: status is public, the numbers are the operator's. `null` with a reason, never zeros.
+            metrics: detail ? latest.metrics : null,
+            ...(detail ? { series: samples.slice(-96).map((p) => ({ at: p.at, metrics: p.metrics })) } : {}),
+            ...(detail ? {} : { withheld: 'the readings are the operator\u2019s; status, lag and what runs here are public' }),
+          }
+        : null,
+      ...(infra.unavailable ? { unavailable: infra.unavailable } : latest ? {} : { unavailable: `the town MCP holds no reading for ${resource} in the last day` }),
+    }, 200, detail ? { 'cache-control': 'private, no-store' } : { 'cache-control': 'public, max-age=60' });
+  }
   // ── THE MCP CENSUS AT THE SCALES A MANIFEST AND A CHAIN CAN ANSWER (spec 435 §5) ───────────────────────
   // Town-shared and per-estate servers come from the manifest, which DECLARES them. The agents' own doors come
   // from the chain (`atl:mcpEndpoint`). What an agent has ATTACHED is absent on purpose: those are spec-404
@@ -442,7 +482,16 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
       ask<Record<string, unknown>>(env.REGISTRY, `https://registry/offerings?key=${encodeURIComponent(key)}`),
     ]);
     if (!agent) return json({ error: 'the registry could not be asked just now' }, 502);
-    return json({ key, agent, offerings });
+    // WHICH ESTATE THIS AGENT IS PLACED IN (spec 435 §4) — computed from its own on-chain endpoint against the
+    // hosts this town declares, the same rule the estate page uses. An INFERENCE, carrying which rule placed
+    // it, and it is on the agent's page because "whose estate is this?" is a public-graph question a reader
+    // arrives with and the chain's relationship edges do not answer.
+    const triples = ((agent as { triples?: Array<{ p: string; o: string }> }).triples ?? []);
+    const a2a = triples.find((t) => /[#/]a2aEndpoint$/.test(t.p))?.o;
+    const mcp = triples.find((t) => /[#/]mcpEndpoint$/.test(t.p))?.o;
+    const sa = triples.find((t) => /[#/]smartAgent$/.test(t.p))?.o ?? '';
+    const placement = placeAgent({ name: key, smartAgent: sa, ...(a2a ? { a2aEndpoint: a2a } : {}), ...(mcp ? { mcpEndpoint: mcp } : {}) }, town);
+    return json({ key, agent, offerings, placement: { estate: placement.estate, how: placement.how } });
   }
   // The Pulse (spec 434 §10 / 436 §5.3): the latest sample per source and the series for a window, from the store the
   // cron fills. Public: everything here is aggregate — probes, gateway rollups, estate counts — never a person's record.

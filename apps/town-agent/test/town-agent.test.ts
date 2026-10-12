@@ -56,9 +56,12 @@ const refusing = { async fetch() { return new Response('nope', { status: 502 });
 
 // The probe is INJECTED. A unit test that reaches the live hosts tests the internet, and a red run would then
 // mean "a door was down", which is not what any assertion here is about.
-const call = async (path: string, registry?: { fetch(req: Request): Promise<Response> }) => {
-  const url = new URL(`https://town.example/api${path}`);
-  const res = await api(path, url, envWith(registry), town, 'town.example', 'https://town.example', null, 'GET', up);
+// `api()` takes the path ALREADY stripped of its query, the way the fetch handler hands it over. Passing the
+// whole thing matched no route and every assertion read `undefined`, which looks like a broken route.
+const call = async (pathWithQuery: string, registry?: { fetch(req: Request): Promise<Response> }, authorization: string | null = null) => {
+  const url = new URL(`https://town.example/api${pathWithQuery}`);
+  const path = pathWithQuery.split('?')[0]!;
+  const res = await api(path, url, envWith(registry), town, 'town.example', 'https://town.example', authorization, 'GET', up);
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 };
 
@@ -263,5 +266,40 @@ d('the portal routes a question to whichever agent knows the answer', () => {
     for (const q of ['how is the town doing', 'how many people are named here', 'is the registry up']) {
       expect(claimedByTown(q, town), q).toBeNull();
     }
+  });
+});
+
+d('what serves an endpoint (spec 437 I4)', () => {
+  it('attributes an agent’s A2A door to its estate’s Worker, with the repository', async () => {
+    const r = await call('/endpoint?url=https%3A%2F%2Falice.faithnet.ai%2Fapi%2Fa2a', rosterOf([]));
+    const a = r.body.attribution as { how: string; worker: string; estate: string; repo: string };
+    expect(a).toMatchObject({ how: 'estate-zone', worker: 'demo-a2a-faithnet', estate: 'faithnet', repo: 'agentictrustlabs/ap-home' });
+    expect(r.body.source).toBe('https://github.com/agentictrustlabs/ap-home');
+  });
+
+  it('says UNATTRIBUTED, and reads nothing, for a host the manifest never declared', async () => {
+    const r = await call('/endpoint?url=https%3A%2F%2Fdemo-gc-pg.r-pedersen.workers.dev%2Fmcp', rosterOf([]));
+    expect((r.body.attribution as { how: string }).how).toBe('unattributed');
+    expect(r.body.reading).toBeNull();
+    expect(r.body.source).toBeNull();
+  });
+
+  it('withholds the numbers on a public read rather than zeroing them', async () => {
+    // No ops token on this call, so `detail` is false. The shape must carry the refusal, never a 0.
+    const r = await call('/endpoint?url=https%3A%2F%2Fmcp.faithnet.io', rosterOf([]));
+    expect(r.body.detail).toBe(false);
+    const reading = r.body.reading as { metrics: unknown } | null;
+    if (reading) { expect(reading.metrics).toBeNull(); }
+    // Either way the attribution — which is public — still answers.
+    expect(r.body.attribution).toMatchObject({ how: 'mcp-server', mcpServerId: 'vault', worker: 'demo-mcp-faithnet' });
+  });
+
+  it('refuses an empty url rather than attributing nothing to nothing', async () => {
+    expect((await call('/endpoint', rosterOf([]))).status).toBe(400);
+  });
+
+  it('a town service’s own host carries its app directory into the source link', async () => {
+    const r = await call('/endpoint?url=https%3A%2F%2Fdiscovery-connector.faithnet.io', rosterOf([]));
+    expect(r.body.source).toBe('https://github.com/agentictrustlabs/ap-town/tree/HEAD/apps/discovery-connector');
   });
 });

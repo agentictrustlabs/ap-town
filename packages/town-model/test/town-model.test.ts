@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { allMcpServers, crawlRoots, estateMcpServers, EXPOSURE_WORDS, laneBindings, laneRoutesVar, parseTown, townMcpServers, validateTown, AUTHORIZATION_IS_NOT_A_TOWN_SIGNAL } from '../src/index';
+import { allMcpServers, attributeEndpoint, crawlRoots, estateMcpServers, EXPOSURE_WORDS, laneBindings, laneRoutesVar, parseTown, sourceUrlOf, townMcpServers, validateTown, AUTHORIZATION_IS_NOT_A_TOWN_SIGNAL } from '../src/index';
 
 const faithchain = readFileSync(new URL('../../../towns/faithchain/town.yaml', import.meta.url), 'utf8');
 
@@ -154,5 +154,56 @@ describe('the MCP census — declared, never inferred (spec 435 §5)', () => {
       expect(v.length).toBeGreaterThan(10);
       expect(v, `${k} reads as a permission`).not.toMatch(/\b(allowed|authori[sz]ed|may use|permitted|trusted)\b/i);
     }
+  });
+});
+
+describe('what serves this endpoint — declared, never derived from the hostname', () => {
+  const t = () => parseTown(faithchain).town!;
+
+  it('attributes an agent’s A2A door to the Worker its estate’s lane names', () => {
+    // The case the hostname cannot answer: `alice.faithnet.ai` names no Worker, and the only thing that knows
+    // what runs behind it is the estate's `*.faithnet.ai` lane.
+    const a = attributeEndpoint(t(), 'https://alice.faithnet.ai/api/a2a');
+    expect(a.how).toBe('estate-zone');
+    expect(a.estate).toBe('faithnet');
+    expect(a.worker).toBe('demo-a2a-faithnet');
+    expect(a.repo).toBe('agentictrustlabs/ap-home');
+    expect(a.note).toMatch(/every agent under faithnet\.ai answers at the demo-a2a-faithnet Worker/);
+  });
+
+  it('attributes a declared MCP server’s url to that server and its estate', () => {
+    const a = attributeEndpoint(t(), 'https://mcp.faithnet.io');
+    expect(a).toMatchObject({ how: 'mcp-server', mcpServerId: 'vault', estate: 'faithnet', worker: 'demo-mcp-faithnet' });
+  });
+
+  it('attributes a listed service’s host to that service, with its app directory', () => {
+    const a = attributeEndpoint(t(), 'https://discovery-connector.faithnet.io/mcp');
+    expect(a).toMatchObject({ how: 'service-host', serviceId: 'discovery-connector', worker: 'demo-discovery-connector-faithnet', repo: 'ap-town', app: 'apps/discovery-connector' });
+    expect(sourceUrlOf(a)).toBe('https://github.com/agentictrustlabs/ap-town/tree/HEAD/apps/discovery-connector');
+  });
+
+  it('attributes an estate’s own doors, and its Home to its Vercel project', () => {
+    expect(attributeEndpoint(t(), 'https://imb-runtime.richardpedersen3.workers.dev')).toMatchObject({ how: 'estate-lane', estate: 'imbnet', worker: 'imb-runtime' });
+    expect(attributeEndpoint(t(), 'https://www.faithnet.me')).toMatchObject({ how: 'estate-door', estate: 'faithnet', vercelProject: 'faithnet-home' });
+  });
+
+  it('says UNATTRIBUTED for a host the manifest never declared — it does not split the name on a dot', () => {
+    // The temptation this refuses: `demo-gc-pg.r-pedersen.workers.dev` looks exactly like a Worker name and is
+    // on an account this town does not list. A convention that is right four times in six is two falsehoods.
+    const a = attributeEndpoint(t(), 'https://demo-gc-pg.r-pedersen.workers.dev/mcp');
+    expect(a.how).toBe('unattributed');
+    expect(a.worker).toBeUndefined();
+    expect(a.note).toMatch(/does not guess/);
+  });
+
+  it('an unreadable URL is unattributed and says so, rather than throwing', () => {
+    expect(attributeEndpoint(t(), 'not a url')).toMatchObject({ how: 'unattributed', host: '' });
+  });
+
+  it('a repository with no app directory links the repository itself', () => {
+    const a = attributeEndpoint(t(), 'https://skills.faithnet.io');
+    expect(a.repo).toBe('agentictrustlabs/skills');
+    expect(sourceUrlOf(a)).toBe('https://github.com/agentictrustlabs/skills');
+    expect(sourceUrlOf({ ...a, repo: undefined } as typeof a)).toBeNull();
   });
 });

@@ -42,6 +42,8 @@ export interface FindResult {
 export interface Facets { ok: boolean; agentTypes: Array<{ value: string; count: number }>; kinds: Array<{ value: string; count: number }>; capabilityIds: Array<{ value: string; count: number }>; undeclaredType?: number }
 export interface AgentDetail {
   key: string;
+  /** Which estate this agent is placed in (spec 435 §4) — an INFERENCE from its own endpoint, carrying the rule. */
+  placement?: { estate: string | null; how: 'agent-zone' | 'estate-a2a' | 'unplaced' };
   agent: { ok: boolean; agent?: string; triples?: Array<{ p: string; o: string }>; error?: string };
   offerings: { ok?: boolean; offerings?: Array<{ skillId: string; name: string | null; effect?: string | null; exposure?: string | null; family?: string | null; status?: string | null; source?: string | null }>; error?: string } | null;
 }
@@ -103,4 +105,33 @@ export interface McpCensus {
   town: string;
   servers: McpServerRow[];
   agentDoors: { rows: PlacedAgentRow[]; read: number; truncated: boolean } | { unavailable: string };
+}
+
+/** `/api/endpoint?url=` — what the manifest says serves an endpoint, and the town MCP's latest reading of it
+ *  (spec 437 I4). `reading.metrics` is `null` on the public read and says so; it is never zeroed. */
+export interface EndpointInfo {
+  attribution: {
+    url: string;
+    host: string;
+    how: 'mcp-server' | 'service-host' | 'estate-lane' | 'estate-zone' | 'estate-door' | 'unattributed';
+    worker?: string;
+    serviceId?: string;
+    estate?: string;
+    mcpServerId?: string;
+    repo?: string;
+    app?: string;
+    vercelProject?: string;
+    note: string;
+  };
+  /** The GitHub link, deep into the app directory when the manifest names one. */
+  source: string | null;
+  detail: boolean;
+  reading: {
+    resource: string; platform: string; account: string; kind: string;
+    status: string; asOf: string; lagClass: string | null; ok: boolean; error?: string;
+    metrics: Record<string, number | null> | null;
+    series?: Array<{ at: string; metrics: Record<string, number | null> }>;
+    withheld?: string;
+  } | null;
+  unavailable?: string;
 }
