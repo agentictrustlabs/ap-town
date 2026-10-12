@@ -1,7 +1,7 @@
 // One agent as the registry knows it: the public facts the indexer projected from the chain, the offerings crawled
 // from its card, and the card itself read live from the agent's own host. Public evidence; none of it is authority.
 import { useEffect, useState, type ReactNode } from 'react';
-import { Empty, Link, Loading, SectionHead, useApi } from '@ap-town/town-ui';
+import { Chip, Empty, Link, Loading, SectionHead, Stat, useApi } from '@ap-town/town-ui';
 import type { AgentDetail, TownData } from '../types';
 import { EndpointPanel } from './EndpointPanel';
 import { Ask } from '../pulse/Ask';
@@ -66,6 +66,50 @@ function LiveCard({ url }: { url: string }): ReactNode {
 function askExamples(d: AgentDetail): string[] | undefined {
   const offered = (d.offerings?.offerings ?? []).map((o) => o.name || o.skillId).filter(Boolean).slice(0, 3);
   return offered.length ? offered.map((x) => `what can you tell me about ${x}?`) : undefined;
+}
+
+
+/** THE RECORD, RENDERED. Pairs of counts, a line per judgment, and two absences said as themselves: a door that
+ *  could not be asked, and a vault that could not be surveyed. Neither is "nobody has judged this". */
+function AgentRecordSection({ r }: { r: AgentDetail['record'] }): ReactNode {
+  if (!r) return <Empty title="Not asked.">This build did not ask the agent for its record.</Empty>;
+  if ('unavailable' in r) return <Empty title="Its record could not be read.">{r.unavailable}. That is a fact about the door, not about the agent.</Empty>;
+  const rec = r.record;
+  const endings = Object.entries(rec.endings).filter(([, n]) => n > 0);
+  if (rec.total === 0) return <Empty title="No run of this agent has been recorded.">An empty record, not an absent one &mdash; it was asked, and it answered.</Empty>;
+  return (
+    <>
+      <div className="stats">
+        <Stat label="Runs recorded" value={rec.total} sub={endings.map(([k, n]) => `${n} ${k}`).join(' · ')} />
+        <Stat label="Records complete" value={`${rec.evidence.complete} / ${rec.total}`} sub={`${rec.evidence.incomplete} incomplete · ${rec.evidence.unknown} stopped early`} />
+        <Stat label="Runs judged" value={r.assessmentsRead ? `${rec.assessment.runsAssessed} / ${rec.total}` : null} absent="the vault could not be surveyed"
+          sub={r.assessmentsRead ? (rec.assessment.current ? `by ${rec.assessment.evaluators.length} evaluator(s) against ${rec.assessment.criteria.length} stated criteria` : 'nobody has judged these — not a failing grade') : 'unknown, not none'} />
+        {rec.assessment.stale > 0 && <Stat label="Stale judgments" value={rec.assessment.stale} sub="of an earlier version of their run; not counted as current" tone="warn" />}
+      </div>
+      {r.judgments.length > 0 && (
+        <>
+          <h3>Judgments <span className="quiet">{r.judgments.length}</span></h3>
+          <ul className="plain">
+            {r.judgments.map((j) => (
+              <li key={j.digest}>
+                <Link href={`/agent/${j.evaluator}`} className="mono">{j.evaluator.slice(0, 10)}&hellip;</Link>{' '}
+                <span className="quiet">({j.evaluatorKind})</span> judged run <span className="mono">{j.subject.runRef}</span> against{' '}
+                <span className="mono">{j.criteria.outcomeId}</span>:{' '}
+                {j.results.map((x) => <span key={x.criterionId}><Chip tone={x.outcome === 'passed' ? 'ok' : x.outcome === 'failed' ? 'bad' : 'muted'}>{x.criterionId} {x.outcome}</Chip> </span>)}
+                <span className="quiet">· {j.at.slice(0, 10)} · signed {j.signature.slice(0, 12)}&hellip;</span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      <p className="quiet">
+        Counts, never a score: a rate over these would fall whenever this agent correctly refused something, and an
+        unassessed run is not a failed one. Each judgment was verified against its evaluator&rsquo;s Smart Agent when it
+        was written at the agent&rsquo;s Home; this page relays it and does not re-check it.
+        {r.askedAt ? ` Asked ${r.askedAt.slice(11, 16)} UTC.` : ''}
+      </p>
+    </>
+  );
 }
 
 export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
@@ -165,6 +209,15 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
               other direction: the door this agent serves, and the skills its own card advertises below.
               {' '}<Link href="/mcp">Every MCP server in the town &rarr;</Link>
             </p>
+          </section>
+          <section>
+            <SectionHead eyebrow="Asked of the agent itself, at its public door" title="Its record, as it reports it">
+              How its runs have gone and who has judged them. This is what the agent says about itself when a
+              stranger asks &mdash; counts from the records it keeps, never a score &mdash; and the judgments are not
+              its own: each was signed by an evaluator and checked against that evaluator&rsquo;s Smart Agent when it was
+              written. The agent can carry a judgment of itself; it cannot make one up.
+            </SectionHead>
+            <AgentRecordSection r={d.record} />
           </section>
           <section>
             <SectionHead eyebrow="From the chain" title="Its public graph">

@@ -328,6 +328,41 @@ async function ask<T>(svc: { fetch(req: Request): Promise<Response> } | undefine
   try { const r = await svc.fetch(new Request(url, { ...init, headers: { accept: 'application/json', ...(init?.headers ?? {}) } })); return r.ok ? ((await r.json()) as T) : null; } catch { return null; }
 }
 
+/**
+ * AN AGENT'S RECORD, ASKED OF THE AGENT (spec 438 §13 `record.public.ask`).
+ *
+ * The town does not hold any agent's runs and must not: those are records in the agent's own vault. What a
+ * town page CAN show is what the agent says about itself at its public door, and it shows it as exactly
+ * that — "as it reports it", never as the registry's finding. Two things keep that honest rather than hollow:
+ *
+ *   The judgments are SIGNED BY SOMEBODY ELSE. An assessment carries its evaluator's address and signature,
+ *   verified against that evaluator's Smart Agent when it was written at the agent's Home (the runtime
+ *   refuses an unverified one). The agent cannot forge a judgment of itself; it can only carry one.
+ *
+ *   It is COUNTS, never a score. A rate over these buckets would fall whenever the agent correctly refused
+ *   something, and a registry lists — it does not rank (ADR-0038).
+ *
+ * Unreachable is said as itself. "No agent has been judged" and "the door did not answer" render identically
+ * if you let them, and mean opposite things.
+ */
+async function publicRecordOf(a2aEndpoint: string): Promise<Record<string, unknown>> {
+  try {
+    const host = new URL(a2aEndpoint).origin;
+    const resolved = await resolveAgentCard(`${host}/.well-known/agent-card.json`, fetch);
+    const client = createStandardA2aClient({ endpoint: resolved.endpoint, fetch });
+    const sent = await client.sendMessage([{ data: { skill: 'record.public.ask' } }]);
+    const asMessage = sent as unknown as { parts?: unknown[] };
+    const parts = (Array.isArray(asMessage.parts) ? asMessage.parts : sent.message?.parts) ?? [];
+    const data = parts.map((x) => (x as { data?: unknown }).data).find((d) => d && typeof d === 'object') as Record<string, unknown> | undefined;
+    if (!data || !data.record) return { unavailable: 'the agent answered, but not with its record — its door may not offer record.public.ask yet' };
+    return { ...data, askedAt: new Date().toISOString() };
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    if (/admits only an authenticated principal/i.test(why)) return { unavailable: 'this agent’s door does not take a stranger’s question for its record yet' };
+    return { unavailable: `the agent’s door could not be asked: ${why.slice(0, 160)}` };
+  }
+}
+
 /** THE ONE ROSTER READ both doors use. `null` when the registry is unbound or does not answer — which every
  *  caller turns into "unknown", never into "none" (the registry holding nothing and the registry being
  *  unreachable are opposite facts that look identical on a page). */
@@ -506,7 +541,11 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     const mcp = triples.find((t) => /[#/]mcpEndpoint$/.test(t.p))?.o;
     const sa = triples.find((t) => /[#/]smartAgent$/.test(t.p))?.o ?? '';
     const placement = placeAgent({ name: key, smartAgent: sa, ...(a2a ? { a2aEndpoint: a2a } : {}), ...(mcp ? { mcpEndpoint: mcp } : {}) }, town);
-    return json({ key, agent, offerings, placement: { estate: placement.estate, how: placement.how } });
+    // Spec 438 §13 — ITS RECORD, AS IT REPORTS IT. Asked of the agent's own A2A door as a stranger, so the
+    // agent answers from records IT keeps: counts and the signed judgments others made of its runs. The
+    // town adds nothing and re-checks nothing; what it says is who said it.
+    const record = a2a ? await publicRecordOf(a2a) : { unavailable: 'this agent publishes no A2A endpoint, so it cannot be asked for its record' };
+    return json({ key, agent, offerings, placement: { estate: placement.estate, how: placement.how }, record });
   }
   // The Pulse (spec 434 §10 / 436 §5.3): the latest sample per source and the series for a window, from the store the
   // cron fills. Public: everything here is aggregate — probes, gateway rollups, estate counts — never a person's record.

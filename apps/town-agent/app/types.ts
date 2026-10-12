@@ -44,6 +44,8 @@ export interface AgentDetail {
   key: string;
   /** Which estate this agent is placed in (spec 435 §4) — an INFERENCE from its own endpoint, carrying the rule. */
   placement?: { estate: string | null; how: 'agent-zone' | 'estate-a2a' | 'unplaced' };
+  /** Spec 438 §13 — its record AS IT REPORTS IT at its own door: counts, and the judgments others signed. */
+  record?: AgentPublicRecord | { unavailable: string };
   agent: { ok: boolean; agent?: string; triples?: Array<{ p: string; o: string }>; error?: string };
   offerings: { ok?: boolean; offerings?: Array<{ skillId: string; name: string | null; effect?: string | null; exposure?: string | null; family?: string | null; status?: string | null; source?: string | null }>; error?: string } | null;
 }
@@ -134,4 +136,28 @@ export interface EndpointInfo {
     withheld?: string;
   } | null;
   unavailable?: string;
+}
+
+/** What `record.public.ask` answers (spec 438 §13). Counts and signed judgments; nothing of any run. */
+export interface AgentPublicRecord {
+  agent: string;
+  record: {
+    total: number;
+    endings: Record<string, number>;
+    lastEndedAt?: string;
+    evidence: { complete: number; incomplete: number; unknown: number; unreported: number; effectUncertain: number };
+    assessment: { runsAssessed: number; runsUnassessed: number; current: number; stale: number; superseded: number; evaluators: string[]; criteria: string[]; outcomes: Record<string, number> };
+    work: { runsWithWork: number; endeavors: string[]; continuations: number };
+  };
+  judgments: Array<{
+    digest: string; signature: string; evaluator: string; evaluatorKind: string;
+    criteria: { outcomeId: string; revision: number; digest: string; statedAt: string };
+    subject: { runRef: string; recordDigest: string; at: string };
+    results: Array<{ criterionId: string; outcome: string }>;
+    at: string;
+  }>;
+  read: number;
+  assessmentsRead: boolean;
+  answer?: string;
+  askedAt?: string;
 }
