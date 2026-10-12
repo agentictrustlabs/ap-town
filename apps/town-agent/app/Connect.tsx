@@ -45,7 +45,11 @@ export async function goToHome(home: string, hint?: string): Promise<void> {
   const { verifier, challenge } = await pkce();
   const state = crypto.randomUUID();
   try { sessionStorage.setItem(PENDING, JSON.stringify({ home, verifier, state, at: Date.now() })); } catch { /* no storage ⇒ the round trip cannot be completed, and the callback says so */ }
-  const u = new URL('/authorize', home);
+  // THE AUTHORIZATION ENDPOINT IS THE HOME'S ROOT, not `/authorize`. The Home's own discovery doc says so
+  // (`authorization_endpoint: <iss>/`) because the consent + ROOT-passkey ceremony IS the SPA at the origin
+  // root, which reads these params and posts them to its own `/oidc/authorize-grant` first. Every other
+  // relying app in the set leaves the same way (engage-web, demo-jp); `/authorize` is a 404 there.
+  const u = new URL('/', home);
   u.searchParams.set('client_id', CLIENT_ID);
   u.searchParams.set('redirect_uri', REDIRECT());
   u.searchParams.set('response_type', 'code');
