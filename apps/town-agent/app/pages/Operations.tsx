@@ -47,7 +47,7 @@ function OperatorToken({ token, onChange, detail }: { token: string | null; onCh
 interface ChainSummary { totals: { requests: number; reads: number; writes: number; denied: Record<string, number>; cacheHitRate: number; upstreamErrors: number }; latency: { upstreamP50Ms: number; upstreamP95Ms: number }; byToken: Array<{ app: string; estate: string | null; kind: string; requests: number; reads: number; writes: number; denied: number; p95Ms: number; limits?: { readRps: number; writeRps: number } }>; byEstate: Array<{ estate: string; requests: number }>; byMethod: Array<{ method: string; count: number; cacheHitRate: number; p95Ms: number }>; chain: { head: number | null; headAt: string | null; blockRateS: number | null; generation: string; nodeHealthy: boolean } }
 interface InfSlice { key: string; requests: number; answered: number; failed: number; refused: number; tokensIn: number; tokensOut: number; costMicroUsd: number; fallbacks: number; latencyP50Ms: number; latencyP95Ms: number }
 interface InfSummary { totals: InfSlice; byClient: InfSlice[]; byProfile: InfSlice[]; byProvider: InfSlice[]; byModel: InfSlice[]; byEstate: InfSlice[]; pendingReconciliation: number }
-interface Heartbeat { estate: string; at: string; generation: string; versions: Record<string, string>; agents: { person: number; org: number; service: number }; homesActive24h: number; runs: { started: number; completed: number; parked: number; failed: number; canceled: number }; parkedForSignature: number; modelCalls: number; tokensIn: number; tokensOut: number; inferenceMicroUsd: number | null; vaultCalls: number; doRequests: number; askLatencyP95Ms: number | null }
+interface Heartbeat { estate: string; at: string; generation: string; versions: Record<string, string>; agents: { person: number; org: number; service: number }; homesActive24h: number; runs: { started: number; completed: number; parked: number; failed: number; canceled: number }; parkedForSignature: number; modelCalls: number; tokensIn: number; tokensOut: number; inferenceMicroUsd: number | null; vaultCalls: number; doRequests: number; askLatencyP95Ms: number | null; evidenceCoverage?: { runs: number; complete: number; incomplete: number; unknown: number } }
 
 export function Operations({ t, tab = 'town' }: { t: TownData; tab?: Tab }): ReactNode {
   const [window, setWindow] = useState<Window>('24h');
@@ -235,6 +235,15 @@ function EstatesTab({ t, p }: { t: TownData; p: PulseView }): ReactNode {
                     <Stat label="Runs 24h" value={fmtInt(hb.runs.started)} sub={`${fmtInt(hb.runs.completed)} completed · ${fmtInt(hb.runs.failed)} failed`} tone={hb.runs.failed > hb.runs.completed / 4 ? 'warn' : undefined} />
                     <Stat label="Waiting for a signature" value={fmtInt(hb.parkedForSignature)} />
                     <Stat label="Ask p95" value={fmtMs(hb.askLatencyP95Ms)} />
+                    {/* Spec 438 §4 — how much of this estate's work left a complete record. Three numbers, not a
+                        percentage: `unknown` is runs that stopped before their plan finished (parked, denied,
+                        canceled), which is the authority plane WORKING. A single ratio would fall whenever the
+                        estate refused something correctly, and a tile that punishes correct behaviour gets ignored.
+                        Absent when the estate has not computed it — absent is said, never shown as zero. */}
+                    {hb.evidenceCoverage
+                      ? <Stat label="Records complete" value={`${fmtInt(hb.evidenceCoverage.complete)} / ${fmtInt(hb.evidenceCoverage.runs)}`}
+                          sub={<span>{fmtInt(hb.evidenceCoverage.incomplete)} incomplete · {fmtInt(hb.evidenceCoverage.unknown)} stopped early (not a gap)</span>} />
+                      : <Stat label="Records complete" value="not reported" sub={<span>this estate has not computed its coverage</span>} />}
                     <Stat label="Model calls" value={fmtInt(hb.modelCalls)} sub={hb.inferenceMicroUsd !== null ? fmtUsd(hb.inferenceMicroUsd) : 'spend: not a gateway client yet'} />
                     <Stat label="Cost over the window" value={cpr && p.performance.detail ? (cpr.infraMicroUsd === null && !cpr.inferenceMicroUsd ? '—' : fmtUsd(cpr.inferenceMicroUsd + (cpr.infraMicroUsd ?? 0))) : 'operator'} sub={cpr && p.performance.detail ? `${cpr.microUsd !== null ? `${fmtUsd(cpr.microUsd)} per completed run` : 'per run: not yet'}${cpr.complete ? '' : ' · incomplete'}` : 'amounts are the operator\'s read'} tone={cpr && !cpr.complete ? 'warn' : undefined} />
                     <Stat label="Run p95" value={fmtMs(prov?.runDurationMs.p95)} sub={prov ? `${prov.runDurationMs.count} runs in the block` : 'no performance block yet'} />
