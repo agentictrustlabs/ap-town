@@ -34,7 +34,9 @@ Described in one file, [`towns/faithchain/town.yaml`](towns/faithchain/town.yaml
 Estates: **Faithnet** and **imbnet** (both [`ap-home`](https://github.com/agentictrustlabs/ap-home)). The Base Sepolia demo town is in
 [`towns/base-sepolia`](towns/base-sepolia/town.yaml). To add an estate to a town — the row, the lanes, the gateway token, the
 KMS tenant, the naming gate, the heartbeat — follow [`operations/runbooks/publish-an-estate.md`](operations/runbooks/publish-an-estate.md)
-(rung 3 of the [operator's ladder](https://github.com/agentictrustlabs/agenticprimitives/blob/master/docs/operators/README.md)).
+(build 4 of [five](https://github.com/agentictrustlabs/agentic-primitives/blob/main/docs/builds.md)). A town of your own,
+on a chain of your own, is [`operations/runbooks/new-town.md`](operations/runbooks/new-town.md) — do that only if you need
+your own chain; an estate in an existing town is a day's work instead of a quarter's.
 
 ## Layout
 
