@@ -34,12 +34,9 @@ export interface PlacedAgent extends AgentRosterRow {
   how: PlacementHow;
 }
 
-/** The words for each rung, said the way the page says them — so the page cannot invent a stronger one. */
-export const PLACEMENT_WORDS: Record<PlacementHow, string> = {
-  'agent-zone': 'inferred from its endpoint, which is under this estate’s agent zone',
-  'estate-a2a': 'inferred from its endpoint, which is this estate’s own A2A host',
-  unplaced: 'not placed — its records name no endpoint this town recognises',
-};
+// The WORDS for each rung live in the page that renders them, not here: this module decides which rung a row
+// is on, and a second copy of the sentence in a package nothing reads is a sentence that drifts out of date
+// while looking authoritative. What must not drift is the rung vocabulary itself, and that is the type above.
 
 const hostOf = (url: string): string | null => { try { return new URL(url).host.toLowerCase(); } catch { return null; } };
 
