@@ -27,11 +27,14 @@ function Door({ m }: { m: McpServerRow }): ReactNode {
   return <span className="quiet">{m.up ? 'answers' : `did not answer${m.status ? ` (${m.status})` : ''}`}</span>;
 }
 
-export function McpList({ servers, eyebrow, title, children }: {
+export function McpList({ servers, eyebrow, title, children, note = true }: {
   servers: McpServerRow[];
   eyebrow: string;
   title: string;
   children?: ReactNode;
+  /** The "no tool list" note. True on the first list of a page and false on the rest: repeating a caveat under
+   *  every section teaches a reader to skip it, which is the opposite of what a caveat is for. */
+  note?: boolean;
 }): ReactNode {
   return (
     <section>
@@ -62,11 +65,13 @@ export function McpList({ servers, eyebrow, title, children }: {
           ))}
         </ul>
       )}
-      <p className="quiet">
-        No tool list here. What tools a server offers is its own signed manifest&rsquo;s answer, read from the
-        registry so a reader checks the server and not this file; that manifest is still to come (spec 435 §5).
-        An endpoint is where a server listens &mdash; never that you may use it.
-      </p>
+      {note && (
+        <p className="quiet">
+          No tool list here. What tools a server offers is its own signed manifest&rsquo;s answer, read from the
+          registry so a reader checks the server and not this file; that manifest is still to come (spec 435 §5).
+          An endpoint is where a server listens &mdash; never that you may use it.
+        </p>
+      )}
     </section>
   );
 }

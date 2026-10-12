@@ -57,6 +57,7 @@ export function Mcp({ t }: { t: TownData }): ReactNode {
               servers={d.servers.filter((m) => m.estate === e.id)}
               eyebrow={`Declared by ${e.id}`}
               title={`${e.id}'s MCP servers`}
+              note={false}
             >
               Run by this estate for its own people and agents. <Link href={`/estate/${e.id}`}>The {e.id} estate &rarr;</Link>
             </McpList>
