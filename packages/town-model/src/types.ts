@@ -25,6 +25,45 @@ export interface TownChain {
   deploymentOverlay?: Record<string, unknown>;
 }
 
+/**
+ * AN MCP SERVER THE TOWN OR AN ESTATE RUNS — declared, never inferred (spec 435 §5).
+ *
+ * The town knows its MCP servers the way it knows its Workers: because this file says so. The tempting
+ * shortcut is to read them off the Worker names (`demo-mcp-faithnet`, `imb-home-mcp`, `skills-mcp`) and
+ * three of them do end in `-mcp`, which is exactly why it is tempting and exactly why it is wrong: a name
+ * is not a declaration, the vault's MCP at faithnet is called `demo-mcp`, and a census built from a
+ * spelling convention reports whatever the convention last happened to be.
+ *
+ * `exposure` is the honest answer to "can I speak MCP to this?" and is NOT a permission — ADR-0057: MCP is
+ * a PRIVATE capability interface behind an admitted runtime, absent from every Agent Card. Whether a caller
+ * may use a tool is decided inside, against the chain, every time.
+ *
+ * WHAT IS NOT HERE. No tool list and no trust level. Those come from a server's own SIGNED tool manifest
+ * (spec 435 §5 `McpToolManifestV1`, W1) read from the registry, so that a reader checks the server rather
+ * than this file: a tool list in a manifest is a claim by whoever edited the manifest, which is the one
+ * thing an anti-rug-pull control must not be.
+ */
+export interface TownMcpServer {
+  /** Short id, unique within its town or estate (`vault`, `home`, `infra`). */
+  id: string;
+  /** What it serves, in a sentence a reader who does not know this deployment can follow. */
+  description: string;
+  /**
+   * `binding` — no hostname at all: only a Worker the manifest binds can reach it.
+   * `authenticated` — it has a door, and the door admits only an authenticated principal.
+   * `open` — it has a door that answers an anonymous MCP client (a read-only interop surface).
+   */
+  exposure: 'binding' | 'authenticated' | 'open';
+  /** The door, when it has one. Absent for `binding`, and absence is the point rather than a gap. */
+  url?: string;
+  /** The Worker that serves it, kept exactly as deployed. */
+  worker?: string;
+  /** The agent whose own MCP this is (`atl:mcpEndpoint` on its name record), when it belongs to one. */
+  agentName?: string;
+  /** An unauthenticated GET answering 2xx when it is up. Absent = its health is not observable from outside. */
+  probe?: string;
+}
+
 /** An estate is a resident of the town: a Home, its edge and runtime, on this chain. It is never deployed from here. */
 export interface TownEstate {
   id: string;
@@ -72,6 +111,9 @@ export interface TownEstate {
   pagesProjects?: string[];
   vercelProjects?: string[];
   azureResources?: string[];
+  /** The MCP servers this estate runs (spec 435 §5). Absent = it declares none, which is a fact about this
+   *  file: an estate's agents may still each serve their own, and those live on the chain, not here. */
+  mcpServers?: TownMcpServer[];
 }
 
 export interface TownService {
@@ -98,6 +140,15 @@ export interface TownService {
   pagesProjects?: string[];
   vercelProjects?: string[];
   azureResources?: string[];
+  /** Set when this service's OWN interface is MCP — the town-shared half of the §5 catalog. Its id,
+   *  description, worker and probe are the service row's already; this adds only what is MCP-specific. A
+   *  service that merely talks to an MCP server does not carry this. */
+  mcp?: { exposure: TownMcpServer['exposure']; url?: string };
+  /** MCP servers this service RUNS BESIDE its own interface — the skills registry's tools Worker is one:
+   *  the service is a website, and an MCP server sits behind a binding next to it. Separate from `mcp`
+   *  because "this service speaks MCP" and "this service runs an MCP server" are different claims and a
+   *  reader deciding what to call needs to know which. */
+  mcpServers?: TownMcpServer[];
 }
 
 export interface TownManifest {

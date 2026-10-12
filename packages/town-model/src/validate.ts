@@ -15,6 +15,26 @@ export function parseTown(text: string): TownValidation {
   return validateTown(raw);
 }
 
+
+/** One declared MCP server, checked. `at` names where it was found so an error is findable in the YAML.
+ *
+ * The rule worth stating: `binding` means NO DOOR, so a url on one is a contradiction and is refused rather
+ * than ignored. A manifest that says both "unreachable from outside" and "here is where to reach it" tells a
+ * reader the opposite things on the same row, and the row is what the portal renders.
+ */
+function checkMcp(m: unknown, at: string, errors: string[], opts: { urlRequired: boolean }): void {
+  const x = m as Record<string, unknown> | null;
+  if (!x || typeof x !== 'object') { errors.push(`${at}: an object`); return; }
+  if (!MCP_EXPOSURES.includes(x.exposure as string)) errors.push(`${at}.exposure: one of ${MCP_EXPOSURES.join(' | ')}`);
+  if (x.url !== undefined && !isUrl(x.url)) errors.push(`${at}.url: an https URL`);
+  if (x.exposure === 'binding' && x.url !== undefined) errors.push(`${at}.url: a binding-only server has no door — remove the url or change the exposure`);
+  // An estate's server must say where its door is; a town SERVICE need not, because its row already carries
+  // the hosts the census reads it from.
+  if (opts.urlRequired && x.exposure !== 'binding' && x.url === undefined) errors.push(`${at}.url: a server with a door says where it is`);
+  if (x.probe !== undefined && !isUrl(x.probe)) errors.push(`${at}.probe: an https URL`);
+}
+const MCP_EXPOSURES = ['binding', 'authenticated', 'open'];
+
 export function validateTown(raw: unknown): TownValidation {
   const errors: string[] = [];
   const t = raw as Partial<TownManifest> | null;
@@ -62,6 +82,23 @@ export function validateTown(raw: unknown): TownValidation {
       if (prior) errors.push(`${at}.lanes: "${pattern}" is already a lane of ${prior}`);
       laneOwner.set(pattern, e.id);
     }
+    const mcps = e.mcpServers;
+    if (mcps !== undefined) {
+      if (!Array.isArray(mcps)) errors.push(`${at}.mcpServers: a list`);
+      else {
+        const ids = new Set<string>();
+        for (const [j, m] of mcps.entries()) {
+          const mat = `${at}.mcpServers[${j}]${(m as { id?: string })?.id ? ` (${(m as { id: string }).id})` : ''}`;
+          const id = (m as { id?: unknown })?.id;
+          if (typeof id !== 'string' || !ID.test(id)) errors.push(`${mat}.id: a lower-case id`);
+          else if (ids.has(id)) errors.push(`${mat}: duplicate MCP server id in this estate`);
+          else ids.add(id);
+          const d = (m as { description?: unknown })?.description;
+          if (typeof d !== 'string' || !d.trim()) errors.push(`${mat}.description: required — say what it serves`);
+          checkMcp(m, mat, errors, { urlRequired: true });
+        }
+      }
+    }
   }
 
   const services = Array.isArray(t.services) ? t.services : [];
@@ -87,6 +124,16 @@ export function validateTown(raw: unknown): TownValidation {
     if (s.probe !== undefined && !isUrl(s.probe)) errors.push(`${at}.probe: an https URL`);
     if (s.card !== undefined && !isUrl(s.card)) errors.push(`${at}.card: an https URL`);
     for (const e of s.estates ?? []) if (!estateIds.has(e)) errors.push(`${at}.estates: "${e}" is not an estate of this town`);
+    // A service whose OWN interface is MCP. Its id and description are the row's, so only the MCP-specific
+    // half is checked here — and a `binding` service that also lists a host is left alone: the host may be a
+    // health page or a redirect, and only the `mcp.url` claim is this rule's business.
+    if (s.mcp !== undefined) checkMcp(s.mcp, `${at}.mcp`, errors, { urlRequired: false });
+    for (const [j, m] of (s.mcpServers ?? []).entries()) {
+      const mat = `${at}.mcpServers[${j}]${(m as { id?: string })?.id ? ` (${(m as { id: string }).id})` : ''}`;
+      if (typeof (m as { id?: unknown })?.id !== 'string' || !ID.test((m as { id: string }).id)) errors.push(`${mat}.id: a lower-case id`);
+      if (typeof (m as { description?: unknown })?.description !== 'string' || !(m as { description: string }).description.trim()) errors.push(`${mat}.description: required — say what it serves`);
+      checkMcp(m, mat, errors, { urlRequired: true });
+    }
   }
 
   return { town: errors.length ? null : (t as TownManifest), errors };

@@ -79,6 +79,9 @@ interface AgentResult {
   /** spec 347 §8.5 — `approf:a2aEndpoint` (the agent's A2A host; ARD entries need it) and the parsed
    *  `approf:distribution` fact (ACP registry eligibility), both as the MCP surfaces them; null when undeclared. */
   a2aEndpoint?: string | null; distribution?: import('./acp.js').AcpDistributionLike | null; siteUrl?: string | null;
+  /** spec 435 §5 — `approf:mcpEndpoint`, the agent's own MCP door. Surfaced by the roster and ranked nowhere:
+   *  an endpoint is where a server listens, never a claim about what it is good for (ADR-0057). */
+  mcpEndpoint?: string | null;
   /** G2/G3/G4 — owner-asserted, comma-separated discovery-ranking facets (approf:languages/regions/focusAreas). */
   languages?: string | null; regions?: string | null; focusAreas?: string | null;
   /** G1 — the trust fabric, now actually projected into the graph. */
@@ -834,6 +837,36 @@ app.post('/explore', async (c) => {
   const out = ardExploreResponse(body, facets as Parameters<typeof ardExploreResponse>[1]);
   if ('code' in out) return c.json(ardError(out), out.status);
   return c.json(out);
+});
+
+// THE ROSTER — every agent the public graph holds, as rows, for a reader placing them (spec 435 §4).
+//
+// Why this exists beside `/agents` and `/search`. `/agents` is the ARD projection and lists only agents with a
+// released card (17 of 212 here); `/search` takes words. "Which agents are in the faithnet estate" is neither a
+// word search nor a card listing — it is a read of every row's endpoint against the town's manifest, and doing it
+// one agent at a time is 212 reads to answer one question.
+//
+// PUBLIC BY CONSTRUCTION (ADR-0040): every field is on chain, and a reader with an RPC could rebuild this page
+// from the naming registry. The endpoints say where an agent listens; nothing here says anybody may use it, and
+// the town's placement of a row into an estate is an INFERENCE from those endpoints, never an authority
+// (spec 435 §4 — inferred never promotes to attested).
+const ROSTER_MAX = 500;
+app.get('/roster', async (c) => {
+  const limit = Math.min(Math.max(Number(c.req.query('limit') ?? ROSTER_MAX) || ROSTER_MAX, 1), ROSTER_MAX);
+  const mcp = await mcpGet(c.env, `/search?q=&limit=${limit}`).catch((e) => ({ ok: false, error: String(e) }));
+  if (!mcp?.ok) return c.json({ ok: false, error: mcp?.error ?? 'the discovery MCP could not be asked' }, 502);
+  const rows = (mcp.results as AgentResult[]).map((a) => ({
+    name: a.name, smartAgent: a.smartAgent,
+    ...(a.displayName ? { displayName: a.displayName } : {}),
+    ...(a.agentType ? { agentType: a.agentType } : {}),
+    ...(a.kind ? { kind: a.kind } : {}),
+    ...(a.tld ? { tld: a.tld } : {}),
+    ...(a.a2aEndpoint ? { a2aEndpoint: a.a2aEndpoint } : {}),
+    ...(a.mcpEndpoint ? { mcpEndpoint: a.mcpEndpoint } : {}),
+  }));
+  // `truncated` is SAID. A page that silently stops at its ceiling makes "this estate has 212 agents" and "this
+  // estate has as many as the page would show" the same sentence.
+  return c.json({ ok: true, returned: rows.length, truncated: !!mcp.truncated, limit, rows }, 200, { 'cache-control': 'public, max-age=120' });
 });
 
 app.get('/agents', async (c) => {

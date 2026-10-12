@@ -45,3 +45,62 @@ export interface AgentDetail {
   agent: { ok: boolean; agent?: string; triples?: Array<{ p: string; o: string }>; error?: string };
   offerings: { ok?: boolean; offerings?: Array<{ skillId: string; name: string | null; effect?: string | null; exposure?: string | null; family?: string | null; status?: string | null; source?: string | null }>; error?: string } | null;
 }
+
+/** One MCP server as `/api/mcp` and `/api/estate/:id` report it (spec 435 §5). `up` is `null` where no probe
+ *  is declared, which is not the same as down — a binding-only server has no door to knock on. */
+export interface McpServerRow {
+  id: string;
+  description: string;
+  exposure: 'binding' | 'authenticated' | 'open';
+  scale: 'town' | 'estate';
+  estate?: string;
+  serviceId?: string;
+  url?: string;
+  worker?: string;
+  agentName?: string;
+  probe?: string;
+  up?: boolean | null;
+  status?: number;
+}
+
+/** One agent as the roster reports it, with the estate this town INFERRED for it and how. Never attested:
+ *  spec 435 §4's top rung is an attestation that does not exist yet, and an inference never promotes. */
+export interface PlacedAgentRow {
+  name: string | null;
+  smartAgent: string;
+  displayName?: string | null;
+  agentType?: string | null;
+  kind?: string | null;
+  tld?: string | null;
+  a2aEndpoint?: string | null;
+  mcpEndpoint?: string | null;
+  estate: string | null;
+  how: 'agent-zone' | 'estate-a2a' | 'unplaced';
+}
+
+/** `/api/estate/:id` — the manifest's own account of one estate, its MCP servers, and the agents placed in it. */
+export interface EstateDetail {
+  estate: EstateSummary & {
+    namingGate?: string;
+    kms?: { tenant: string | null; backend?: string };
+    workers?: string[];
+    pagesProjects?: string[];
+    vercelProjects?: string[];
+    azureResources?: string[];
+    lanes?: Record<string, string>;
+  };
+  mcpServers: McpServerRow[];
+  agents:
+    | { estate: string; agents: PlacedAgentRow[]; byKind: Record<'person' | 'org' | 'service' | 'undeclared', number>; withMcp: number; truncated: boolean; read: number }
+    | { unavailable: string };
+  agent: ContextAgentView | null;
+  chain: { id: number; generation: string; rpc: string };
+  town: string;
+}
+
+/** `/api/mcp` — every server the manifest declares, plus the agents that serve a door of their own. */
+export interface McpCensus {
+  town: string;
+  servers: McpServerRow[];
+  agentDoors: { rows: PlacedAgentRow[]; read: number; truncated: boolean } | { unavailable: string };
+}

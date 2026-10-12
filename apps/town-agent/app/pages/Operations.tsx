@@ -214,7 +214,7 @@ function EstatesTab({ t, p }: { t: TownData; p: PulseView }): ReactNode {
     <section>
       <h2>Estates</h2>
       <Ask scope="estate" estates={t.estates} agents={t.agents} />
-      <p className="lede">One card per estate on this chain — each a context with its own record and its own agent (spec 436 §4; the town's own card is on the Town tab). Each estate reports its own counts to the town — agents, homes, runs, spend — over a token the estate issued. The estate's people and their records stay at the estate; a stale card is dark, never guessed.</p>
+      <p className="lede">One card per estate on this chain — each a context with its own record and its own agent (spec 436 §4; the town's own card is on the Town tab). Each estate reports its own counts to the town — agents, homes, runs, spend — over a token the estate issued. The estate's people and their records stay at the estate; a stale card is dark, never guessed. These are the operations numbers; everything else about an estate — where it lives, what it may name, whose keys hold it, its MCP servers, which agents are its — is on its own page.</p>
       <div className="cards">
         {t.estates.map((e) => {
           const st = p.estates[e.id];
@@ -259,7 +259,7 @@ function EstatesTab({ t, p }: { t: TownData; p: PulseView }): ReactNode {
                   ? undefined
                   : `This estate serves no agent zone of its own, so its agents are reached through its edge by name; the card above is on the zone the Ask is configured with, not ${e.id}'s.`}
               />
-              <span className="card-foot"><a href={e.home} rel="noreferrer">Open the estate's Home</a><span className="mono">{e.repo}</span></span>
+              <span className="card-foot"><Link href={`/estate/${e.id}`}>The {e.id} estate &rarr;</Link><a href={e.home} rel="noreferrer">its Home</a><span className="mono">{e.repo}</span></span>
             </article>
           );
         })}

@@ -49,6 +49,27 @@ estates:
     workers: [demo-a2a-faithnet, demo-mcp-faithnet, demo-edge-faithnet, home-mcp-faithnet, harness-approval-faithnet,
               demo-a2a, demo-mcp, demo-edge, home-mcp]
     vercelProjects: [faithnet-home]
+    # The estate's MCP servers (spec 435 §5). DECLARED, not read off the Worker names: `demo-mcp-faithnet` is
+    # the vault and `home-mcp-faithnet` is the Home's entrance, and no spelling rule tells you which is which.
+    mcpServers:
+      - id: vault
+        worker: demo-mcp-faithnet
+        exposure: authenticated
+        url: https://mcp.faithnet.io
+        probe: https://mcp.faithnet.io/health
+        description: >-
+          Every agent's vault, behind a private MCP. The authorization decision is the Web3 chain every call —
+          on-chain delegation, signature validation, entitlement, tool policy — re-run server-side against the
+          principal agent; a token at the door is at most the envelope it arrived in (ADR-0041).
+      - id: home
+        worker: home-mcp-faithnet
+        exposure: authenticated
+        url: https://home-mcp.faithnet.io
+        probe: https://home-mcp.faithnet.io/health
+        description: >-
+          The Home's own MCP and OAuth 2.1 server (spec 397) — the entrance an outside client such as Claude.ai
+          uses to reach a person's agent. It carries her `ask-as-me` delegation, never the bearer, and an act
+          still parks for her signature at her Home.
 
   # THE SECOND ESTATE on this chain, on default platform names by the owner's instruction (2026-10-11): no
   # faithnet DNS, so its Home is the Vercel project's own host and its Workers are reached on `workers.dev`.
@@ -94,6 +115,24 @@ estates:
     # Not provisioned yet, so its vault KEK path is off and every person's storage stays unprovisioned —
     # stated, not implied.
     kms: { tenant: imb, backend: akcs }  # callers imb-vault-2 / imb-runtime-2, CVM levels only (2026-10-11)
+    # The same two servers as faithnet, on default platform names — imbnet has no zone of its own.
+    mcpServers:
+      - id: vault
+        worker: imb-vault
+        exposure: authenticated
+        url: https://imb-vault.richardpedersen3.workers.dev
+        probe: https://imb-vault.richardpedersen3.workers.dev/health
+        description: >-
+          Every imbnet agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every
+          call, against the principal agent.
+      - id: home
+        worker: imb-home-mcp
+        exposure: authenticated
+        url: https://imb-home-mcp.richardpedersen3.workers.dev
+        probe: https://imb-home-mcp.richardpedersen3.workers.dev/.well-known/oauth-authorization-server
+        description: >-
+          imbnet's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the
+          estate has no zone to give it a name under.
 
 services:
   # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
@@ -113,6 +152,7 @@ services:
     app: apps/discovery-mcp
     worker: demo-discovery-mcp-faithnet
     hosts: []
+    mcp: { exposure: binding }
     description: Reads the public graph and the retrieval index for the registry. Reachable only by service binding.
   - id: discovery-indexer
     kind: commons
@@ -128,6 +168,10 @@ services:
     worker: demo-discovery-connector-faithnet
     hosts: [discovery-connector.faithnet.io]
     probe: https://discovery-connector.faithnet.io/health
+    # The one MCP server in this town with a door an anonymous client may knock on. It is read-only and it
+    # reads the public graph, which anybody could read from the chain anyway (ADR-0040) — so there is nothing
+    # behind this door that being admitted would disclose.
+    mcp: { exposure: open }
     description: Public read-only MCP for external assistants, over the registry's search.
   - id: discovery-web
     kind: commons
@@ -153,6 +197,7 @@ services:
     worker: faithchain-town-mcp
     hosts: []
     workers: []
+    mcp: { exposure: binding }
     description: The town's private MCP (spec 437 §4) — the only place a platform read credential lives, and the only thing that reads Cloudflare, Vercel, Azure and GraphDB. No hostname; reachable only by service binding from the town agent. It reads; it acts for nobody.
   - id: naming
     kind: commons
@@ -188,6 +233,15 @@ services:
     hosts: [skills.faithnet.io]
     probe: https://skills.faithnet.io/
     workers: [skills-web-faithnet, skills-web, skills-a2a, skills-corpus, skills-mcp, skills-ontology]
+    # The registry's own interface is a website; its tools Worker is an MCP server behind a binding beside it.
+    # It has NO public route on purpose: it takes its caller's word for `author` because skills-a2a has already
+    # verified the id_token, and a hostname would turn "trusts its caller" into "trusts the internet" over an
+    # append-only log that cannot un-write a forged leaf.
+    mcpServers:
+      - id: skills
+        worker: skills-mcp
+        exposure: binding
+        description: The skills corpus's tools and store — publish and read SKILL.md contracts. No public route by design.
     description: The skills registry — SKILL.md contracts and playbooks, pinned by digest.
   - id: kms
     kind: commons

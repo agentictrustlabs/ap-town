@@ -10,7 +10,7 @@
 //   GET  /api/town · /api/services · /api/services/:id · /api/estates · /api/find?q= · /api/health
 //   GET  everything else                   the Town portal (the built app in ./dist)
 import { createStandardA2aServer, type AgentCardV1, type MessageV1, type PartV1 } from '@agenticprimitives/a2a/standard';
-import { TOWNS, type TownManifest } from '@ap-town/town-model';
+import { TOWNS, allMcpServers, estateMcpServers, estateOf, estateRoster, placeAgents, type AgentRosterRow, type TownManifest } from '@ap-town/town-model';
 import { agentCardHost, contextAgentViews, describe, serviceViews, townSummary, type Probe, type ServiceView } from './signals';
 import { samplePulse, readPulse, type PulseSampleV1, type PulseEnv } from './pulse';
 import { recordDay, pulseRecordReadiness, contextAgents, type PulseRecordEnv } from './pulse-record';
@@ -159,7 +159,9 @@ async function runPassVia(env: Env, which: string, authorization: string | null)
   } catch (e) { return json({ ok: false, error: `the town MCP could not be asked: ${e instanceof Error ? e.message : String(e)}` }, 502); }
 }
 
-async function api(path: string, url: URL, env: Env, town: TownManifest, selfHost: string, origin: string, authorization: string | null = null, method = 'GET'): Promise<Response> {
+/** Exported for its tests: the API's routes are where "could not ask" must not render as "none", and that is
+ *  only checkable by calling them with a registry that refuses. */
+export async function api(path: string, url: URL, env: Env, town: TownManifest, selfHost: string, origin: string, authorization: string | null = null, method = 'GET', probe: Probe = fetchProbe): Promise<Response> {
   if (path === '/pulse/pass') return method === 'POST' ? runPassVia(env, url.searchParams.get('which') ?? 'status', authorization) : json({ error: 'POST, with the town ops token' }, 405);
   // RECORD THE DAY NOW (spec 436 §5.5 T2). The sampler does this once an hour; an operator may ask for it, which
   // is how the wires get proven the moment they are minted rather than at the top of the next hour. It writes
@@ -186,6 +188,46 @@ async function api(path: string, url: URL, env: Env, town: TownManifest, selfHos
     return json({ ok: true, service: 'town-agent', town: town.town, pulseRecord: pulseRecordReadiness(env as PulseRecordEnv), lastRecord, contextAgents: contextAgents(env as PulseRecordEnv), townMcp: env.INFRA ? 'bound' : 'not bound on this deployment' });
   }
   if (path === '/estates') return json(townSummary(town).estates);
+  // ── ONE ESTATE, ON ITS OWN PAGE (spec 435 §4) ──────────────────────────────────────────────────────────
+  // Everything an estate declares in the manifest, its MCP servers, and the agents this town can PLACE in it
+  // from their own on-chain endpoints. The placement is an inference and says so on every row; nothing here
+  // reads a vault, and the estate's own Home remains the only thing that knows who may do what there.
+  const est = path.match(/^\/estate\/([a-z0-9-]+)$/);
+  if (est) {
+    const estate = estateOf(town, est[1]!);
+    if (!estate) return json({ error: `no estate "${est[1]}" in the ${town.town} town` }, 404);
+    const roster = await ask<{ ok?: boolean; rows?: AgentRosterRow[]; truncated?: boolean; returned?: number }>(env.REGISTRY, 'https://registry/roster?limit=500');
+    // THE REGISTRY BEING UNREACHABLE IS SAID, NOT RENDERED AS AN EMPTY ESTATE. "No agents" and "we could not
+    // ask" look identical on a page and mean opposite things.
+    const agents = roster?.ok && Array.isArray(roster.rows)
+      ? { ...estateRoster(roster.rows, town, estate.id), truncated: !!roster.truncated, read: roster.returned ?? roster.rows.length }
+      : { unavailable: 'the registry could not be asked just now, so this estate\u2019s agents are unknown rather than none' };
+    return json({
+      estate, mcpServers: estateMcpServers(town, estate.id), agents,
+      agent: contextAgentViews(town, contextAgents(env as PulseRecordEnv), env.CONTEXT_AGENT_ZONE).estates[estate.id] ?? null,
+      chain: town.chain, town: town.town,
+    }, 200, { 'cache-control': 'public, max-age=60' });
+  }
+  // ── THE MCP CENSUS AT THE SCALES A MANIFEST AND A CHAIN CAN ANSWER (spec 435 §5) ───────────────────────
+  // Town-shared and per-estate servers come from the manifest, which DECLARES them. The agents' own doors come
+  // from the chain (`atl:mcpEndpoint`). What an agent has ATTACHED is absent on purpose: those are spec-404
+  // records in its owner's vault under her grant, and the town cannot see them and will not guess.
+  if (path === '/mcp') {
+    const roster = await ask<{ ok?: boolean; rows?: AgentRosterRow[]; truncated?: boolean }>(env.REGISTRY, 'https://registry/roster?limit=500');
+    const servers = allMcpServers(town);
+    // Probed where a probe is declared, in parallel and ONCE each; `null` where none is declared, which is a
+    // different answer from down — a binding-only server has no door to knock on and is not therefore broken.
+    const probed = await Promise.all(servers.map(async (m) => {
+      if (!m.probe) return { ...m, up: null };
+      const r = await probe(m.probe);
+      const status = 'status' in r ? r.status : 0;
+      return { ...m, up: status >= 200 && status < 400, status };
+    }));
+    const agentDoors = roster?.ok && Array.isArray(roster.rows)
+      ? { rows: placeAgents(roster.rows.filter((r) => !!r.mcpEndpoint), town), read: roster.rows.length, truncated: !!roster.truncated }
+      : { unavailable: 'the registry could not be asked just now, so which agents serve a door of their own is unknown rather than none' };
+    return json({ town: town.town, servers: probed, agentDoors }, 200, { 'cache-control': 'public, max-age=60' });
+  }
   // WHAT THIS AGENT IS CONFIGURED WITH (the owner's rule, 2026-10-10): which servers the town — or one estate,
   // service or application — declares, and which read credentials the town MCP holds, BY NAME. Never a value: the
   // credentials live only in the MCP, and this Worker could not print one if it tried.

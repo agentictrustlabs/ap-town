@@ -7,6 +7,8 @@ import { Find } from './pages/Find';
 import { Service } from './pages/Service';
 import { Operations, type Tab } from './pages/Operations';
 import { AgentPage } from './pages/Agent';
+import { Estate } from './pages/Estate';
+import { Mcp } from './pages/Mcp';
 
 function Page({ t }: { t: TownData }): ReactNode {
   const { path } = useRoute();
@@ -15,6 +17,8 @@ function Page({ t }: { t: TownData }): ReactNode {
   if (path === '/find') return <Find t={t} />;
   if (path === '/operations') return <Operations t={t} />;
   if ((m = path.match(/^\/operations\/(estates|homes|inference|chain|apps|infra|performance)$/))) return <Operations t={t} tab={m[1] as Tab} />;
+  if (path === '/mcp') return <Mcp t={t} />;
+  if ((m = path.match(/^\/estate\/([a-z0-9-]+)$/))) return <Estate key={m[1]} t={t} id={m[1]!} />;
   if ((m = path.match(/^\/service\/([a-z0-9-]+)$/))) return <Service t={t} id={m[1]!} />;
   if ((m = path.match(/^\/agent\/(.+)$/))) return <AgentPage key={m[1]} t={t} id={decodeURIComponent(m[1]!)} />;
   return <section><h1>Nothing here</h1><p className="lede">That page does not exist. <Link href="/">Back to the town.</Link></p></section>;
@@ -33,6 +37,7 @@ function Shell(): ReactNode {
         <Link href="/" className="brand"><span className="brand-mark" aria-hidden="true" />The town{town && <span className="brand-town">{town.town} · chain {town.chain.id}</span>}</Link>
         <nav aria-label="Areas">
           <Link href="/find">Find</Link>
+          <Link href="/mcp">MCP</Link>
           {naming && <a href={`https://${naming}`} rel="noreferrer">Names</a>}
           {skills && <a href={`https://${skills}`} rel="noreferrer">Skills</a>}
           <Link href="/operations">Pulse</Link>

@@ -9,7 +9,12 @@ const local = (iri: string): string => iri.replace(/^.*[#/]/, '');
 /** HOW TO REACH IT. Pulled out of the flat fact list because "where do I send an A2A message" is the question
  *  people actually arrive with, and it was a row among thirteen. Still public, still not a permission: an
  *  endpoint says where an agent listens, never that you may use it. */
-const REACH_KEYS = ['a2aEndpoint', 'mcpEndpoint', 'cardUri', 'cardHash', 'serviceUrl', 'siteUrl'] as const;
+const REACH_KEYS = ['a2aEndpoint', 'cardUri', 'cardHash', 'serviceUrl', 'siteUrl'] as const;
+
+/** `mcpEndpoint` is deliberately NOT in `REACH_KEYS`: it has its own section, because "which MCP servers does
+ *  this agent have" is a question people arrive with and the honest answer has two halves — the door it serves
+ *  (on chain, here) and the servers it was equipped with (in its owner's vault, not here, and never guessed). */
+const MCP_KEY = 'mcpEndpoint';
 
 /** THE PUBLIC GRAPH. Who this agent is connected to, as the chain shows it. Separate signals, never a score:
  *  a registry lists, it does not rank trust (ADR-0038 / spec 429 D2), and an edge count is a shape of the
@@ -18,7 +23,6 @@ const GRAPH_KEYS = ['hasRelationship', 'relatedAgent', 'edgeCount', 'activeEdgeC
 
 const REACH_LABEL: Record<string, string> = {
   a2aEndpoint: 'A2A endpoint — where another agent sends it a message',
-  mcpEndpoint: 'MCP endpoint — the tools it serves behind its own door',
   cardUri: 'Agent card — what it says about itself, at its own host',
   cardHash: 'Card hash — the digest the chain holds for that card',
   serviceUrl: 'Service URL',
@@ -73,9 +77,10 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
       const isIn = (keys: readonly string[]) => (x: { p: string }) => keys.includes(local(x.p));
       const reach = rows.filter(isIn(REACH_KEYS));
       const graph = rows.filter(isIn(GRAPH_KEYS));
-      const rest = rows.filter((x) => !isIn(REACH_KEYS)(x) && !isIn(GRAPH_KEYS)(x));
+      const rest = rows.filter((x) => !isIn(REACH_KEYS)(x) && !isIn(GRAPH_KEYS)(x) && local(x.p) !== MCP_KEY);
       const conforms = triples.find((x) => x.p.endsWith('shacl#conforms'))?.o;
       const cardUri = triples.find((x) => local(x.p) === 'cardUri')?.o;
+      const mcpEndpoint = triples.find((x) => local(x.p) === MCP_KEY)?.o;
       const address = (d.agent.agent ?? '').split(':').pop() ?? '';
       const offerings = d.offerings?.offerings ?? [];
       return (
@@ -98,11 +103,37 @@ export function AgentPage({ t, id }: { t: TownData; id: string }): ReactNode {
               </dl>
             ) : (
               <Empty title="It publishes no endpoint.">
-                Nothing on chain says where to reach this agent — no A2A endpoint, no card, no MCP. That is a fact
+                Nothing on chain says where to reach this agent — no A2A endpoint and no card. That is a fact
                 about its records, not a judgement about the agent: an agent is chartered with its endpoints written,
                 and one without them cannot be engaged by anybody who only has its name.
               </Empty>
             )}
+          </section>
+          <section>
+            <SectionHead eyebrow="From the chain" title="The tools it serves">
+              Whether this agent runs an MCP server of its own, and where. An MCP endpoint is a PRIVATE capability
+              interface (ADR-0057): it is absent from every Agent Card by design, and the authorization decision for
+              every call is the chain, re-run server-side against the calling principal. A door you can see is not a
+              door you may open.
+            </SectionHead>
+            {mcpEndpoint ? (
+              <dl className="kv kv-facts">
+                <dt>MCP endpoint</dt><dd className="mono break">{factValue('mcpEndpoint', mcpEndpoint)}</dd>
+              </dl>
+            ) : (
+              <Empty title="Its name record publishes no MCP endpoint.">
+                It serves no tools behind a door of its own &mdash; or it serves them somewhere its records do not
+                name, which a service reached only by its own estate&rsquo;s Workers has no reason to publish. Either
+                way, nothing on chain says where.
+              </Empty>
+            )}
+            <p className="quiet">
+              <strong>Which MCP servers this agent USES is not here, and cannot be.</strong> The connectors its owner
+              equipped it with are records in her vault, under her own grant (spec 404, ADR-0025) &mdash; the town
+              cannot read them and does not guess. Her Home is where that list lives. What this page can show is the
+              other direction: the door this agent serves, and the skills its own card advertises below.
+              {' '}<Link href="/mcp">Every MCP server in the town &rarr;</Link>
+            </p>
           </section>
           <section>
             <SectionHead eyebrow="From the chain" title="Its public graph">

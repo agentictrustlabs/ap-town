@@ -139,6 +139,24 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         ],
         "vercelProjects": [
           "faithnet-home"
+        ],
+        "mcpServers": [
+          {
+            "id": "vault",
+            "worker": "demo-mcp-faithnet",
+            "exposure": "authenticated",
+            "url": "https://mcp.faithnet.io",
+            "probe": "https://mcp.faithnet.io/health",
+            "description": "Every agent's vault, behind a private MCP. The authorization decision is the Web3 chain every call — on-chain delegation, signature validation, entitlement, tool policy — re-run server-side against the principal agent; a token at the door is at most the envelope it arrived in (ADR-0041)."
+          },
+          {
+            "id": "home",
+            "worker": "home-mcp-faithnet",
+            "exposure": "authenticated",
+            "url": "https://home-mcp.faithnet.io",
+            "probe": "https://home-mcp.faithnet.io/health",
+            "description": "The Home's own MCP and OAuth 2.1 server (spec 397) — the entrance an outside client such as Claude.ai uses to reach a person's agent. It carries her `ask-as-me` delegation, never the bearer, and an act still parks for her signature at her Home."
+          }
         ]
       },
       {
@@ -177,7 +195,25 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "kms": {
           "tenant": "imb",
           "backend": "akcs"
-        }
+        },
+        "mcpServers": [
+          {
+            "id": "vault",
+            "worker": "imb-vault",
+            "exposure": "authenticated",
+            "url": "https://imb-vault.richardpedersen3.workers.dev",
+            "probe": "https://imb-vault.richardpedersen3.workers.dev/health",
+            "description": "Every imbnet agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every call, against the principal agent."
+          },
+          {
+            "id": "home",
+            "worker": "imb-home-mcp",
+            "exposure": "authenticated",
+            "url": "https://imb-home-mcp.richardpedersen3.workers.dev",
+            "probe": "https://imb-home-mcp.richardpedersen3.workers.dev/.well-known/oauth-authorization-server",
+            "description": "imbnet's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the estate has no zone to give it a name under."
+          }
+        ]
       }
     ],
     "services": [
@@ -202,6 +238,9 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "app": "apps/discovery-mcp",
         "worker": "demo-discovery-mcp-faithnet",
         "hosts": [],
+        "mcp": {
+          "exposure": "binding"
+        },
         "description": "Reads the public graph and the retrieval index for the registry. Reachable only by service binding."
       },
       {
@@ -223,6 +262,9 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "discovery-connector.faithnet.io"
         ],
         "probe": "https://discovery-connector.faithnet.io/health",
+        "mcp": {
+          "exposure": "open"
+        },
         "description": "Public read-only MCP for external assistants, over the registry's search."
       },
       {
@@ -258,6 +300,9 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "worker": "faithchain-town-mcp",
         "hosts": [],
         "workers": [],
+        "mcp": {
+          "exposure": "binding"
+        },
         "description": "The town's private MCP (spec 437 §4) — the only place a platform read credential lives, and the only thing that reads Cloudflare, Vercel, Azure and GraphDB. No hostname; reachable only by service binding from the town agent. It reads; it acts for nobody."
       },
       {
@@ -317,6 +362,14 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "skills-corpus",
           "skills-mcp",
           "skills-ontology"
+        ],
+        "mcpServers": [
+          {
+            "id": "skills",
+            "worker": "skills-mcp",
+            "exposure": "binding",
+            "description": "The skills corpus's tools and store — publish and read SKILL.md contracts. No public route by design."
+          }
         ],
         "description": "The skills registry — SKILL.md contracts and playbooks, pinned by digest."
       },

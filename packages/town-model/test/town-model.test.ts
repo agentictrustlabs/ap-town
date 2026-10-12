@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { crawlRoots, laneBindings, laneRoutesVar, parseTown, validateTown, AUTHORIZATION_IS_NOT_A_TOWN_SIGNAL } from '../src/index';
+import { allMcpServers, crawlRoots, estateMcpServers, EXPOSURE_WORDS, laneBindings, laneRoutesVar, parseTown, townMcpServers, validateTown, AUTHORIZATION_IS_NOT_A_TOWN_SIGNAL } from '../src/index';
 
 const faithchain = readFileSync(new URL('../../../towns/faithchain/town.yaml', import.meta.url), 'utf8');
 
@@ -77,5 +77,82 @@ describe('generators', () => {
 
   it('authorization is never a town signal', () => {
     expect(AUTHORIZATION_IS_NOT_A_TOWN_SIGNAL).toMatch(/does not grant/);
+  });
+});
+
+describe('the MCP census — declared, never inferred (spec 435 §5)', () => {
+  it('reads the town’s servers off the services that declare one, not off Worker names', () => {
+    const { town } = parseTown(faithchain);
+    const rows = townMcpServers(town!);
+    expect(rows.map((r) => r.id).sort()).toEqual(['discovery-connector', 'discovery-mcp', 'skills', 'town-mcp']);
+    // `demo-discovery-indexer-faithnet` is not here, and neither is any other Worker whose name ends in -mcp
+    // without a declaration. The census is what the manifest asserts.
+    expect(rows.every((r) => r.scale === 'town')).toBe(true);
+    expect(rows.find((r) => r.id === 'discovery-connector')?.exposure).toBe('open');
+    expect(rows.find((r) => r.id === 'town-mcp')?.exposure).toBe('binding');
+  });
+
+  it('gives a binding-only server no url, and an open one the host it is served on', () => {
+    const { town } = parseTown(faithchain);
+    const rows = townMcpServers(town!);
+    expect(rows.find((r) => r.id === 'town-mcp')?.url).toBeUndefined();
+    expect(rows.find((r) => r.id === 'discovery-connector')?.url).toBe('https://discovery-connector.faithnet.io');
+  });
+
+  it('reads each estate’s own servers, tagged with the estate', () => {
+    const { town } = parseTown(faithchain);
+    for (const id of ['faithnet', 'imbnet']) {
+      const rows = estateMcpServers(town!, id);
+      expect(rows.map((r) => r.id)).toEqual(['vault', 'home']);
+      expect(rows.every((r) => r.scale === 'estate' && r.estate === id)).toBe(true);
+      expect(rows.every((r) => !!r.url && !!r.description)).toBe(true);
+    }
+    expect(estateMcpServers(town!, 'nowhere')).toEqual([]);
+  });
+
+  it('every declared server is in the whole-town census exactly once', () => {
+    const { town } = parseTown(faithchain);
+    const all = allMcpServers(town!);
+    const keys = all.map((r) => `${r.scale}:${r.estate ?? ''}:${r.id}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(all.length).toBe(townMcpServers(town!).length + town!.estates.reduce((n, e) => n + (e.mcpServers?.length ?? 0), 0));
+  });
+
+  it('refuses a binding-only server that also says where its door is', () => {
+    const t = base();
+    (t.estates[0] as any).mcpServers = [{ id: 'v', description: 'd', exposure: 'binding', url: 'https://v.example' }];
+    const { errors } = validateTown(t);
+    expect(errors.join(' ')).toMatch(/binding-only server has no door/);
+  });
+
+  it('refuses a server with a door that does not say where, and an unknown exposure', () => {
+    const t = base();
+    (t.estates[0] as any).mcpServers = [
+      { id: 'v', description: 'd', exposure: 'authenticated' },
+      { id: 'w', description: 'd', exposure: 'sometimes', url: 'https://w.example' },
+    ];
+    const { errors } = validateTown(t);
+    expect(errors.join(' ')).toMatch(/says where it is/);
+    expect(errors.join(' ')).toMatch(/exposure: one of/);
+  });
+
+  it('refuses a nameless or wordless server, and a duplicate id in one estate', () => {
+    const t = base();
+    (t.estates[0] as any).mcpServers = [
+      { id: 'v', exposure: 'binding' },
+      { id: 'v', description: 'd', exposure: 'binding' },
+      { description: 'd', exposure: 'binding' },
+    ];
+    const { errors } = validateTown(t);
+    expect(errors.join(' ')).toMatch(/description: required/);
+    expect(errors.join(' ')).toMatch(/duplicate MCP server id/);
+    expect(errors.join(' ')).toMatch(/id: a lower-case id/);
+  });
+
+  it('every exposure has words a reader can act on, and none of them is a permission', () => {
+    for (const [k, v] of Object.entries(EXPOSURE_WORDS)) {
+      expect(v.length).toBeGreaterThan(10);
+      expect(v, `${k} reads as a permission`).not.toMatch(/\b(allowed|authori[sz]ed|may use|permitted|trusted)\b/i);
+    }
   });
 });
