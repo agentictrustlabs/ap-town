@@ -106,6 +106,11 @@ function TownTab({ t, p }: { t: TownData; p: PulseReadV1 }): ReactNode {
         <Stat label="Names" value={t.names ? fmtInt(t.names.total) : '—'} sub={t.names ? `across ${t.names.roots.length} roots` : 'the naming service did not answer'} />
         <Stat label="Last sample" value={fmtAgo(p.sampledAt)} sub="every 5 minutes" tone={p.sampledAt && Date.now() - Date.parse(p.sampledAt) < 12 * 60_000 ? 'ok' : 'warn'} />
       </section>
+      <section>
+        <h2>The town</h2>
+        <p className="lede">The town is a context like its estates (spec 436 §4) — its own record, its own agent. This is who answers for it, and the card that names the door a question goes to.</p>
+        <div className="cards"><TownCard t={t} p={p} /></div>
+      </section>
       <Ask scope="town" agents={t.agents} />
       <section>
         <h2>Every listed service</h2>
@@ -137,10 +142,9 @@ function TownTab({ t, p }: { t: TownData; p: PulseReadV1 }): ReactNode {
           <dt>Public RPC</dt><dd className="mono">{t.chain.rpc} <span className="quiet">(per-app tokens; read-only by default — the Chain tab shows their use)</span></dd>
           <dt>Estates</dt><dd>{t.estates.map((e) => <Link key={e.id} href="/operations/estates">{e.id}</Link>)}</dd>
           {/* TWO DIFFERENT AGENTS, and reading them as one is how "ask the town" ends up pointed at the portal.
-              The portal's card is this Worker: it describes the town and holds no record. The context agent is
-              the one with a vault and a day's record in it, and the one the Ask talks to. */}
+              This Worker describes the town and keeps no record; the context agent has the vault with the day's
+              record in it and is the one the Ask talks to. Both are on the town's card at the top of this tab. */}
           <dt>The portal's agent card</dt><dd><a href={t.card} rel="noreferrer" className="mono break">{t.card}</a> <span className="quiet">(this Worker — it describes the town; it keeps no record)</span></dd>
-          <dt>The town's context agent</dt><dd>{t.agents?.town ? <>{<span className="mono">{t.agents.town.name}</span>}{t.agents.town.card ? <> · <a href={t.agents.town.card} rel="noreferrer">its agent card</a></> : null}</> : <span className="quiet">not chartered yet (spec 436 §5.5 T1)</span>}</dd>
         </dl>
       </section>
       <section>
@@ -189,9 +193,7 @@ function WhoAnswers({ agent, name, nameLabel, a2a, note }: {
  * more record and one more agent, not the frame the others sit in. What it keeps that no estate does: the
  * services every estate shares, and the town of names.
  */
-function TownCard({ t, p }: { t: TownData; p: PulseView }): ReactNode {
-  const up = t.services.filter((s) => s.signals.healthy === 'up' || s.signals.healthy === 'self').length;
-  const probed = t.services.filter((s) => s.signals.healthy !== 'unobserved').length;
+function TownCard({ t, p }: { t: TownData; p: PulseReadV1 }): ReactNode {
   const fresh = p.sampledAt !== null && Date.now() - Date.parse(p.sampledAt) < 12 * 60_000;
   return (
     <article className="card estate-card">
@@ -199,12 +201,8 @@ function TownCard({ t, p }: { t: TownData; p: PulseView }): ReactNode {
         <span><span className="card-title">{t.town}</span><br /><span className="card-sub">the town — what every estate here shares</span></span>
         {fresh ? <Chip tone="ok">live · {fmtAgo(p.sampledAt)}</Chip> : <Chip tone="muted">{p.sampledAt ? `stale · ${fmtAgo(p.sampledAt)}` : 'no sample yet'}</Chip>}
       </span>
-      <div className="stats stats-tight">
-        <Stat label="Chain" value={t.chain.id} sub={`generation ${t.chain.generation}`} />
-        <Stat label="Services answering" value={`${up} / ${probed}`} sub={`${t.services.length} listed`} tone={probed && up === probed ? 'ok' : 'warn'} />
-        <Stat label="Names" value={t.names ? fmtInt(t.names.total) : '—'} sub={t.names ? `under ${t.names.roots.filter((r) => r.count > 0).length} endings` : 'the naming service did not answer'} />
-        <Stat label="Estates" value={t.estates.length} sub={t.estates.map((e) => e.id).join(' · ')} />
-      </div>
+      {/* No figures here: the band at the top of this tab already carries them, and a number said twice on
+          one page is a number a reader has to reconcile. This card answers WHO, which nothing else did. */}
       <WhoAnswers agent={t.agents?.town ?? null} name={t.town} nameLabel="Town" />
       <span className="card-foot"><a href={t.card} rel="noreferrer">The portal's own agent card</a><span className="mono">agentictrustlabs/ap-town</span></span>
     </article>
@@ -216,9 +214,8 @@ function EstatesTab({ t, p }: { t: TownData; p: PulseView }): ReactNode {
     <section>
       <h2>Estates</h2>
       <Ask scope="estate" estates={t.estates} agents={t.agents} />
-      <p className="lede">The town and one card per estate on this chain — each a context with its own record and its own agent (spec 436 §4). Each estate reports its own counts to the town — agents, homes, runs, spend — over a token the estate issued. The estate's people and their records stay at the estate; a stale card is dark, never guessed.</p>
+      <p className="lede">One card per estate on this chain — each a context with its own record and its own agent (spec 436 §4; the town's own card is on the Town tab). Each estate reports its own counts to the town — agents, homes, runs, spend — over a token the estate issued. The estate's people and their records stay at the estate; a stale card is dark, never guessed.</p>
       <div className="cards">
-        <TownCard t={t} p={p} />
         {t.estates.map((e) => {
           const st = p.estates[e.id];
           const hb = st?.latest?.ok ? (st.latest.payload as Heartbeat) : null;
