@@ -14,7 +14,7 @@
 //   · it is not the operator token. That one unlocks a READ of the town's own cost and metrics
 //     (`ap-town.ops-token`); this one is a person's identity at their Home. Two different things, two keys,
 //     and conflating them would let a town secret pass for somebody's identity.
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Chip } from '@ap-town/town-ui';
 
 const KEY = 'ap-town.home-session';
@@ -103,8 +103,9 @@ const write = (c: Connection | null): void => {
   window.dispatchEvent(new Event(EVENT));
 };
 
-/** The connection this tab holds, if any. Every surface reads it from here so there is one answer. */
-export function useConnection(): { conn: Connection | null; set: (c: Connection | null) => void } {
+/** The connection this tab holds, if any. Every surface READS it from here so there is one answer; the only
+ *  two writers are `completeConnection` (the leg home) and `disconnectEverywhere` (the teardown). */
+export function useConnection(): { conn: Connection | null } {
   const [conn, setConn] = useState<Connection | null>(null);
   useEffect(() => {
     const sync = () => setConn(read());
@@ -112,11 +113,38 @@ export function useConnection(): { conn: Connection | null; set: (c: Connection 
     window.addEventListener(EVENT, sync);
     return () => window.removeEventListener(EVENT, sync);
   }, []);
-  return { conn, set: write };
+  return { conn };
 }
 
 /** The bearer to put on a relayed ask, or nothing. Never read straight from storage elsewhere. */
 export const connectionToken = (): string | null => read()?.token ?? null;
+
+/**
+ * DISCONNECT, EVERYWHERE — the same teardown every other app in the set does (engage's field-web,
+ * coach-web and gather27-web, demo-gs, demo-sso): clear this tab FIRST, then hand the person to their
+ * own Home's `/logout`, which ends the cross-app SSO session, flips FedCM to logged-out so nothing
+ * silently re-recognizes them, front-channel-notifies the Home's other relying apps, and bounces back
+ * here.
+ *
+ * Dropping the token in this tab alone is the lie those apps already refuse to tell: the Home would
+ * still know them, FedCM would still recognize them, and the next Connect would walk straight back in
+ * with no ceremony — which reads as "disconnect did nothing". The Home decides where the person lands:
+ * `return` is checked against its registered relying origins, and `https://town.faithnet.io` is one
+ * (`town-app` in ap-home's whitelabel registry), so the bounce comes back to the town.
+ *
+ * This takes nothing away from D2. The town still holds no key and still acts for no one; ending a
+ * session is the one thing a sign-out may do, and it is the PERSON'S Home that does it.
+ */
+export function disconnectEverywhere(conn: Connection): void {
+  write(null);
+  try {
+    const u = new URL('/logout', conn.home);
+    u.searchParams.set('return', `${window.location.origin}/`);
+    window.location.assign(u.toString());
+  } catch {
+    /* a Home we cannot even form a URL for: the tab is already cleared, which is all this page can do */
+  }
+}
 
 /**
  * What a Home's session token says about who holds it. The token is a JWT the HOME signed; this reads its
@@ -132,8 +160,64 @@ function claimsOf(token: string): { name: string | null; agent: string | null } 
   } catch { return { name: null, agent: null }; }
 }
 
+/** How to call someone whose Home asserted no agent name: their Smart Agent, shortened. */
+const label = (conn: Connection): string =>
+  conn.name ?? (conn.agent ? `${conn.agent.slice(0, 6)}\u2026${conn.agent.slice(-4)}` : 'connected');
+
+/**
+ * WHO YOU ARE, as one control.
+ *
+ * This was a name chip beside a bare "disconnect" link — two things of equal weight in the corner, one of
+ * which signs you out of every app on your Home. The name is the control now and the menu is where sign-out
+ * lives, which is the shape every other app in the set uses: you go looking for it, you do not brush past it.
+ * The menu also says the thing the chip could not — WHICH Home this session came from — because on a town
+ * with more than one estate that is the difference between two people with the same name.
+ */
+function Account({ conn }: { conn: Connection }): ReactNode {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    // A menu that outlives a click somewhere else is a menu in the way.
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    window.addEventListener('keydown', key);
+    window.addEventListener('mousedown', away);
+    return () => { window.removeEventListener('keydown', key); window.removeEventListener('mousedown', away); };
+  }, [open]);
+
+  let host = conn.home;
+  try { host = new URL(conn.home).host; } catch { /* show it as given */ }
+
+  return (
+    <span className="account" ref={box}>
+      <button type="button" className="account-name" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <Chip tone="ok">connected</Chip>
+        <span className="who">{label(conn)}</span>
+        <span className="caret" aria-hidden="true">{open ? '\u25b4' : '\u25be'}</span>
+      </button>
+      {open && (
+        <div className="account-menu" role="menu">
+          <p className="account-who">
+            <b>{label(conn)}</b>
+            <small>{conn.agent ?? 'no Smart Agent in the session'}</small>
+            <small>signed in at {host}</small>
+          </p>
+          <div className="account-sep" />
+          <a className="account-item" role="menuitem" href={conn.home} target="_blank" rel="noreferrer">Open my Home</a>
+          <div className="account-sep" />
+          <button type="button" className="account-item" role="menuitem" onClick={() => { setOpen(false); disconnectEverywhere(conn); }}>
+            Disconnect
+          </button>
+          <p className="account-note">Signs you out at {host} too, and at the other apps connected to it.</p>
+        </div>
+      )}
+    </span>
+  );
+}
+
 export function ConnectButton({ estates }: { estates: Array<{ id: string; home: string }> }): ReactNode {
-  const { conn, set } = useConnection();
+  const { conn } = useConnection();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [draft, setDraft] = useState('');
@@ -150,7 +234,7 @@ export function ConnectButton({ estates }: { estates: Array<{ id: string; home: 
 
   /**
    * A NAME SAYS WHICH HOME, and the chain is what says it. Two people named under the same root can belong
-   * to different estates, and signing in at the wrong one does not fail \u2014 it derives a DIFFERENT Smart Agent
+   * to different estates, and signing in at the wrong one does not fail — it derives a DIFFERENT Smart Agent
    * for the same credential. So the name is resolved before anyone is sent anywhere, and an agent that
    * declares no estate is told so rather than sent to the first Home in the list.
    */
@@ -171,24 +255,20 @@ export function ConnectButton({ estates }: { estates: Array<{ id: string; home: 
 
   const leave = (home: string, hint?: string) => { setBusy(true); void goToHome(home, hint); };
 
-  if (conn && !open) {
-    return (
-      <span className="operator">
-        <Chip tone="ok">{conn.name ?? (conn.agent ? `${conn.agent.slice(0, 6)}\u2026${conn.agent.slice(-4)}` : 'connected')}</Chip>{' '}
-        <button type="button" className="linkish" onClick={() => set(null)}>disconnect</button>
-      </span>
-    );
-  }
+  if (conn && !open) return <Account conn={conn} />;
   if (!open) return <button type="button" className="linkish" onClick={() => setOpen(true)}>Connect</button>;
 
   const chosen = home ?? (estates.length === 1 ? { id: estates[0]!.id, home: estates[0]!.home } : null);
   return (
     <div className="panel connect-pop" role="dialog" aria-modal="true" aria-label="Connect with your home">
-      <h2 style={{ marginTop: 0 }}>Connect with your home</h2>
+      <div className="pop-head">
+        <h2 style={{ marginTop: 0 }}>Connect with your home</h2>
+        <button type="button" className="pop-close" onClick={close} aria-label="Close">{'\u00d7'}</button>
+      </div>
       <p className="quiet">
         Sign in at your own Home. Unconnected, a question reaches an agent as a <strong>stranger</strong> and it
         answers from what it has made public. Connected, it arrives as <strong>you</strong>, and the agent decides
-        from your own standing \u2014 this page relays your session and adds nothing to it.
+        from your own standing — this page relays your session and adds nothing to it.
       </p>
       <p className="quiet">
         Connecting grants nothing. The town holds no key and acts for no one: your session stays in this browser
@@ -211,7 +291,7 @@ export function ConnectButton({ estates }: { estates: Array<{ id: string; home: 
             </p>
           ))}
           <p className="quiet">
-            Each estate holds its own people and its own records \u2014 sign in at the one where you have an account.
+            Each estate holds its own people and its own records — sign in at the one where you have an account.
             The town lists them; it holds none of them.
           </p>
         </>
@@ -220,7 +300,6 @@ export function ConnectButton({ estates }: { estates: Array<{ id: string; home: 
       {busy && <p className="quiet">Taking you to {chosen ? new URL(chosen.home).host : 'your Home'}…</p>}
 
       {err && <p className="banner banner-warn" style={{ marginBottom: 0 }}>{err}</p>}
-      <p className="quiet"><button type="button" className="linkish" onClick={close}>\u2190 Back</button></p>
     </div>
   );
 }
