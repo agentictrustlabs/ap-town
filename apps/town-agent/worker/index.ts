@@ -175,9 +175,16 @@ async function api(path: string, url: URL, env: Env, town: TownManifest, selfHos
     const store = env.HEARTBEAT.get(env.HEARTBEAT.idFromName(town.town));
     const all = (await (await store.fetch(`https://pulse/read?from=${Date.parse(day)}`)).json()) as PulseSampleV1[];
     const landed = await recordDay(env as PulseRecordEnv, all, day, fetch, town, (await infraRowsFrom(env, Date.parse(day))).rows);
+    await store.fetch('https://pulse/record-outcome', { method: 'POST', body: JSON.stringify({ at: new Date().toISOString(), day, landed }) }).catch(() => undefined);
     return json({ ok: landed.every((l) => l.ok), day, samples: all.length, landed });
   }
-  if (path === '/health') return json({ ok: true, service: 'town-agent', town: town.town, pulseRecord: pulseRecordReadiness(env as PulseRecordEnv), contextAgents: contextAgents(env as PulseRecordEnv), townMcp: env.INFRA ? 'bound' : 'not bound on this deployment' });
+  if (path === '/health') {
+    // Readiness is whether the WIRES are in place; `lastRecord` is whether the write actually landed. Two
+    // different questions, and only the second one explains an Ask that says it has no record.
+    const store = env.HEARTBEAT?.get(env.HEARTBEAT.idFromName(town.town));
+    const lastRecord = store ? await (await store.fetch('https://pulse/record-outcome')).json().catch(() => null) : null;
+    return json({ ok: true, service: 'town-agent', town: town.town, pulseRecord: pulseRecordReadiness(env as PulseRecordEnv), lastRecord, contextAgents: contextAgents(env as PulseRecordEnv), townMcp: env.INFRA ? 'bound' : 'not bound on this deployment' });
+  }
   if (path === '/estates') return json(townSummary(town).estates);
   // WHAT THIS AGENT IS CONFIGURED WITH (the owner's rule, 2026-10-10): which servers the town — or one estate,
   // service or application — declares, and which read credentials the town MCP holds, BY NAME. Never a value: the
@@ -300,6 +307,9 @@ export async function takeSample(env: Env, town: TownManifest): Promise<number> 
     const all = (await (await store.fetch(`https://pulse/read?from=${Date.parse(day)}`)).json()) as PulseSampleV1[];
     const landed = await recordDay(env as PulseRecordEnv, all, day, fetch, town, (await infraRowsFrom(env, Date.parse(day))).rows);
     for (const l of landed) if (!l.ok) console.warn(`[pulse-record] ${l.agent} ${l.recordType}: ${l.error}`);
+    // KEPT, NOT ONLY LOGGED. A write that the vault refuses is the one thing that makes the Ask answer "I
+    // have no record", and until this was stored the only way to see it was the ops token and a log tail.
+    await store.fetch('https://pulse/record-outcome', { method: 'POST', body: JSON.stringify({ at: new Date().toISOString(), day, landed }) }).catch(() => undefined);
   }
   return samples.length;
 }

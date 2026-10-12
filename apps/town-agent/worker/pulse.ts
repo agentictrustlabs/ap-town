@@ -178,6 +178,14 @@ export class HeartbeatDO {
       if ((await this.state.storage.getAlarm()) === null) await this.state.storage.setAlarm(Date.now() + 60 * 60_000);
       return Response.json({ ok: true, stored: samples.length });
     }
+    // THE LAST RECORD ATTEMPT (spec 436 §5.5). `recordDay` returns what landed and what did not, and the
+    // sampler only ever logged it — so "is the record being written?" was a question nobody could answer
+    // without the ops token and a console. One row, overwritten each pass: the outcome, never the record.
+    if (req.method === 'POST' && url.pathname === '/record-outcome') {
+      await this.state.storage.put('lastRecord', await req.json());
+      return Response.json({ ok: true });
+    }
+    if (url.pathname === '/record-outcome') return Response.json((await this.state.storage.get('lastRecord')) ?? null);
     if (url.pathname === '/read') {
       const from = Number(url.searchParams.get('from') ?? Date.now() - 86_400_000);
       const to = Number(url.searchParams.get('to') ?? Number.MAX_SAFE_INTEGER);
