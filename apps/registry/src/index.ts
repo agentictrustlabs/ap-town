@@ -630,11 +630,18 @@ const NARROW_STOP = new Set([
   'agent', 'agents', 'registry', 'please', 'tell', 'know', 'knows', 'answer', 'answers', 'questions', 'question',
 ]);
 const NARROW_READS = 6;
-export function narrowReadTokens(words: string): string[] {
+export function narrowReadTokens(words: string, ids: string[] = []): string[] {
   const own = words.toLowerCase().split(/[\s,]+/).filter((t) => t.length >= 3 && !NARROW_STOP.has(t));
-  // The phrase leads; its own vocabulary follows. If every word was furniture, the phrase alone is the read —
+  // A CAPABILITY ID LEADS, because it is the most precise thing a question can name and it is EXACT where a
+  // word is a guess. An org-side resolution turns a question into ids and sends those with no `need` at all,
+  // so the words path never fired and the broad page decided alone — and `requireCapabilityId` fail-opens (a
+  // candidate that declared nothing is exempt, never eliminated), so a filter for `gc:CFnPeopleGroupIntelligence`
+  // returned 75 agents declaring no capability and not the one declaring exactly it. The KB finds an id by its
+  // own text: `approf:skills` is the string the ids were parsed FROM.
+  //
+  // The phrase next; its own vocabulary after. If every word was furniture, the phrase alone is the read —
   // widening to the furniture would match on words that are in nothing and say nothing about the question.
-  return [...new Set([words, ...own])].slice(0, NARROW_READS);
+  return [...new Set([...ids, ...(words ? [words, ...own] : [])])].slice(0, NARROW_READS);
 }
 
 /** The discovery pipeline (spec 281): fetch → enrich → HARD mandates → SOFT rank. Shared by `/discover` and the
@@ -661,9 +668,15 @@ async function runDiscovery(env: Env, args: { q: string; intent: Intent; mandate
   // reordered — nothing is taken away, and what the question named can no longer be missing. At most
   // three extra bounded reads, and a failure adds nothing rather than failing the call.
   const words = ((intent.need ?? '').trim() || (intent.skills ?? []).join(' ').trim()).slice(0, 120);
+  // Every id the question resolved to, however it arrived: ranked (`capabilityIds`), expanded
+  // (`specializationIds`) or required (`requireCapabilityId`). All three name the same kind of thing.
+  const ids = [...new Set([
+    ...(intent.capabilityIds ?? []), ...(intent.specializationIds ?? []),
+    ...(mandates?.requireCapabilityId ? [mandates.requireCapabilityId] : []),
+  ].map((x) => String(x ?? '').trim()).filter((x) => x.length >= 3))];
   let named = 0;
-  if (!q && words) {
-    const toks = narrowReadTokens(words);
+  if (!q && (words || ids.length)) {
+    const toks = narrowReadTokens(words, ids);
     const have = new Set(candidates.map((a) => (a.smartAgent ?? '').toLowerCase()));
     const pages = await Promise.all(toks.map((t) => mcpGet(env, `/search?q=${encodeURIComponent(t)}&limit=25`).catch(() => null)));
     for (const page of pages) {

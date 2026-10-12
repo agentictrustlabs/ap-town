@@ -15,7 +15,10 @@ const sa = (n: number) => `0x${n.toString(16).padStart(40, '0')}`;
 const agent = (name: string, n: number) => ({ agent: `urn:${name}`, name, smartAgent: sa(n), facets: ['naming'], shaclConforms: true, agentType: name.split('.')[1], tld: name.split('.')[1] });
 
 /** A base of 103 agents whose 100-row page cannot reach the one the question names. */
-const BASE = [...Array.from({ length: 100 }, (_, i) => agent(`filler-${String(i).padStart(3, '0')}.workspace`, i + 1)), agent('imb-estate.workspace', 901), agent('imbrichgoogle.me', 902), agent('zz-last.org', 903)];
+const BASE = [...Array.from({ length: 100 }, (_, i) => agent(`filler-${String(i).padStart(3, '0')}.workspace`, i + 1)), agent('imb-estate.workspace', 901), agent('imbrichgoogle.me', 902), agent('zz-last.org', 903),
+  // Past the 100-row cut, and the only agent that declares the capability — `skills` is the string the KB
+  // parses capability ids from, so the narrow read finds it by the id's own text.
+  { ...agent('declares-the-cap.svc', 904), skills: 'cap:people-groups', capabilityIds: ['cap:people-groups'] }];
 
 const env = { MCP_URL: 'http://mcp.test', A2A_PUBLIC_ORIGIN: 'https://discovery-a2a.example' } as unknown as Parameters<typeof app.fetch>[1];
 const discover = (body: unknown) => app.fetch(new Request('https://discovery-a2a.example/discover', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), env);
@@ -30,7 +33,7 @@ const stubMcp = () => vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | U
   const url = new URL(u);
   const q = (url.searchParams.get('q') ?? '').toLowerCase();
   const limit = Number(url.searchParams.get('limit') ?? 25);
-  const hits = q ? BASE.filter((a) => a.name.toLowerCase().includes(q)) : BASE;
+  const hits = q ? BASE.filter((a) => `${a.name} ${(a as { skills?: string }).skills ?? ''}`.toLowerCase().includes(q)) : BASE;
   return new Response(JSON.stringify({ ok: true, results: hits.slice(0, limit), truncated: hits.length > limit, limit, returned: Math.min(hits.length, limit) }), { headers: { 'content-type': 'application/json' } });
 }));
 
@@ -85,5 +88,36 @@ describe('discovery retrieval sees what the question named (2026-10-12)', () => 
     expect(j.ok).toBe(true);
     expect(j.results).toHaveLength(100);
     expect(j.page.named).toBe(0);
+  });
+});
+
+describe('a capability id is a thing the question named (2026-10-12)', () => {
+  // An org-side resolution turns a question into capability ids and sends THOSE — often with no `need` at
+  // all. The narrow read only looked at words, so the ids reached nothing: the broad page decided alone, and
+  // `requireCapabilityId` fail-opens (a candidate declaring nothing structured is exempt, never eliminated),
+  // so filtering for `gc:CFnPeopleGroupIntelligence` returned 75 agents that declare no capability and not
+  // the one that declares exactly it.
+  afterEach(() => { vi.unstubAllGlobals(); reads = []; });
+
+  it('fetches the agent that DECLARES the id, though the broad page never reaches it', async () => {
+    stubMcp();
+    const j = await (await discover({ intent: { capabilityIds: ['cap:people-groups'] } })).json() as { results: Array<{ name: string }>; page: { named: number } };
+    expect(j.page.named).toBe(1);
+    expect(j.results[0]!.name).toBe('declares-the-cap.svc');
+  });
+
+  it('a REQUIRED id is read for too — the mandate that fail-opens still finds its one real match', async () => {
+    stubMcp();
+    const j = await (await discover({ mandates: { requireCapabilityId: 'cap:people-groups' } })).json() as { results: Array<{ name: string }>; page: { named: number } };
+    expect(j.page.named).toBe(1);
+    expect(j.results.some((r) => r.name === 'declares-the-cap.svc')).toBe(true);
+  });
+
+  it('ids and words together, ids first, still bounded', async () => {
+    stubMcp();
+    await discover({ intent: { need: 'imb-estate', capabilityIds: ['cap:people-groups'] } });
+    const searches = reads.filter((u) => u.includes('/search'));
+    expect(searches.some((u) => u.includes(encodeURIComponent('cap:people-groups')))).toBe(true);
+    expect(searches.length).toBeLessThanOrEqual(7); // the broad page + at most NARROW_READS
   });
 });
