@@ -2,8 +2,8 @@
 
 **What this does:** gives an estate that is being stood up (or already runs) its place in this chain's shared
 services: a row in the manifest, the lanes the town's Workers reach it on, a token at the chain gateway, a KMS
-tenant, its Home's naming gate on the priced roots, and a heartbeat into the Pulse. Rung 3 of
-[the operator's ladder](https://github.com/agentictrustlabs/agenticprimitives/blob/master/docs/operators/README.md).
+tenant, its Home's naming gate on the priced roots, and a heartbeat into the Pulse. Part of build 4 of
+[the five builds](https://github.com/agentictrustlabs/agentic-primitives/blob/main/docs/builds.md).
 The estate's own half — keys, Workers, Home, demo people — is
 [ap-home's new-estate runbook](https://github.com/agentictrustlabs/ap-home/blob/master/docs/runbooks/new-estate.md);
 the two interleave, and this one says which of its steps come first.

@@ -8,7 +8,7 @@ stays in the estate. See [spec 429](specs/429-ap-town-the-towns-repository.md) a
 
 | Scale | Repository |
 | --- | --- |
-| Substrate | [`agenticprimitives`](https://github.com/agentictrustlabs/agenticprimitives) — packages, contracts, the Developer Kit |
+| Substrate | [`agentic-primitives`](https://github.com/agentictrustlabs/agentic-primitives) — the published packages, contracts and Developer Kit (source monorepo is private) |
 | Estate | [`ap-home`](https://github.com/agentictrustlabs/ap-home) — the Home and Faithnet |
 | **Town** | **`ap-town`** — this repository |
 | Federation | `ap-federation` — towns on different chains (next) |
@@ -27,7 +27,7 @@ Described in one file, [`towns/faithchain/town.yaml`](towns/faithchain/town.yaml
 | Connector for external assistants | `apps/discovery-connector` | `discovery-connector.faithnet.io` |
 | The explorer's old host: the registry's documents, and a redirect to Find | `apps/discovery-web` | `discovery.faithnet.io` |
 | Chain access | `apps/chain-gateway` | `rpc.faithnet.io` |
-| Skills | [`skills`](https://github.com/agentictrustlabs/skills) | `skills.faithnet.io` |
+| Skills | the skills corpus (private repo) | [`skills.faithnet.io`](https://skills.faithnet.io) |
 | Key custody (AKCS) | `faithkms` | `akcs-pilot.faithnet.io` |
 | Game Night | `pokernight` | `gamenight.faithnet.io` |
 
