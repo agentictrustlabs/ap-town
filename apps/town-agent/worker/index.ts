@@ -107,6 +107,12 @@ export function cardFor(town: TownManifest, origin: string): AgentCardV1 {
     skills: [
       { id: 'town.describe', name: 'Describe the town', description: 'The chain, the estates and every listed service, each with its signals: listed · healthy · compatible.', tags: ['town', 'directory', 'health'], examples: ['what is in this town?', 'which services are up?'] },
       { id: 'town.service', name: 'One service', description: 'One listed service by id — what it is, who deploys it, where it lives, and its signals.', tags: ['town', 'service', 'health'], examples: ['registry', 'skills', 'kms'] },
+      // Spec 435 §7. Both read the SAME things the portal's pages read, so an agent and a reader are never told
+      // different things about one estate. `town.standing` is deliberately absent: it would report a
+      // `TownStanding` attestation, and none exists yet (435 W1) — a skill that can only answer "none" is worse
+      // than no skill, because a caller cannot tell it apart from a town where nobody has standing.
+      { id: 'town.estate', name: 'One estate', description: 'One estate of this town by id — where it lives, the name roots it may give and the gate that authorizes them, whose keys hold it, the MCP servers it declares, and which agents answer at its hosts. Membership is INFERRED from each agent\'s own on-chain endpoint and every row says so; no attestation of membership exists yet. Args: a data part { "skill": "town.estate", "id": "<estate id>" }, or name the estate in the text.', tags: ['town', 'estate', 'directory'], examples: ['tell me about the faithnet estate', 'which agents are in imbnet?'] },
+      { id: 'town.mcp', name: 'The MCP servers', description: 'Which MCP servers this town runs, which each estate runs, and which agents serve a door of their own. The first two are DECLARED in the town manifest; the third is read from the chain. What an agent has ATTACHED is absent by construction: those are records in its owner\'s vault under her own grant. No tool lists — those belong to each server\'s own signed manifest. An endpoint says where a server listens, never that you may use it.', tags: ['town', 'mcp', 'directory'], examples: ['which mcp servers are here?', 'what mcp does faithnet run?'] },
     ],
   };
 }
@@ -118,26 +124,186 @@ const fetchProbe: Probe = async (url) => {
   } catch (e) { return { error: (e as Error).name }; }
 };
 
-/** What a message asks for. A data part naming a skill wins; otherwise text is matched against service ids. */
-export function intentOf(message: MessageV1, town: TownManifest): { skill: 'town.describe' } | { skill: 'town.service'; id: string } | { skill: 'unknown-service'; id: string } {
+export type TownIntent =
+  | { skill: 'town.describe' }
+  | { skill: 'town.service'; id: string }
+  | { skill: 'unknown-service'; id: string }
+  | { skill: 'town.estate'; id: string }
+  | { skill: 'unknown-estate'; id: string }
+  | { skill: 'town.mcp'; estate?: string };
+
+/**
+ * WHAT A MESSAGE ASKS FOR. A data part naming a skill wins; otherwise the text is matched, in an order the
+ * collisions decide:
+ *
+ *   1. A SERVICE ID, first and unchanged. Two of this town's services are themselves named `…-mcp`, so
+ *      "is discovery-mcp up" has to reach the service answer rather than the census; matching the specific
+ *      id before the generic word is what keeps that true.
+ *   2. The word MCP, which no estate id contains. An estate named alongside it scopes the census to that
+ *      estate rather than changing the question.
+ *   3. An ESTATE ID on its own.
+ *
+ * It is a MATCHER, not an understanding — the same deliberate ceiling `pulse.public.ask` keeps. A wrong
+ * match answers a question nobody asked and says which one it answered; a model would compose a confident
+ * sentence out of the same uncertainty.
+ */
+export function intentOf(message: MessageV1, town: TownManifest): TownIntent {
   for (const p of message.parts) {
     const d = p.data as { skill?: unknown; id?: unknown } | undefined;
     if (d && d.skill === 'town.service' && typeof d.id === 'string') {
       return town.services.some((s) => s.id === d.id) ? { skill: 'town.service', id: d.id } : { skill: 'unknown-service', id: d.id };
     }
+    if (d && d.skill === 'town.estate' && typeof d.id === 'string') {
+      return town.estates.some((e) => e.id === d.id) ? { skill: 'town.estate', id: d.id } : { skill: 'unknown-estate', id: d.id };
+    }
+    if (d && d.skill === 'town.mcp') return { skill: 'town.mcp', ...(typeof d.id === 'string' && town.estates.some((e) => e.id === d.id) ? { estate: d.id } : {}) };
     if (d && d.skill === 'town.describe') return { skill: 'town.describe' };
   }
   const text = message.parts.map((p) => p.text ?? '').join(' ').toLowerCase();
   const hit = town.services.find((s) => new RegExp(`\\b${s.id.replace(/-/g, '[- ]')}\\b`).test(text));
-  return hit ? { skill: 'town.service', id: hit.id } : { skill: 'town.describe' };
+  if (hit) return { skill: 'town.service', id: hit.id };
+  const estate = town.estates.find((e) => new RegExp(`\\b${e.id.replace(/-/g, '[- ]')}\\b`).test(text));
+  if (/\bmcps?\b|\bmcp servers?\b/.test(text)) return { skill: 'town.mcp', ...(estate ? { estate: estate.id } : {}) };
+  if (estate) return { skill: 'town.estate', id: estate.id };
+  return { skill: 'town.describe' };
 }
 
 function reply(parts: PartV1[]): PartV1[] { return parts; }
 
-export async function answer(town: TownManifest, message: MessageV1, probe: Probe, selfHost: string | null): Promise<PartV1[]> {
+/** The roster, or `null` when the registry could not be asked. A PORT: the A2A answer and the portal's routes
+ *  read the same rows, and neither invents an empty town out of an unreachable registry. */
+export type RosterRead = () => Promise<{ rows: AgentRosterRow[]; truncated: boolean } | null>;
+
+/** ONE ESTATE, BUILT ONCE (spec 435 §4). `/api/estate/:id` and the `town.estate` skill both compose from this,
+ *  so a reader and an agent are never told different things about one estate. */
+export async function estateView(town: TownManifest, estateId: string, probe: Probe, roster: RosterRead | undefined) {
+  const estate = estateOf(town, estateId);
+  if (!estate) return null;
+  const read = roster ? await roster() : null;
+  return {
+    estate,
+    mcpServers: await probeMcp(estateMcpServers(town, estate.id), probe),
+    // UNREACHABLE AND EMPTY ARE DIFFERENT ANSWERS. An estate rendered with no agents because a service
+    // binding was down is the most convincing lie either door could tell. `read` and `truncated` ride along
+    // so "none were placed" is always said with the denominator it was placed out of.
+    agents: read
+      ? { ...estateRoster(read.rows, town, estate.id), read: read.rows.length, truncated: read.truncated }
+      : { unavailable: 'the registry could not be asked just now, so this estate\u2019s agents are unknown rather than none' },
+  };
+}
+
+/** THE MCP CENSUS, BUILT ONCE (spec 435 §5) — shared by `/api/mcp` and the `town.mcp` skill for the same reason. */
+export async function mcpCensusView(town: TownManifest, probe: Probe, roster: RosterRead | undefined, estateId?: string) {
+  const read = roster ? await roster() : null;
+  const declared = estateId ? estateMcpServers(town, estateId) : allMcpServers(town);
+  return {
+    town: town.town,
+    ...(estateId ? { estate: estateId } : {}),
+    servers: await probeMcp(declared, probe),
+    // An agent's own door is on the CHAIN, not in the manifest. Scoped to one estate when one was named,
+    // using the same placement the estate page uses — and an unplaced agent is never silently assigned.
+    agentDoors: read
+      ? {
+          rows: placeAgents(read.rows.filter((r) => !!r.mcpEndpoint), town).filter((a) => !estateId || a.estate === estateId),
+          read: read.rows.length,
+          truncated: read.truncated,
+        }
+      : { unavailable: 'the registry could not be asked just now, so which agents serve a door of their own is unknown rather than none' },
+  };
+}
+
+/** The `town.estate` sentence. Counts and names; nothing from any vault, and the inference said as one. */
+function estateWords(v: NonNullable<Awaited<ReturnType<typeof estateView>>>): string {
+  const e = v.estate;
+  const lines = [
+    `The ${e.id} estate: its Home at ${e.home}, its gate at ${e.edge}, its agents reached at ${e.a2a}${e.agentZone ? ` under the zone ${e.agentZone}` : ' (it serves no agent zone of its own)'}. Deployed from ${e.repo}${e.estateName ? `; its own name on this chain is ${e.estateName}` : ''}.`,
+    `It may name under ${e.nameRoots.map((r) => `.${r}`).join(' ')}${e.namingGate ? `, authorized by the gate ${e.namingGate} — recover the signer from one of its registrations and it is that address` : ', and it has no naming gate of its own'}.`,
+    e.kms?.tenant ? `Its keys live in the ${e.kms.tenant} tenant${e.kms.backend ? ` (${e.kms.backend})` : ''}; a key is a delegate, never an identity.` : 'It declares no key-custody tenant of its own.',
+    v.mcpServers.length
+      ? `It declares ${v.mcpServers.length} MCP server(s): ${v.mcpServers.map((m) => `${m.id} (${m.exposure})`).join(', ')}.`
+      : 'It declares no MCP server.',
+  ];
+  if ('unavailable' in v.agents) lines.push(`Which agents are in it could not be read: ${v.agents.unavailable}`);
+  else if (v.agents.agents.length === 0) lines.push(`No agent was placed in it: none of the ${v.agents.read} row(s) read from the registry carries an endpoint this estate recognises. That is a statement about endpoints, not about the estate.`);
+  else lines.push(
+    `${v.agents.agents.length} agent(s) answer at its hosts: ${v.agents.byKind.person} person, ${v.agents.byKind.org} organization, ${v.agents.byKind.service} service, ${v.agents.byKind.undeclared} with no declared type; ${v.agents.withMcp} serve an MCP door of their own. Every one of those placements is INFERRED from the agent's own on-chain endpoint and carries which rule placed it — no attestation of membership exists yet, and an inference does not become one by being reported.`,
+  );
+  lines.push('None of this says what anybody may do here. That is the estate\u2019s own Home to answer.');
+  return lines.join('\n');
+}
+
+/** The `town.mcp` sentence. What is here, what is deliberately not, and that an endpoint is not an invitation. */
+function mcpWords(v: Awaited<ReturnType<typeof mcpCensusView>>): string {
+  const byScale = (sc: 'town' | 'estate') => v.servers.filter((m) => m.scale === sc);
+  const lines = [
+    v.estate
+      ? `The ${v.estate} estate declares ${v.servers.length} MCP server(s).`
+      : `The ${v.town} town: ${byScale('town').length} MCP server(s) of its own and ${byScale('estate').length} declared by its estates.`,
+    ...v.servers.map((m) => `- ${m.id}${m.estate ? ` (${m.estate})` : ''}: ${m.exposure}${m.url ? ` at ${m.url}` : ', no door — only a Worker bound to it can reach it'}${m.up === null ? '' : m.up ? ' [answers]' : ' [did not answer]'} — ${m.description}`),
+  ];
+  if ('unavailable' in v.agentDoors) lines.push(`Which agents serve a door of their own could not be read: ${v.agentDoors.unavailable}`);
+  else lines.push(
+    v.agentDoors.rows.length
+      ? `${v.agentDoors.rows.length} agent(s) publish an MCP endpoint of their own, read from the chain: ${v.agentDoors.rows.map((a) => `${a.name ?? a.smartAgent} at ${a.mcpEndpoint}`).join('; ')}.`
+      : `No agent here publishes an MCP endpoint of its own (${v.agentDoors.read} read). An agent can serve tools without publishing a door, so this is a count of published doors and not of servers.`,
+  );
+  lines.push(
+    'What an agent has ATTACHED is not here and cannot be: those are records in its owner\u2019s vault under her own grant, which this town cannot read and will not guess.',
+    'No tool lists: what a server offers is its own signed manifest\u2019s answer, read from the registry rather than from a file somebody edited.',
+    'An endpoint is where a server listens. It is never a statement that you may use it — every call is decided inside, against the chain.',
+  );
+  return lines.join('\n');
+}
+
+/**
+ * WHICH OF THE TOWN'S TWO AGENTS ANSWERS A QUESTION TYPED INTO THE PORTAL.
+ *
+ * The portal has one Ask box and two agents behind it, and they know different things:
+ *
+ *   the CONTEXT AGENT knows how things have been GOING — the daily pulse rollups written into its vault.
+ *   the TOWN AGENT    knows the town's SHAPE — what the manifest declares and what the chain shows.
+ *
+ * This decides which, BEFORE either is asked, from the question itself. It is a router and not a fallback
+ * (ADR-0013): nothing here asks one agent, sees an empty answer, and tries the other. The answer names who
+ * answered either way, so a reader is never guessing which of the two they are reading.
+ *
+ * THE CLAIM IS DELIBERATELY NARROW, because the failure mode is stealing a question the context agent would
+ * have answered better. Two rules:
+ *
+ *   · `mcp` claims outright. No pulse record carries a single fact about an MCP server, so a question using
+ *     the word cannot be the context agent's under any reading.
+ *   · An estate NAME alone does not claim. "how is faithnet doing this week" is a pulse question and the
+ *     estate names appear in both agents' worlds; it claims only when the question also asks about the
+ *     estate's shape — who is in it, what it may name, who holds its keys, where it lives.
+ *
+ * Everything else goes to the context agent exactly as before. `null` means "not mine".
+ */
+const ESTATE_SHAPE = /\bagents?\b|\bwho(?:'s| is)? in\b|\bmembers?\b|\bname roots?\b|\bnaming gate\b|\bnames? (?:it|they) (?:may|can)\b|\bcustod(?:y|ian)\b|\bkeys?\b|\bwhere (?:is|does)\b|\bhome\b|\bedge\b|\bendpoints?\b|\brepositor(?:y|ies)\b|\bwhat does it run\b/i;
+
+export function claimedByTown(text: string, town: TownManifest): TownIntent | null {
+  const t = text.toLowerCase();
+  const estate = town.estates.find((e) => new RegExp(`\\b${e.id.replace(/-/g, '[- ]')}\\b`).test(t));
+  if (/\bmcps?\b|\bmcp servers?\b/.test(t)) return { skill: 'town.mcp', ...(estate ? { estate: estate.id } : {}) };
+  if (estate && ESTATE_SHAPE.test(t)) return { skill: 'town.estate', id: estate.id };
+  return null;
+}
+
+export async function answer(town: TownManifest, message: MessageV1, probe: Probe, selfHost: string | null, deps: { roster?: RosterRead } = {}): Promise<PartV1[]> {
   const intent = intentOf(message, town);
   if (intent.skill === 'unknown-service') {
     return reply([{ text: `"${intent.id}" is not a service listed in the ${town.town} town. Listed: ${town.services.map((s) => s.id).join(', ')}.` }]);
+  }
+  if (intent.skill === 'unknown-estate') {
+    return reply([{ text: `"${intent.id}" is not an estate of the ${town.town} town. Its estates: ${town.estates.map((e) => e.id).join(', ')}.` }]);
+  }
+  if (intent.skill === 'town.estate') {
+    const v = await estateView(town, intent.id, probe, deps.roster);
+    if (!v) return reply([{ text: `"${intent.id}" is not an estate of the ${town.town} town.` }]);
+    return reply([{ text: estateWords(v) }, { data: v, mediaType: 'application/json' }]);
+  }
+  if (intent.skill === 'town.mcp') {
+    const v = await mcpCensusView(town, probe, deps.roster, intent.estate);
+    return reply([{ text: mcpWords(v) }, { data: v, mediaType: 'application/json' }]);
   }
   const views = await serviceViews(town, probe, selfHost);
   if (intent.skill === 'town.service') {
@@ -160,6 +326,16 @@ const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =
 async function ask<T>(svc: { fetch(req: Request): Promise<Response> } | undefined, url: string, init?: RequestInit): Promise<T | null> {
   if (!svc) return null;
   try { const r = await svc.fetch(new Request(url, { ...init, headers: { accept: 'application/json', ...(init?.headers ?? {}) } })); return r.ok ? ((await r.json()) as T) : null; } catch { return null; }
+}
+
+/** THE ONE ROSTER READ both doors use. `null` when the registry is unbound or does not answer — which every
+ *  caller turns into "unknown", never into "none" (the registry holding nothing and the registry being
+ *  unreachable are opposite facts that look identical on a page). */
+function rosterOf(env: Env): RosterRead {
+  return async () => {
+    const r = await ask<{ ok?: boolean; rows?: AgentRosterRow[]; truncated?: boolean }>(env.REGISTRY, 'https://registry/roster?limit=500');
+    return r?.ok && Array.isArray(r.rows) ? { rows: r.rows, truncated: !!r.truncated } : null;
+  };
 }
 
 /** The operator's "collect now": forwarded to the town MCP, which does the collecting. This Worker reaches no provider. */
@@ -207,17 +383,13 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
   // reads a vault, and the estate's own Home remains the only thing that knows who may do what there.
   const est = path.match(/^\/estate\/([a-z0-9-]+)$/);
   if (est) {
-    const estate = estateOf(town, est[1]!);
-    if (!estate) return json({ error: `no estate "${est[1]}" in the ${town.town} town` }, 404);
-    const roster = await ask<{ ok?: boolean; rows?: AgentRosterRow[]; truncated?: boolean; returned?: number }>(env.REGISTRY, 'https://registry/roster?limit=500');
-    // THE REGISTRY BEING UNREACHABLE IS SAID, NOT RENDERED AS AN EMPTY ESTATE. "No agents" and "we could not
-    // ask" look identical on a page and mean opposite things.
-    const agents = roster?.ok && Array.isArray(roster.rows)
-      ? { ...estateRoster(roster.rows, town, estate.id), truncated: !!roster.truncated, read: roster.returned ?? roster.rows.length }
-      : { unavailable: 'the registry could not be asked just now, so this estate\u2019s agents are unknown rather than none' };
+    // The SAME builder the `town.estate` A2A skill composes from, so a reader and an agent are never told
+    // different things about one estate. The page adds only what is the portal's: who answers for it, and the chain.
+    const v = await estateView(town, est[1]!, probe, rosterOf(env));
+    if (!v) return json({ error: `no estate "${est[1]}" in the ${town.town} town` }, 404);
     return json({
-      estate, mcpServers: await probeMcp(estateMcpServers(town, estate.id), probe), agents,
-      agent: contextAgentViews(town, contextAgents(env as PulseRecordEnv), env.CONTEXT_AGENT_ZONE).estates[estate.id] ?? null,
+      ...v,
+      agent: contextAgentViews(town, contextAgents(env as PulseRecordEnv), env.CONTEXT_AGENT_ZONE).estates[v.estate.id] ?? null,
       chain: town.chain, town: town.town,
     }, 200, { 'cache-control': 'public, max-age=60' });
   }
@@ -226,13 +398,8 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
   // from the chain (`atl:mcpEndpoint`). What an agent has ATTACHED is absent on purpose: those are spec-404
   // records in its owner's vault under her grant, and the town cannot see them and will not guess.
   if (path === '/mcp') {
-    const roster = await ask<{ ok?: boolean; rows?: AgentRosterRow[]; truncated?: boolean }>(env.REGISTRY, 'https://registry/roster?limit=500');
-    const servers = allMcpServers(town);
-    const probed = await probeMcp(servers, probe);
-    const agentDoors = roster?.ok && Array.isArray(roster.rows)
-      ? { rows: placeAgents(roster.rows.filter((r) => !!r.mcpEndpoint), town), read: roster.rows.length, truncated: !!roster.truncated }
-      : { unavailable: 'the registry could not be asked just now, so which agents serve a door of their own is unknown rather than none' };
-    return json({ town: town.town, servers: probed, agentDoors }, 200, { 'cache-control': 'public, max-age=60' });
+    const estate = url.searchParams.get('estate');
+    return json(await mcpCensusView(town, probe, rosterOf(env), estate && town.estates.some((e) => e.id === estate) ? estate : undefined), 200, { 'cache-control': 'public, max-age=60' });
   }
   // WHAT THIS AGENT IS CONFIGURED WITH (the owner's rule, 2026-10-10): which servers the town — or one estate,
   // service or application — declares, and which read credentials the town MCP holds, BY NAME. Never a value: the
@@ -299,6 +466,18 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     const q = (url.searchParams.get('q') ?? '').trim();
     const scope = url.searchParams.get('scope') === 'estate' ? 'estate' : 'town';
     if (!q) return json({ ok: false, error: 'say what you want to know' }, 400);
+    // THE TOWN AGENT ANSWERS ITS OWN QUESTIONS (spec 435 §7). Decided here, before either agent is asked, and
+    // the reply names who answered — see `claimedByTown` for why the claim is as narrow as it is.
+    const mine = claimedByTown(q, town);
+    if (mine && (mine.skill === 'town.mcp' || mine.skill === 'town.estate')) {
+      const v = mine.skill === 'town.mcp'
+        ? await mcpCensusView(town, fetchProbe, rosterOf(env), mine.estate)
+        : await estateView(town, mine.id, fetchProbe, rosterOf(env));
+      if (v) {
+        const words = mine.skill === 'town.mcp' ? mcpWords(v as Awaited<ReturnType<typeof mcpCensusView>>) : estateWords(v as NonNullable<Awaited<ReturnType<typeof estateView>>>);
+        return json({ ok: true, answer: words, agent: `${town.town} town agent`, skill: mine.skill, read: 'the town manifest and the public registry' }, 200, { 'cache-control': 'public, max-age=30' });
+      }
+    }
     const cfg = contextAgents(env as PulseRecordEnv);
     const estateId = url.searchParams.get('estate') ?? town.estates[0]?.id ?? '';
     const name = scope === 'town' ? cfg.town : cfg.estates[estateId];
@@ -393,7 +572,9 @@ export default {
         card,
         // No task is ever created — every message is answered with a message — so no task is anybody's to see.
         canSeeTask: () => false,
-        executor: { async execute(ctx) { await ctx.reply(await answer(town, ctx.message, fetchProbe, selfHost)); } },
+        // The roster is handed in, so `town.estate` and `town.mcp` read the registry the portal's own pages read.
+        // Still public and still read-only: the roster is the chain's public rows, and nothing here holds a key.
+        executor: { async execute(ctx) { await ctx.reply(await answer(town, ctx.message, fetchProbe, selfHost, { roster: rosterOf(env) })); } },
       });
       return server.handle(req);
     }

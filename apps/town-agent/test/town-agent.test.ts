@@ -1,6 +1,6 @@
 import { describe as d, expect, it } from 'vitest';
 import { TOWNS } from '@ap-town/town-model';
-import { answer, api, cardFor, intentOf } from '../worker/index';
+import { answer, api, cardFor, claimedByTown, intentOf, type RosterRead } from '../worker/index';
 import type { MessageV1 } from '@agenticprimitives/a2a/standard';
 
 const town = TOWNS.faithchain!;
@@ -11,7 +11,7 @@ d('town agent', () => {
   it('the card is A2A 1.0 with a JSONRPC interface and two skills', () => {
     const c = cardFor(town, 'https://town.example');
     expect(c.supportedInterfaces[0]).toEqual({ url: 'https://town.example/a2a', protocolBinding: 'JSONRPC', protocolVersion: '1.0' });
-    expect(c.skills.map((s) => s.id)).toEqual(['town.describe', 'town.service']);
+    expect(c.skills.map((s) => s.id)).toContain('town.describe');
   });
 
   it('reads intent from a data part, then from text, else describes the town', () => {
@@ -132,5 +132,136 @@ d('the MCP census', () => {
     const r = await call('/mcp', refusing);
     expect(r.body.agentDoors).toHaveProperty('unavailable');
     expect((r.body.servers as unknown[]).length).toBeGreaterThan(0);
+  });
+});
+
+// ── THE TOWN AGENT'S OWN SKILLS (spec 435 §7) ─────────────────────────────────────────────────────────────
+const ROWS = [
+  { name: 'alice.me', smartAgent: '0xa1', kind: 'PersonAgent', a2aEndpoint: 'https://alice.faithnet.ai/api/a2a' },
+  { name: 'pg.svc', smartAgent: '0xb2', kind: 'ServiceAgent', a2aEndpoint: 'https://a2a.faithnet.io', mcpEndpoint: 'https://pg.example/mcp' },
+  { name: 'far.me', smartAgent: '0xc3', kind: 'PersonAgent', a2aEndpoint: 'https://imb-runtime.richardpedersen3.workers.dev' },
+];
+const withRoster: { roster: RosterRead } = { roster: async () => ({ rows: ROWS, truncated: false }) };
+const dataMsg = (data: Record<string, unknown>) => msg([{ data }]);
+const partsOf = async (m: Parameters<typeof answer>[1], deps: { roster: RosterRead } = withRoster) => answer(town, m, up, null, deps);
+const textOf = (ps: Awaited<ReturnType<typeof answer>>) => String(ps[0]!.text ?? '');
+const dataOf = (ps: Awaited<ReturnType<typeof answer>>) => ps[1]!.data as Record<string, unknown>;
+
+d('the card advertises the two new skills and not a third it cannot keep', () => {
+  it('lists town.estate and town.mcp, and NOT town.standing', () => {
+    const ids = cardFor(town, 'https://town.example').skills.map((s) => s.id);
+    expect(ids).toEqual(['town.describe', 'town.service', 'town.estate', 'town.mcp']);
+    // `town.standing` would report an attestation that does not exist yet (435 W1). A skill that can only
+    // answer "none" is worse than no skill: a caller cannot tell it from a town where nobody has standing.
+    expect(ids).not.toContain('town.standing');
+  });
+});
+
+d('intentOf — the collisions decide the order', () => {
+  it('a service whose own id ends in -mcp still reaches the service answer', () => {
+    expect(intentOf(msg([{ text: 'is discovery-mcp up?' }]), town)).toEqual({ skill: 'town.service', id: 'discovery-mcp' });
+    expect(intentOf(msg([{ text: 'what about town-mcp' }]), town)).toEqual({ skill: 'town.service', id: 'town-mcp' });
+  });
+  it('the word mcp reaches the census, and an estate beside it scopes rather than changes the question', () => {
+    expect(intentOf(msg([{ text: 'which mcp servers are here?' }]), town)).toEqual({ skill: 'town.mcp' });
+    expect(intentOf(msg([{ text: 'what mcp does faithnet run?' }]), town)).toEqual({ skill: 'town.mcp', estate: 'faithnet' });
+  });
+  it('an estate id on its own reaches the estate answer', () => {
+    expect(intentOf(msg([{ text: 'tell me about imbnet' }]), town)).toEqual({ skill: 'town.estate', id: 'imbnet' });
+  });
+  it('a data part wins, and names an estate this town does not have as unknown rather than guessing', () => {
+    expect(intentOf(dataMsg({ skill: 'town.estate', id: 'imbnet' }), town)).toEqual({ skill: 'town.estate', id: 'imbnet' });
+    expect(intentOf(dataMsg({ skill: 'town.estate', id: 'nowhere' }), town)).toEqual({ skill: 'unknown-estate', id: 'nowhere' });
+    expect(intentOf(dataMsg({ skill: 'town.mcp', id: 'faithnet' }), town)).toEqual({ skill: 'town.mcp', estate: 'faithnet' });
+  });
+});
+
+d('town.estate answers from the manifest and the chain, and never promotes an inference', () => {
+  it('places agents by their endpoints and says the placement is inferred', async () => {
+    const ps = await partsOf(dataMsg({ skill: 'town.estate', id: 'faithnet' }));
+    const v = dataOf(ps) as { agents: { agents: Array<{ name: string; how: string }>; byKind: Record<string, number>; read: number } };
+    expect(v.agents.agents.map((a) => a.name)).toEqual(['alice.me', 'pg.svc']);
+    expect(v.agents.read).toBe(3);
+    expect(textOf(ps)).toMatch(/INFERRED from the agent's own on-chain endpoint/);
+    expect(textOf(ps)).not.toMatch(/attested|verified member/i);
+  });
+
+  it('says what the estate may name and who holds its keys, and that none of it is permission', async () => {
+    const t = textOf(await partsOf(dataMsg({ skill: 'town.estate', id: 'faithnet' })));
+    expect(t).toMatch(/\.me/);
+    expect(t).toMatch(/authorized by the gate 0x/);
+    expect(t).toMatch(/a key is a delegate, never an identity/);
+    expect(t).toMatch(/None of this says what anybody may do here/);
+  });
+
+  it('an estate with no zone of its own says so rather than omitting it', async () => {
+    expect(textOf(await partsOf(dataMsg({ skill: 'town.estate', id: 'imbnet' })))).toMatch(/serves no agent zone of its own/);
+  });
+
+  it('an unreachable registry leaves the agents unknown, never none', async () => {
+    const ps = await partsOf(dataMsg({ skill: 'town.estate', id: 'faithnet' }), { roster: async () => null });
+    expect(textOf(ps)).toMatch(/could not be read/);
+    expect(textOf(ps)).not.toMatch(/No agent was placed/);
+    expect(dataOf(ps).agents).toHaveProperty('unavailable');
+  });
+
+  it('refuses an estate this town does not have, and names the ones it does', async () => {
+    expect(textOf(await partsOf(dataMsg({ skill: 'town.estate', id: 'nowhere' })))).toMatch(/not an estate of the .* town.*faithnet, imbnet/);
+  });
+});
+
+d('town.mcp says what is here, what is deliberately not, and that a door is not an invitation', () => {
+  it('lists the town’s and the estates’ declared servers with their exposure', async () => {
+    const ps = await partsOf(dataMsg({ skill: 'town.mcp' }));
+    const v = dataOf(ps) as { servers: Array<{ id: string; scale: string }> };
+    expect(v.servers.filter((m) => m.scale === 'town').map((m) => m.id).sort()).toEqual(['discovery-connector', 'discovery-mcp', 'skills', 'town-mcp']);
+    expect(v.servers.some((m) => m.scale === 'estate' && m.id === 'vault')).toBe(true);
+    expect(textOf(ps)).toMatch(/no door — only a Worker bound to it can reach it/);
+  });
+
+  it('scopes to one estate when one was named', async () => {
+    const v = dataOf(await partsOf(dataMsg({ skill: 'town.mcp', id: 'imbnet' }))) as { estate: string; servers: Array<{ id: string }>; agentDoors: { rows: unknown[] } };
+    expect(v.estate).toBe('imbnet');
+    expect(v.servers.map((m) => m.id)).toEqual(['vault', 'home']);
+    expect(v.agentDoors.rows).toEqual([]);
+  });
+
+  it('names the agents whose own records carry a door, from the chain', async () => {
+    const t = textOf(await partsOf(dataMsg({ skill: 'town.mcp' })));
+    expect(t).toMatch(/pg\.svc at https:\/\/pg\.example\/mcp/);
+  });
+
+  it('states the two absences rather than leaving them to be read as none', async () => {
+    const t = textOf(await partsOf(dataMsg({ skill: 'town.mcp' })));
+    expect(t).toMatch(/ATTACHED is not here and cannot be/);
+    expect(t).toMatch(/No tool lists/);
+    expect(t).toMatch(/never a statement that you may use it/);
+  });
+});
+
+d('the portal routes a question to whichever agent knows the answer', () => {
+  it('claims every question that says mcp — no pulse record holds one such fact', () => {
+    expect(claimedByTown('which mcp servers are here', town)).toEqual({ skill: 'town.mcp' });
+    expect(claimedByTown('what MCP does faithnet run', town)).toEqual({ skill: 'town.mcp', estate: 'faithnet' });
+  });
+
+  it('DOES NOT claim a pulse question that happens to name an estate', () => {
+    // The twin this router exists to get right: the estate names live in both agents' worlds, and these are
+    // the context agent's questions. Claiming them would answer a shape question nobody asked.
+    for (const q of ['how is faithnet doing this week', 'what did imbnet spend', 'is anything broken in faithnet', 'how many runs failed in faithnet']) {
+      expect(claimedByTown(q, town), q).toBeNull();
+    }
+  });
+
+  it('claims an estate question that asks about its shape', () => {
+    for (const q of ['which agents are in faithnet', 'who is in imbnet', 'what name roots does faithnet have', 'who holds faithnet’s keys', 'where does imbnet live']) {
+      expect(claimedByTown(q, town)?.skill, q).toBe('town.estate');
+    }
+  });
+
+  it('claims nothing it was not asked', () => {
+    for (const q of ['how is the town doing', 'how many people are named here', 'is the registry up']) {
+      expect(claimedByTown(q, town), q).toBeNull();
+    }
   });
 });
