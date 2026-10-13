@@ -132,9 +132,6 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "demo-edge-faithnet",
           "home-mcp-faithnet",
           "harness-approval-faithnet",
-          "demo-a2a",
-          "demo-mcp",
-          "demo-edge",
           "home-mcp"
         ],
         "vercelProjects": [
@@ -162,10 +159,14 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
       {
         "id": "imbnet",
         "repo": "agentictrustlabs/ap-home",
-        "home": "https://imb-home.vercel.app",
-        "edge": "https://imb-edge.richardpedersen3.workers.dev",
-        "a2a": "https://imb-runtime.richardpedersen3.workers.dev",
+        "home": "https://www.impact-agent.me",
+        "edge": "https://edge.impact-agent.io",
+        "a2a": "https://a2a.impact-agent.io",
+        "agentZone": "impact-agent.ai",
         "lanes": {
+          "edge.impact-agent.io": "imb-edge",
+          "*.impact-agent.ai": "imb-runtime",
+          "a2a.impact-agent.io": "imb-runtime",
           "imb-edge.richardpedersen3.workers.dev": "imb-edge",
           "imb-runtime.richardpedersen3.workers.dev": "imb-runtime"
         },

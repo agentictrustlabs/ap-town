@@ -46,8 +46,11 @@ estates:
     # Spec 437 I4 — the estate's own Cloudflare Workers (its A2A runtime, its vault, its edge, its Home MCP, its
     # approval door) and its Vercel project (the Home itself). The unsuffixed twins are the same apps' dev
     # environments on the same account: an estate's staging is still the estate's.
+    # The unsuffixed twins are GONE (2026-10-13): `demo-a2a` was deleted with the Base Sepolia / Impact
+    # estate's decommission, and `demo-mcp` / `demo-edge` never existed on this account (Cloudflare 10007) —
+    # they were aspirational dev environments. `home-mcp` stays: it does exist.
     workers: [demo-a2a-faithnet, demo-mcp-faithnet, demo-edge-faithnet, home-mcp-faithnet, harness-approval-faithnet,
-              demo-a2a, demo-mcp, demo-edge, home-mcp]
+              home-mcp]
     vercelProjects: [faithnet-home]
     # The estate's MCP servers (spec 435 §5). DECLARED, not read off the Worker names: `demo-mcp-faithnet` is
     # the vault and `home-mcp-faithnet` is the Home's entrance, and no spelling rule tells you which is which.
@@ -72,19 +75,27 @@ estates:
           still parks for her signature at her Home.
 
   # THE SECOND ESTATE on this chain, on default platform names by the owner's instruction (2026-10-11): no
-  # faithnet DNS, so its Home is the Vercel project's own host and its Workers are reached on `workers.dev`.
-  # It has no `agentZone`: per-agent card hosts need a wildcard zone, which a `workers.dev` host cannot give —
-  # its agents are reached through its edge by name instead, which is the routing rule anyway (a name resolves
-  # to an endpoint from the chain; a subdomain is never the authority).
+  # faithnet DNS. SUPERSEDED 2026-10-13: it now has its own zones (see the row below). The rule it illustrated
+  # still holds and is the reason the switch is safe — a name resolves to an endpoint FROM THE CHAIN, and a
+  # subdomain is never the authority, so giving an estate real hosts is a routing change and never a trust one.
   - id: imbnet
     repo: agentictrustlabs/ap-home
-    home: https://imb-home.vercel.app
-    edge: https://imb-edge.richardpedersen3.workers.dev
-    a2a: https://imb-runtime.richardpedersen3.workers.dev
-    # A Worker cannot fetch a same-account workers.dev host, and imbnet has no zone — so every host of this
-    # estate that a town Worker must reach is declared here, and `pnpm gen:town` writes the binding. The
-    # runtime is on the list because the town pulls this estate's HEARTBEAT from it.
+    home: https://www.impact-agent.me
+    edge: https://edge.impact-agent.io
+    a2a: https://a2a.impact-agent.io
+    # ITS OWN ZONES SINCE 2026-10-13 — the owner's `impact-agent.io` (service hosts) + `impact-agent.ai`
+    # (per-agent cards) on Cloudflare and `impact-agent.me` on Vercel, in faithnet's shape. The paragraph
+    # above this row described the estate BEFORE that and no longer holds.
+    agentZone: impact-agent.ai
+    # LANES ARE NOT ABOUT workers.dev. A Worker's subrequest to a SAME-ACCOUNT host returns a 404 page
+    # (CF-1042) whether that host is `workers.dev` or a custom domain — which is why faithnet, on a real
+    # zone of its own, still declares `edge.faithnet.io` here. So the new hosts get lanes too; the old ones
+    # stay while they still serve, because a lane for a host nothing asks for costs nothing and removing one
+    # too early is a 404 inside a Worker with no sign of why.
     lanes:
+      edge.impact-agent.io: imb-edge
+      "*.impact-agent.ai": imb-runtime
+      a2a.impact-agent.io: imb-runtime
       imb-edge.richardpedersen3.workers.dev: imb-edge
       imb-runtime.richardpedersen3.workers.dev: imb-runtime
     # The same chain and the same priced roots: an estate is a Home and the people under it, not a namespace.

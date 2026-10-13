@@ -99,7 +99,9 @@ d('the estate page', () => {
     const e = r.body.estate as { id: string; estateName: string; namingGate: string; agentZone?: string };
     expect(e.id).toBe('imbnet');
     expect(e.estateName).toBe('imbnet.estate');
-    expect(e.agentZone).toBeUndefined();
+    // ITS OWN ZONE SINCE 2026-10-13 (`impact-agent.ai`). This asserted `undefined` while imbnet was on
+    // workers.dev; the estate page's job is to say what the manifest says, so it now names the zone.
+    expect(e.agentZone).toBe('impact-agent.ai');
     expect((r.body.mcpServers as Array<{ id: string; estate: string }>).map((m) => m.id)).toEqual(['vault', 'home']);
     // The estate page probes the same doors the census does. Two pages disagreeing about one door — "answers"
     // on /mcp and "not probed" here — is worse than neither saying anything, and that is what shipped first.
@@ -198,7 +200,17 @@ d('town.estate answers from the manifest and the chain, and never promotes an in
   });
 
   it('an estate with no zone of its own says so rather than omitting it', async () => {
-    expect(textOf(await partsOf(dataMsg({ skill: 'town.estate', id: 'imbnet' })))).toMatch(/serves no agent zone of its own/);
+    // imbnet WAS this test's subject until it got `impact-agent.ai` (2026-10-13), and no estate of this town
+    // is zoneless now. The behaviour under test is the WORDING — an absent zone is stated, not omitted — so
+    // the subject is injected rather than the coverage dropped: deleting the case would have retired a
+    // sentence nothing else asserts, on the day the only estate that produced it stopped producing it.
+    const zoneless = { ...town, estates: town.estates.map((e) => (e.id === 'imbnet' ? { ...e, agentZone: undefined } : e)) };
+    const ps = await answer(zoneless, dataMsg({ skill: 'town.estate', id: 'imbnet' }), up, null, withRoster);
+    expect(textOf(ps)).toMatch(/serves no agent zone of its own/);
+  });
+
+  it('an estate WITH a zone of its own names it', async () => {
+    expect(textOf(await partsOf(dataMsg({ skill: 'town.estate', id: 'imbnet' })))).toMatch(/impact-agent\.ai/);
   });
 
   it('an unreachable registry leaves the agents unknown, never none', async () => {

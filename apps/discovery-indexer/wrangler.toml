@@ -79,7 +79,7 @@ WATCH_MAX_BLOCKS = "20000"
 DELEGATION_MANAGER = "0x710cb1bF08C234Df397e0910331e0A29710EF4F7"
 UNIVERSAL_SIGNATURE_VALIDATOR = "0xeDd56f500325D4701B9985A34e5Fa6EED6716137"
 TIMESTAMP_ENFORCER = "0x73A7B878168b7DE48677617179A8bE894f0Dfe96"
-LANE_ROUTES = "edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2,imb-edge.richardpedersen3.workers.dev=LANE_IMBNET_1,imb-runtime.richardpedersen3.workers.dev=LANE_IMBNET_2"  # town:lanes
+LANE_ROUTES = "edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2,edge.impact-agent.io=LANE_IMBNET_1,*.impact-agent.ai=LANE_IMBNET_2,a2a.impact-agent.io=LANE_IMBNET_2,imb-edge.richardpedersen3.workers.dev=LANE_IMBNET_1,imb-runtime.richardpedersen3.workers.dev=LANE_IMBNET_2"  # town:lanes
 
 [env.faithnet.triggers]
 crons = ["* * * * *"]

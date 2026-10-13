@@ -67,12 +67,21 @@ describe('generators', () => {
       { binding: 'LANE_FAITHNET_2', service: 'demo-a2a-faithnet', pattern: '*.faithnet.ai', estate: 'faithnet' },
       // A SECOND ESTATE gets its own binding, numbered within ITS estate: a lane is per estate, so imbnet's
       // first is _1 beside faithnet's _1 and the two never collide.
+      //
+      // imbnet GOT ITS OWN ZONES on 2026-10-13 (`impact-agent.io` + `impact-agent.ai`), so it now carries the
+      // same shape faithnet does — the edge host, the `*.<agentZone>` card wildcard — and the workers.dev
+      // hosts stay beside them while they still serve. Note what this proves: ONE binding per Worker, several
+      // patterns onto it. imbnet's `*.impact-agent.ai` and `a2a.impact-agent.io` both reach `imb-runtime` on
+      // LANE_IMBNET_2, which is the invariant this test is named for.
+      { binding: 'LANE_IMBNET_1', service: 'imb-edge', pattern: 'edge.impact-agent.io', estate: 'imbnet' },
+      { binding: 'LANE_IMBNET_2', service: 'imb-runtime', pattern: '*.impact-agent.ai', estate: 'imbnet' },
+      { binding: 'LANE_IMBNET_2', service: 'imb-runtime', pattern: 'a2a.impact-agent.io', estate: 'imbnet' },
       { binding: 'LANE_IMBNET_1', service: 'imb-edge', pattern: 'imb-edge.richardpedersen3.workers.dev', estate: 'imbnet' },
-      // The RUNTIME is a lane too, because imbnet has no zone: the town pulls its heartbeat from that host,
-      // and a same-account Worker cannot fetch a workers.dev one.
+      // The RUNTIME is a lane on the old host too: the town pulls this estate's heartbeat from it, and a
+      // same-account Worker cannot fetch a workers.dev one.
       { binding: 'LANE_IMBNET_2', service: 'imb-runtime', pattern: 'imb-runtime.richardpedersen3.workers.dev', estate: 'imbnet' },
     ]);
-    expect(laneRoutesVar(town!)).toBe('edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2,imb-edge.richardpedersen3.workers.dev=LANE_IMBNET_1,imb-runtime.richardpedersen3.workers.dev=LANE_IMBNET_2');
+    expect(laneRoutesVar(town!)).toBe('edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2,edge.impact-agent.io=LANE_IMBNET_1,*.impact-agent.ai=LANE_IMBNET_2,a2a.impact-agent.io=LANE_IMBNET_2,imb-edge.richardpedersen3.workers.dev=LANE_IMBNET_1,imb-runtime.richardpedersen3.workers.dev=LANE_IMBNET_2');
   });
 
   it('authorization is never a town signal', () => {
