@@ -10,7 +10,8 @@
 // here is true of the town by its own design, not by today's readings.
 import type { ReactNode } from 'react';
 import { Link, SectionHead } from '@ap-town/town-ui';
-import { ConnectButton } from '../Connect';
+import { ConnectButton, connectAsDemo } from '../Connect';
+import { useState } from 'react';
 import type { TownData } from '../types';
 
 export function Welcome({ t }: { t: TownData }): ReactNode {
@@ -60,6 +61,8 @@ export function Welcome({ t }: { t: TownData }): ReactNode {
         </p>
       </section>
 
+      {t.demoConnect && <DemoDoor t={t} handle={t.demoConnect} />}
+
       <section>
         <SectionHead eyebrow="If you have no Home here" title="Then this is not your town — yet" />
         <p className="quiet">
@@ -71,5 +74,42 @@ export function Welcome({ t }: { t: TownData }): ReactNode {
         </p>
       </section>
     </>
+  );
+}
+
+/**
+ * THE DEMO DOOR, at the bottom and labelled as what it is. A town meant to be shown needs a way in that does
+ * not require an account at one of its estates, so this signs in as a demo persona at the estate's own Home
+ * and holds the token the real walk would have produced — the same issuer, the same verification, a shorter
+ * walk. It is here only because the deployment named a persona.
+ */
+function DemoDoor({ t, handle }: { t: TownData; handle: string }): ReactNode {
+  const home = t.estates[0]?.home ?? '';
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const go = async () => {
+    setBusy(true); setErr(null);
+    const r = await connectAsDemo(home, handle);
+    setBusy(false);
+    if (!r.ok) setErr(r.error);
+  };
+  return (
+    <section>
+      <SectionHead eyebrow="Looking around, with no account here" title="Come in as the demo operator" />
+      <p className="quiet">
+        This deployment is a demonstration, so it offers one: sign in as{' '}
+        <span className="mono">{handle}</span> at <span className="mono">{(() => { try { return new URL(home).host; } catch { return home; } })()}</span>{' '}
+        and the portal opens as that person would see it — the services, the estates, the Pulse, and, because this
+        town lists that persona among its operators, what the infrastructure costs. It is a real sign-in: that
+        Home issues the token and the town verifies it like any other. Anyone opening this page can do it, which
+        is the trade a demonstration makes.
+      </p>
+      <div className="welcome-act">
+        <button type="button" className="button button-quiet" onClick={() => void go()} disabled={busy || !home}>
+          {busy ? 'Signing in\u2026' : `Connect as ${handle}`}
+        </button>
+        {err && <span className="quiet" style={{ color: 'var(--bad)' }}>{err}</span>}
+      </div>
+    </section>
   );
 }

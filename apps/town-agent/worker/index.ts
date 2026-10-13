@@ -30,6 +30,10 @@ interface Env {
   CHAIN?: { fetch(req: Request): Promise<Response> };
   INFERENCE?: { fetch(req: Request): Promise<Response> };
   TOWN_OPS_TOKEN?: string;
+  /** Spec 437 I7 — a DEMO DOOR: the persona handle this deployment offers as a one-click sign-in on the front
+   *  page, issued by the estate's own Home. Absent ⇒ no demo door, which is the default and the right one for a
+   *  deployment with real people on it: whoever opens the page can become that persona. */
+  DEMO_CONNECT?: string;
   ESTATE_HEARTBEAT_TOKENS?: string;
   HEARTBEAT?: DurableObjectNamespace;
   /** Spec 436 §5.5 — the Town Ask: the context agents (by name) whose vaults keep the Pulse's record and whose doors answer. */
@@ -527,7 +531,10 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     // WHO ANSWERS FOR EACH CONTEXT (spec 436 §5.5): the town's agent and each estate's, by name and by card.
     // The portal shows the door it would send a question to, which is the only honest way to show the Ask.
     const agents = contextAgentViews(town, contextAgents(env as PulseRecordEnv), env.CONTEXT_AGENT_ZONE);
-    return json({ ...townSummary(town), services, names, agents, card: `${origin}/.well-known/agent-card.json` }, 200, { 'cache-control': 'public, max-age=30' });
+    // The demo door's PERSONA is public (the front page offers it); nothing secret is involved — the Home
+    // issues the token and the town verifies it like any other.
+    const demo = (env.DEMO_CONNECT ?? '').trim();
+    return json({ ...townSummary(town), services, names, agents, card: `${origin}/.well-known/agent-card.json`, ...(demo ? { demoConnect: demo } : {}) }, 200, { 'cache-control': 'public, max-age=30' });
   }
   if (path === '/services') return json(await serviceViews(town, fetchProbe, selfHost));
   const m = path.match(/^\/services\/([a-z0-9-]+)$/);

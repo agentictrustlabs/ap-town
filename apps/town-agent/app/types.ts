@@ -22,6 +22,8 @@ export interface TownData {
   names: NamesSummary | null;
   /** The context agents the Ask sends questions to: the town's, and one per estate that has one. */
   agents?: { town: ContextAgentView | null; estates: Record<string, ContextAgentView> };
+  /** A demo persona this deployment offers as a one-click sign-in (`DEMO_CONNECT`); absent ⇒ no demo door. */
+  demoConnect?: string;
   card: string;
   /** Spec 437 I4 — the accounts' ids and labels (never a token), for the Infra tab's names. */
   accounts?: { cloudflare?: Array<{ id: string; label: string }>; vercel?: { teamId: string; label?: string }; azure?: { subscriptionId: string; resourceGroups: string[]; label?: string }; graphdb?: { url: string; label?: string } } | null;

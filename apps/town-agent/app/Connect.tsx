@@ -103,6 +103,33 @@ const write = (c: Connection | null): void => {
   window.dispatchEvent(new Event(EVENT));
 };
 
+/**
+ * THE DEMO DOOR — a sign-in without the round trip, for a town that exists to be shown.
+ *
+ * It asks the estate's Home for a demo persona's `id_token` (`/connect/demo-signin`, the same endpoint the
+ * estate's own scripts use) and holds it exactly as the real leg home would. The token is the Home's, signed
+ * by the Home, and the town verifies it like any other — there is no second way in, only a shorter walk to
+ * the same one.
+ *
+ * WHAT IT COSTS, said plainly: on a deployment that turns this on, anybody who opens the page can become that
+ * persona, and if the manifest lists that persona as an operator they can read the town's amounts. That is the
+ * trade a demonstration makes. It is off unless the deployment names a persona (`DEMO_CONNECT`), and turning
+ * it off is deleting that one line.
+ */
+export async function connectAsDemo(home: string, handle: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const r = await fetch(`${home.replace(/\/$/, '')}/connect/demo-signin`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ handle, client_id: 'demo-web' }),
+    });
+    const b = (await r.json().catch(() => ({}))) as { id_token?: string; agent_name?: string; agent?: string; error?: string };
+    if (!r.ok || !b.id_token) return { ok: false, error: b.error ?? `that Home would not issue a demo session (${r.status})` };
+    const c = claimsOf(b.id_token);
+    write({ token: b.id_token, name: c.name ?? b.agent_name ?? handle, agent: c.agent ?? b.agent ?? null, home });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: `that Home could not be reached: ${(e as Error).message}` }; }
+}
+
 /** The connection this tab holds, if any. Every surface READS it from here so there is one answer; the only
  *  two writers are `completeConnection` (the leg home) and `disconnectEverywhere` (the teardown). */
 export function useConnection(): { conn: Connection | null } {
