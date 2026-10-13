@@ -19,7 +19,7 @@ function Page({ t }: { t: TownData }): ReactNode {
   if (path === '/find') return <Find t={t} />;
   if (path === '/connected') return <Connected />;
   if (path === '/operations') return <Operations t={t} />;
-  if ((m = path.match(/^\/operations\/(estates|homes|inference|chain|apps|infra|performance)$/))) return <Operations t={t} tab={m[1] as Tab} />;
+  if ((m = path.match(/^\/operations\/(estates|homes|inference|chain|apps|infra|cost|performance)$/))) return <Operations t={t} tab={m[1] as Tab} />;
   if (path === '/mcp') return <Mcp t={t} />;
   if ((m = path.match(/^\/estate\/([a-z0-9-]+)$/))) return <Estate key={m[1]} t={t} id={m[1]!} />;
   if ((m = path.match(/^\/service\/([a-z0-9-]+)$/))) return <Service t={t} id={m[1]!} />;

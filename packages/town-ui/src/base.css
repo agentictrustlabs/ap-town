@@ -185,6 +185,14 @@ main > section:last-child { margin-bottom: 0; }
 
 /* tables + rows */
 .table { width: 100%; border-collapse: collapse; font-size: .95rem; font-variant-numeric: tabular-nums; }
+/* A SIX-COLUMN TABLE DOES NOT FIT A PHONE, and the one thing it must not do is push the PAGE sideways: the
+   reader then scrolls the whole operations centre to read one cell and loses the column headers doing it.
+   Below the breakpoint the table scrolls inside itself and keeps its columns legible; at desk width it is a
+   table again, unchanged. (Measured 2026-10-13: Infra pushed the page 489 px, Performance 186 px.) */
+@media (max-width: 759px) {
+  .table { display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .table th, .table td { padding: 9px 10px; }
+}
 .table th, .table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .table thead th { color: var(--muted); font-weight: 650; font-size: .76rem; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
 .table tbody tr:last-child th, .table tbody tr:last-child td { border-bottom: 0; }
@@ -343,6 +351,22 @@ a.card:hover, button.card:hover { border-color: var(--accent); box-shadow: var(-
 .tab:hover { color: var(--ink); background: var(--soft); }
 .tab.is-on { color: var(--accent-ink); background: var(--accent); font-weight: 650; }
 .tabs-right { margin-left: auto; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+/* THE SECTION RAIL (the operations centre's tabs are long pages). A map of the page beside it on a wide screen;
+   above it, scrollable, on a narrow one — never hidden, because the tabs it maps are longest on a phone. */
+.withrail { display: block; }
+.srail { margin: 0 0 16px; }
+.srail-head { margin: 0 0 6px; font-size: 0.7rem; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; }
+.srail ul { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; overflow-x: auto; }
+.srail a { display: block; padding: 5px 10px; border-radius: 999px; color: var(--muted); text-decoration: none; font-size: 0.86rem; white-space: nowrap; border: 1px solid var(--line); }
+.srail a:hover { color: var(--ink); background: var(--soft); }
+.srail a.is-on { color: var(--accent-ink); background: var(--accent); border-color: transparent; font-weight: 650; }
+@media (min-width: 1100px) {
+  .withrail { display: grid; grid-template-columns: 196px minmax(0, 1fr); gap: 28px; align-items: start; }
+  .srail { position: sticky; top: 18px; margin: 0; max-height: calc(100vh - 36px); overflow-y: auto; }
+  .srail ul { flex-direction: column; gap: 2px; overflow-x: visible; }
+  .srail a { border: 0; border-left: 2px solid var(--line); border-radius: 0; padding: 6px 10px; white-space: normal; }
+  .srail a.is-on { background: transparent; border-left-color: var(--accent); color: var(--ink); }
+}
 .window-picker { display: inline-flex; gap: 4px; }
 .window-picker .button.is-on { background: var(--ink); color: var(--bg); }
 /* Capped at four across: `auto-fit` alone put five on the first row and stranded two on the second, which reads
@@ -384,7 +408,11 @@ a.card:hover, button.card:hover { border-color: var(--accent); box-shadow: var(-
 .card-wide { grid-column: 1 / -1; }
 .table-tight th, .table-tight td { padding: 6px 8px; font-size: .9rem; }
 .sources { display: flex; flex-wrap: wrap; gap: 10px 18px; }
-.source { display: inline-flex; align-items: center; gap: 6px; font-size: .9rem; }
+/* A source's line carries its REASON when it could not be read, and a reason is a sentence — "Microsoft.ResourceHealth
+   is not registered on this subscription…" is the useful form and it is 300 characters. Wrapping is what lets it be
+   useful: an inline-flex that cannot wrap pushed the page 62 px sideways on a phone (2026-10-13). */
+.source { display: inline-flex; align-items: baseline; gap: 6px; font-size: .9rem; flex-wrap: wrap; max-width: 100%; min-width: 0; }
+.source > .quiet { min-width: 0; overflow-wrap: anywhere; }
 .chip.lag { font-weight: 500; }
 ul.plain { list-style: none; padding: 0; margin: 6px 0; display: grid; gap: 4px; }
 .operator { display: inline-flex; align-items: center; gap: 6px; margin-right: 10px; }

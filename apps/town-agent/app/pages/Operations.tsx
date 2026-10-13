@@ -2,17 +2,19 @@
 // thing an operator comes to know — the Town (services, chain, rules: today's page), the Estates (each estate's heartbeat),
 // the Homes (the estates' run mix), Inference and Chain (the two metered gateways), Applications. Everything here is
 // aggregate and public: probes, rollups, counts. Nothing here is anybody's Home; a person's truth is reached by link.
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Band, Link, Loading, useRoute, Chip, Stat, Sparkline, UpStrip, WindowPicker, Bar, fmtInt, fmtUsd, fmtMs, fmtAgo, type PulseWindow } from '@ap-town/town-ui';
 import { InfraTab, PerformanceTab, type EstatePerf, type PerfView } from '../pulse/InfraTabs';
 import type { ContextAgentView, TownData } from '../types';
 import type { PulseReadV1 } from '../../worker/pulse';
 import { Health } from '../ui';
 import { Ask } from '../pulse/Ask';
+import { CostTab } from '../pulse/CostTab';
+import { SectionRail, useSections } from '../pulse/SectionRail';
 import { TOKEN_KEY, readToken, usePulse, type PulseView } from '../pulse/use-pulse';
 
-export type Tab = 'town' | 'estates' | 'homes' | 'inference' | 'chain' | 'apps' | 'infra' | 'performance';
-const TABS: Array<[Tab, string]> = [['town', 'Town'], ['estates', 'Estates'], ['homes', 'Homes'], ['inference', 'Inference'], ['chain', 'Chain'], ['apps', 'Applications'], ['infra', 'Infra'], ['performance', 'Performance']];
+export type Tab = 'town' | 'estates' | 'homes' | 'inference' | 'chain' | 'apps' | 'infra' | 'cost' | 'performance';
+const TABS: Array<[Tab, string]> = [['town', 'Town'], ['estates', 'Estates'], ['homes', 'Homes'], ['inference', 'Inference'], ['chain', 'Chain'], ['apps', 'Applications'], ['infra', 'Infra'], ['cost', 'Cost'], ['performance', 'Performance']];
 type Window = PulseWindow;
 // The read, the token and its storage key live in `../pulse/use-pulse` — a service's own page asks for the same
 // thing, and one number must not be read two ways.
@@ -36,11 +38,18 @@ interface InfSummary { totals: InfSlice; byClient: InfSlice[]; byProfile: InfSli
 interface Heartbeat { estate: string; at: string; generation: string; versions: Record<string, string>; agents: { person: number; org: number; service: number }; homesActive24h: number; runs: { started: number; completed: number; parked: number; failed: number; canceled: number }; parkedForSignature: number; modelCalls: number; tokensIn: number; tokensOut: number; inferenceMicroUsd: number | null; vaultCalls: number; doRequests: number; askLatencyP95Ms: number | null; evidenceCoverage?: { runs: number; complete: number; incomplete: number; unknown: number } }
 
 export function Operations({ t, tab = 'town' }: { t: TownData; tab?: Tab }): ReactNode {
-  const [window, setWindow] = useState<Window>('24h');
+  // Cost is measured by the DAY (one pass a day, over whole days), so its tab opens on a week; every other tab
+  // opens on the day, which is what an operator looking at health wants.
+  const [window, setWindow] = useState<Window>(tab === 'cost' ? '7d' : '24h');
   const [token, setToken] = useState<string | null>(readToken);
   const pulse = usePulse(window, token);
   const { go } = useRoute();
-  const wide = tab === 'infra' || tab === 'performance';
+  const wide = tab === 'infra' || tab === 'performance' || tab === 'cost';
+  // The rail reads the tab's OWN headings once they are on the page. Re-read when the tab, the window or the
+  // reader's standing changes: each of those changes which sections exist (an operator sees cost sections a
+  // public reader does not).
+  const body = useRef<HTMLDivElement | null>(null);
+  const sections = useSections(body, `${tab}|${window}|${pulse.state}|${pulse.state === 'ready' && pulse.data.performance.detail ? 'op' : 'pub'}`);
   return (
     <>
       <section className="hero">
@@ -76,14 +85,21 @@ export function Operations({ t, tab = 'town' }: { t: TownData; tab?: Tab }): Rea
       <Loading v={pulse} what="Reading the pulse">{(p) => (
         <>
           {p.sampledAt === null && <div className="banner banner-warn"><strong>No samples yet.</strong> The sampler runs every five minutes; until the first pass, this page shows the live probes only.</div>}
-          {tab === 'town' && <TownTab t={t} p={p} />}
-          {tab === 'estates' && <EstatesTab t={t} p={p} />}
-          {tab === 'homes' && <HomesTab t={t} p={p} />}
-          {tab === 'inference' && <InferenceTab p={p} />}
-          {tab === 'chain' && <ChainTab t={t} p={p} />}
-          {tab === 'apps' && <AppsTab t={t} p={p} />}
-          {tab === 'infra' && <InfraTab t={t} perf={p.performance} />}
-          {tab === 'performance' && <PerformanceTab t={t} perf={p.performance} chain={p.chain.latest?.ok ? (p.chain.latest.payload as ChainSummary) : null} />}
+          {/* A tab is a long page, so it gets a map of itself — derived from the headings it already renders. */}
+          <div className="withrail">
+            <SectionRail items={sections} label={TABS.find(([id]) => id === tab)?.[1] ?? 'this tab'} />
+            <div ref={body}>
+              {tab === 'town' && <TownTab t={t} p={p} />}
+              {tab === 'estates' && <EstatesTab t={t} p={p} />}
+              {tab === 'homes' && <HomesTab t={t} p={p} />}
+              {tab === 'inference' && <InferenceTab p={p} />}
+              {tab === 'chain' && <ChainTab t={t} p={p} />}
+              {tab === 'apps' && <AppsTab t={t} p={p} />}
+              {tab === 'infra' && <InfraTab t={t} perf={p.performance} />}
+              {tab === 'cost' && <CostTab t={t} perf={p.performance} window={window} onWindow={setWindow} />}
+              {tab === 'performance' && <PerformanceTab t={t} perf={p.performance} chain={p.chain.latest?.ok ? (p.chain.latest.payload as ChainSummary) : null} />}
+            </div>
+          </div>
         </>
       )}</Loading>
     </>
