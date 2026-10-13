@@ -3,7 +3,7 @@
 // bucket is a list, never hidden (I4); the two halves of performance sit side by side (I5); cost per completed run shows
 // both components (I6). Status is public; amounts and metrics are the operator's (`detail`) — withheld, said so.
 import { useState, type ReactNode } from 'react';
-import { Chip, Empty, SectionHead, Stat, Sparkline, LagBadge, BasisBadge, fmtInt, fmtUsd, fmtMs, fmtAgo, fmtBytes, fmtPct } from '@ap-town/town-ui';
+import { Chip, Empty, Link, SectionHead, Stat, Sparkline, LagBadge, BasisBadge, fmtInt, fmtUsd, fmtMs, fmtAgo, fmtBytes, fmtPct } from '@ap-town/town-ui';
 import type { TownData } from '../types';
 import type { PerfViewV1 } from '../../worker/pulse-perf';
 
@@ -29,7 +29,13 @@ const accountLabel = (t: TownData, platform: string, account: string): string =>
   if (platform === 'graphdb') return a?.graphdb?.label ?? account.replace(/^https?:\/\//, '');
   return account;
 };
-const ownerChip = (o: InfraRow['owner']): ReactNode => (o ? <Chip tone={o.kind === 'estate' ? 'ok' : o.kind === 'service' ? 'free' : 'muted'}>{o.kind} · {o.id}</Chip> : <Chip tone="warn">unattributed</Chip>);
+// An owner is a LINK to the thing that owns it: a cost row of $143 means nothing until you can go and see what
+// bastion, database and registry it pays for. Only an estate and a service have a page; the town itself does not.
+const ownerChip = (o: InfraRow['owner']): ReactNode => {
+  if (!o) return <Chip tone="warn">unattributed</Chip>;
+  const chip = <Chip tone={o.kind === 'estate' ? 'ok' : o.kind === 'service' ? 'free' : 'muted'}>{o.kind} · {o.id}</Chip>;
+  return o.kind === 'service' || o.kind === 'estate' ? <Link href={`/${o.kind}/${o.id}`}>{chip}</Link> : chip;
+};
 const statusChip = (r: InfraRow): ReactNode => { const s = r.latest; if (!s || !s.ok) return <Chip tone="bad">unreadable</Chip>; return <Chip tone={s.status === 'up' ? 'ok' : s.status === 'degraded' ? 'warn' : s.status === 'down' ? 'bad' : 'muted'}>{s.status}</Chip>; };
 const q = (x: Q | null | undefined): string => (!x || !x.count ? '—' : `${fmtMs(x.p50)} · p95 ${fmtMs(x.p95)}`);
 const sumQ = (xs: Q[]): number => xs.reduce((n, x) => n + x.count, 0);

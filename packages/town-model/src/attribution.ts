@@ -18,8 +18,16 @@ export function attributeResource(town: TownManifest, platform: InfraPlatform, r
   if (platform === 'graphdb' || platform === 'chain-node') { const svc = town.services.find((s: TownService) => (platform === 'graphdb' ? s.id === 'graphdb' || s.id === 'discovery-mcp' : s.id === 'rpc')); return svc ? { kind: 'service', id: svc.id } : { kind: 'town', id: town.town }; }
   if (!field) return null;
   const matches = (xs: string[] | undefined): boolean => !!xs?.some((x) => x === resource || (platform === 'azure' && resource === x.split('/').pop()));
-  for (const e of town.estates) if (matches((e as TownEstate)[field])) return { kind: 'estate', id: e.id };
-  for (const s of town.services) if (matches((s as TownService)[field]) || (field === 'workers' && s.worker === resource)) return { kind: 'service', id: s.id };
+  // AZURE COST NAMES A RESOURCE GROUP, NOT A RESOURCE. Cost Management groups by `ResourceGroupName`, so a cost
+  // row's `resource` is `rg-faithnet` while `azureResources` lists `/subscriptions/…/virtualMachines/faithnet-vm`
+  // — nothing matched, and every Azure dollar read as unattributed while the VMs above it read as owned
+  // (2026-10-13). A group is claimed by its own declaration, never inferred from a resource inside it: of the 21
+  // resources billed in these two groups only 3 are VMs, and the rest — a bastion, a Postgres server, a registry,
+  // a key vault, the disks — are most of the money. Case-insensitive: the id says `RG-FAITHNET`, the bill says
+  // `rg-faithnet`, and they are one group.
+  const claimsGroup = (xs: string[] | undefined): boolean => !!xs?.some((x) => x.toLowerCase() === resource.toLowerCase());
+  for (const e of town.estates) if (matches((e as TownEstate)[field]) || (platform === 'azure' && claimsGroup(e.azureResourceGroups))) return { kind: 'estate', id: e.id };
+  for (const s of town.services) if (matches((s as TownService)[field]) || (field === 'workers' && s.worker === resource) || (platform === 'azure' && claimsGroup(s.azureResourceGroups))) return { kind: 'service', id: s.id };
   return null;
 }
 

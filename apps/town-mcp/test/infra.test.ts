@@ -190,6 +190,20 @@ describe('the passes and the attribution (I4, I7)', () => {
     expect(attributeResource(town, 'azure', 'besu-1')).toEqual({ kind: 'service', id: 'rpc' });
     expect(attributeResource(town, 'graphdb', 'graphdb')).toEqual({ kind: 'town', id: 'faithchain' });
   });
+
+  // Azure's COST rows name a resource GROUP, which no `azureResources` id equals — so every Azure dollar read
+  // as unattributed while the VMs above them read as owned (2026-10-13). A group is claimed by its own
+  // declaration and never inferred from a resource inside it: in the live groups only 3 of 21 billed resources
+  // are the declared VMs, and the bastion, database, registry and disks are most of the money.
+  it('an azure cost row names a resource GROUP, and a group is owned only where one is declared', () => {
+    const withGroup = { ...town, services: [...town.services, { id: 'kms', kind: 'commons', repo: 'r', hosts: [], description: 'd', azureResourceGroups: ['rg-akcs-pilot-westus'] }] } as unknown as TownManifest;
+    expect(attributeResource(withGroup, 'azure', 'rg-akcs-pilot-westus')).toEqual({ kind: 'service', id: 'kms' });
+    // The bill lowercases the group the resource id spells in caps; they are one group.
+    expect(attributeResource(withGroup, 'azure', 'RG-AKCS-PILOT-WESTUS')).toEqual({ kind: 'service', id: 'kms' });
+    // `rg-faithnet` holds the declared besu-1, and that does NOT make the group the service's — the money in it
+    // may be anybody's until somebody says otherwise.
+    expect(attributeResource(withGroup, 'azure', 'rg-faithnet')).toBeNull();
+  });
   it('an unconfigured source is NOT CONFIGURED — a failed sample per declared account, named in unreadable — never a zero', async () => {
     const status = await collectStatusPass(town, {}, fetchOf(() => json({}, 500)), Date.parse(AT));
     expect(status.unreadable).toEqual(['vercel: VERCEL_TOKEN unset', 'azure: AZURE_* unset']);

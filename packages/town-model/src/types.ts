@@ -140,6 +140,10 @@ export interface TownEstate {
   pagesProjects?: string[];
   vercelProjects?: string[];
   azureResources?: string[];
+  /** Azure RESOURCE GROUPS this owner claims, for the cost rows — which name a group, not a resource.
+   *  Declaring a group claims EVERY resource billed inside it, including ones listed nowhere else
+   *  (a bastion, a database, a registry, the disks). Declare one only where that is true. */
+  azureResourceGroups?: string[];
   /** The MCP servers this estate runs (spec 435 §5). Absent = it declares none, which is a fact about this
    *  file: an estate's agents may still each serve their own, and those live on the chain, not here. */
   mcpServers?: TownMcpServer[];
@@ -169,6 +173,8 @@ export interface TownService {
   pagesProjects?: string[];
   vercelProjects?: string[];
   azureResources?: string[];
+  /** Azure resource groups this service claims — see `TownEstate.azureResourceGroups`. */
+  azureResourceGroups?: string[];
   /** Set when this service's OWN interface is MCP — the town-shared half of the §5 catalog. Its id,
    *  description, worker and probe are the service row's already; this adds only what is MCP-specific. A
    *  service that merely talks to an MCP server does not carry this. */

@@ -249,6 +249,10 @@ services:
     hosts: [rpc.faithnet.io]
     probe: https://rpc.faithnet.io/healthz
     azureResources: [/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-FAITHNET/providers/Microsoft.Compute/virtualMachines/faithnet-vm]
+    # The whole group is this service's: the node VM, its data and OS disks, its public IP — nothing else is
+    # billed in it. Azure's cost rows name a GROUP, so without this line every faithchain-node dollar reads as
+    # unattributed (checked 2026-10-13: 3 resources, ~$5.6/day).
+    azureResourceGroups: [rg-faithnet]
     description: Chain access — per-app tokens, method allow-list, rate limits — in front of the faithchain node.
 
   # ── Commons deployed from their own repositories ──────────────────────────────────────────────────────────
@@ -275,10 +279,15 @@ services:
     probe: https://akcs-pilot.faithnet.io/healthz
     azureResources: [/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-AKCS-PILOT-WESTUS/providers/Microsoft.Compute/virtualMachines/vm-akcs-pilot-0,
                      /subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-AKCS-PILOT-WESTUS/providers/Microsoft.Compute/virtualMachines/vm-akcs-tunnel-pilot]
+    # The AKCS pilot's whole group. The two VMs are the small half: the bastion, the Postgres flexible server,
+    # the container registry, the key vault, the load balancer, the private endpoints and the disks are billed
+    # here too and are most of it (18 resources, ~$20/day on 2026-10-13). Declaring the group claims them all,
+    # which is true of this group and must be re-checked before anything unrelated is deployed into it.
     # THE FEDERATION'S SHARED OPERATOR (ap-federation spec 440 §A, 2026-10-14): one AKCS operator serves every town;
     # the operator record — host, tenants, callers, the four conditions — is `federation.yaml#kms` in ap-federation
     # and this row declares it BY REFERENCE. One tenant per estate, always (a tenant is a derivation root). Not
     # neutral ground, not a root, not required: `key-custody` is a port.
+    azureResourceGroups: [rg-akcs-pilot-westus]
     description: Key custody (AKCS) — the federation's shared operator (ap-federation federation.yaml#kms); a tenant per estate, never shared; keys are delegates, never identities.
 
   # ── Applications ──────────────────────────────────────────────────────────────────────────────────────────

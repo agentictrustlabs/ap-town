@@ -2,34 +2,20 @@
 // thing an operator comes to know — the Town (services, chain, rules: today's page), the Estates (each estate's heartbeat),
 // the Homes (the estates' run mix), Inference and Chain (the two metered gateways), Applications. Everything here is
 // aggregate and public: probes, rollups, counts. Nothing here is anybody's Home; a person's truth is reached by link.
-import { useEffect, useState, type ReactNode } from 'react';
-import { Band, Link, Loading, useRoute, Chip, Stat, Sparkline, UpStrip, WindowPicker, Bar, fmtInt, fmtUsd, fmtMs, fmtAgo, type Loaded, type PulseWindow } from '@ap-town/town-ui';
+import { useState, type ReactNode } from 'react';
+import { Band, Link, Loading, useRoute, Chip, Stat, Sparkline, UpStrip, WindowPicker, Bar, fmtInt, fmtUsd, fmtMs, fmtAgo, type PulseWindow } from '@ap-town/town-ui';
 import { InfraTab, PerformanceTab, type EstatePerf, type PerfView } from '../pulse/InfraTabs';
 import type { ContextAgentView, TownData } from '../types';
 import type { PulseReadV1 } from '../../worker/pulse';
 import { Health } from '../ui';
 import { Ask } from '../pulse/Ask';
+import { TOKEN_KEY, readToken, usePulse, type PulseView } from '../pulse/use-pulse';
 
 export type Tab = 'town' | 'estates' | 'homes' | 'inference' | 'chain' | 'apps' | 'infra' | 'performance';
 const TABS: Array<[Tab, string]> = [['town', 'Town'], ['estates', 'Estates'], ['homes', 'Homes'], ['inference', 'Inference'], ['chain', 'Chain'], ['apps', 'Applications'], ['infra', 'Infra'], ['performance', 'Performance']];
 type Window = PulseWindow;
-/** The Pulse read plus spec 437's performance view (`/api/pulse` returns both). */
-type PulseView = PulseReadV1 & { performance: PerfView };
-const TOKEN_KEY = 'ap-town.ops-token';
-const readToken = (): string | null => { try { return sessionStorage.getItem(TOKEN_KEY); } catch { return null; } };
-
-/** `/api/pulse` for a window; with the operator's token the read carries cost and metrics (spec 437 / 434 §10). */
-function usePulse(window: Window, token: string | null): Loaded<PulseView> {
-  const [v, setV] = useState<Loaded<PulseView>>({ state: 'loading' });
-  useEffect(() => {
-    let live = true; setV({ state: 'loading' });
-    fetch(`/api/pulse?window=${window}`, { headers: { accept: 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })
-      .then(async (r) => { const body = (await r.json().catch(() => null)) as PulseView | null; if (!live) return; setV(r.ok && body ? { state: 'ready', data: body } : { state: 'error', status: r.status, error: { error: `http_${r.status}` } }); })
-      .catch((e) => { if (live) setV({ state: 'error', status: 0, error: { error: 'unreachable', detail: String((e as Error).message) } }); });
-    return () => { live = false; };
-  }, [window, token]);
-  return v;
-}
+// The read, the token and its storage key live in `../pulse/use-pulse` — a service's own page asks for the same
+// thing, and one number must not be read two ways.
 
 /** The operator's token, kept in this tab's session only — it unlocks a READ; it grants nothing. */
 function OperatorToken({ token, onChange, detail }: { token: string | null; onChange: (t: string | null) => void; detail: boolean }): ReactNode {
@@ -313,6 +299,21 @@ function InferenceTab({ p }: { p: PulseReadV1 }): ReactNode {
     <section>
       <h2>Inference</h2>
       <p className="lede">The town's model gateway (inference.svc): spend and tokens by client, profile, provider and model; fallbacks; budget utilisation. Every number is a receipt the gateway wrote; a profile is the policy unit, a model is a switch.</p>
+      {/* ZERO REQUESTS IS NOT NO DATA. The gateway answers and has nothing to report because no estate calls
+          through it yet (spec 434 W3: the harness still reaches providers directly). The model calls ARE
+          happening — the estates' own heartbeats count them, and the Performance tab breaks them down by
+          provider — so a bare row of zeros here reads as a broken page instead of an unfinished wave. The
+          count below is the estates' own, not this gateway's. */}
+      {s && s.totals.requests === 0 && (() => {
+        const calls = Object.values(p.estates).reduce((n, e) => n + ((e.latest?.payload as Heartbeat | undefined)?.modelCalls ?? 0), 0);
+        return (
+          <div className="banner">
+            <strong>No client called the gateway in this window.</strong> That is the honest zero: the estates still
+            call providers directly, and routing the harness through this gateway is spec 434 W3, not yet done.
+            {calls > 0 && <> Their own heartbeats counted <strong>{fmtInt(calls)}</strong> model call{calls === 1 ? '' : 's'} in the same window — see <Link href="/operations/performance">Performance</Link> for provider and latency.</>}
+          </div>
+        );
+      })()}
       {!s ? <p className="quiet">{p.inference.latest?.error ? `The gateway's summary could not be read: ${p.inference.latest.error}.` : 'No gateway sample yet.'}</p> : (
         <>
           <div className="stats">
