@@ -18,11 +18,23 @@ function RunsOn({ id }: { id: string }): ReactNode {
   const pulse = usePulse('7d', token);
   if (pulse.state !== 'ready') return null;
   const perf = pulse.data.performance;
-  const mine = perf.infrastructure.filter((r) => r.owner?.kind === 'service' && r.owner.id === id);
+  // ONE ROW PER RESOURCE. The Pulse keeps a tile per cadence (a VM is read for status every five minutes and
+  // for metrics hourly), which is right on a page about sources and lag — but here the question is "what does
+  // this service run on", and two rows per VM, one of them red because Resource Health is unregistered, reads
+  // as four resources with half of them broken. Status comes from the best reading there is, labelled with the
+  // age of THAT reading, and a cadence that could not be read is named rather than dropped.
+  const tiles = perf.infrastructure.filter((r) => r.owner?.kind === 'service' && r.owner.id === id);
+  const byResource = new Map<string, typeof tiles>();
+  for (const r of tiles) byResource.set(`${r.platform}|${r.kind}|${r.resource}`, [...(byResource.get(`${r.platform}|${r.kind}|${r.resource}`) ?? []), r]);
+  const mine = [...byResource.values()].map((rs) => {
+    const best = rs.find((r) => r.latest?.ok) ?? rs[0]!;
+    const failed = rs.filter((r) => r.latest && !r.latest.ok);
+    return { row: best, failed: failed.filter((f) => f !== best) };
+  });
   const cost = perf.cost.filter((c) => c.owner?.kind === 'service' && c.owner.id === id);
-  if (!mine.length && !cost.length) return null;
+  if (!tiles.length && !cost.length) return null;
   const total = cost.reduce((n, c) => n + c.days.reduce((m, d) => m + d.amountMicroUsd, 0), 0);
-  const partial = cost.some((c) => c.days.some((d) => !d.complete)) || mine.some((r) => !r.latest?.ok);
+  const partial = cost.some((c) => c.days.some((d) => !d.complete)) || mine.some((m) => !m.row.latest?.ok || m.failed.length > 0);
   return (
     <section>
       <SectionHead eyebrow="What it runs on" title="Infrastructure and cost">
@@ -39,11 +51,14 @@ function RunsOn({ id }: { id: string }): ReactNode {
       {mine.length > 0 && (
         <table className="table table-tight">
           <thead><tr><th scope="col">Resource</th><th scope="col">Kind</th><th scope="col">Status</th><th scope="col">As of</th></tr></thead>
-          <tbody>{mine.map((r) => (
-            <tr key={`${r.platform}|${r.resource}|${r.latest?.lagClass ?? ''}`}>
+          <tbody>{mine.map(({ row: r, failed }) => (
+            <tr key={`${r.platform}|${r.kind}|${r.resource}`}>
               <th scope="row" className="mono">{r.resource}</th>
               <td>{r.kind}</td>
-              <td>{r.latest?.ok ? <Chip tone={r.latest.status === 'up' ? 'ok' : r.latest.status === 'degraded' ? 'warn' : 'muted'}>{r.latest.status}</Chip> : <Chip tone="bad">unreadable</Chip>}</td>
+              <td>
+                {r.latest?.ok ? <Chip tone={r.latest.status === 'up' ? 'ok' : r.latest.status === 'degraded' ? 'warn' : 'muted'}>{r.latest.status}</Chip> : <Chip tone="bad">unreadable</Chip>}
+                {failed.length > 0 && <span className="quiet"> · its {failed.map((f) => f.latest?.lagClass).join(' and ')} reading could not be taken</span>}
+              </td>
               <td className="quiet">{fmtAgo(r.latest?.asOf)} <LagBadge lag={r.latest?.lagClass} /></td>
             </tr>
           ))}</tbody>

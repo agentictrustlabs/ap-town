@@ -189,8 +189,13 @@ main > section:last-child { margin-bottom: 0; }
    reader then scrolls the whole operations centre to read one cell and loses the column headers doing it.
    Below the breakpoint the table scrolls inside itself and keeps its columns legible; at desk width it is a
    table again, unchanged. (Measured 2026-10-13: Infra pushed the page 489 px, Performance 186 px.) */
+/* AT EVERY WIDTH, not only on a phone: a table wide enough to push the page does it on a desk too — the Town
+   tab's service table ran 347 px past a 1360 px window (2026-10-13), which scrolls the whole operations centre
+   sideways and takes the column headers off screen. Containing it costs a scrollbar on the table and nothing
+   else; the columns stay as wide as they need to be. */
+.table { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 @media (max-width: 759px) {
-  .table { display: block; overflow-x: auto; white-space: nowrap; -webkit-overflow-scrolling: touch; }
+  .table { white-space: nowrap; }
   .table th, .table td { padding: 9px 10px; }
 }
 .table th, .table td { text-align: left; padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
@@ -236,7 +241,12 @@ main > section:last-child { margin-bottom: 0; }
 /* THREE CARD DENSITIES, because one does not fit three jobs. The default is a service card with a sentence in
    it; `-tight` is a label and a count; `-roomy` is a card with a list of facts, which looks abandoned at the
    default width when there is only one of them. */
-.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(268px, 1fr)); gap: 14px; align-items: stretch; }
+/* `auto-fit`, not `auto-fill`: with auto-fill the grid keeps the empty tracks, so a section holding ONE card
+   left it in a 268 px column with three quarters of a 1360 px row beside it — the town card wrapped
+   "faith-town.workspa / ce" mid-word and put an agent-card URL on seven lines (2026-10-13). A lone card now
+   stretches, and is capped so it does not become a 1300 px line of text. */
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 14px; align-items: stretch; }
+.cards > :only-child { max-width: 620px; }
 .cards-tight { grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 12px; }
 .cards-roomy { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
 @media (min-width: 900px) { .cards-roomy { grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr)); } }
@@ -386,7 +396,11 @@ a.card:hover, button.card:hover { border-color: var(--accent); box-shadow: var(-
 .stat-sub { font-size: 0.82rem; color: var(--muted); line-height: 1.4; }
 .stat-ok .stat-value { color: var(--ok); } .stat-warn .stat-value { color: var(--warn); } .stat-bad .stat-value { color: var(--bad); } .stat-muted .stat-value { color: var(--muted); }
 .spark { color: var(--accent); vertical-align: middle; } .spark-empty { color: var(--muted); }
-.upstrip { display: inline-flex; gap: 1px; align-items: center; height: 14px; }
+/* The strip is one cell per sampling interval, so a long window makes a very wide cell — at 24 h it ran about
+   450 px and pushed the HOST column of the Applications table off the edge, cut mid-word, which reads as broken
+   rather than as scrollable. It shrinks to fit its column instead; the cells compress, the shape still reads. */
+.upstrip { display: flex; gap: 1px; align-items: center; height: 14px; max-width: 320px; min-width: 60px; }
+.upstrip .upcell { flex: 1 1 auto; min-width: 1px; }
 .upcell { display: inline-block; width: 4px; height: 12px; border-radius: 1px; background: var(--line); }
 .upcell-ok { background: var(--ok); } .upcell-bad { background: var(--bad); } .upcell-none { background: var(--line); }
 .bar { position: relative; display: inline-block; width: 120px; height: 12px; background: var(--soft); border-radius: 6px; overflow: hidden; vertical-align: middle; }

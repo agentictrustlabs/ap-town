@@ -50,6 +50,7 @@ export function Operations({ t, tab = 'town' }: { t: TownData; tab?: Tab }): Rea
   // public reader does not).
   const body = useRef<HTMLDivElement | null>(null);
   const sections = useSections(body, `${tab}|${window}|${pulse.state}|${pulse.state === 'ready' && pulse.data.performance.detail ? 'op' : 'pub'}`);
+  const showRail = sections.length >= 2;
   return (
     <>
       <section className="hero">
@@ -85,9 +86,13 @@ export function Operations({ t, tab = 'town' }: { t: TownData; tab?: Tab }): Rea
       <Loading v={pulse} what="Reading the pulse">{(p) => (
         <>
           {p.sampledAt === null && <div className="banner banner-warn"><strong>No samples yet.</strong> The sampler runs every five minutes; until the first pass, this page shows the live probes only.</div>}
-          {/* A tab is a long page, so it gets a map of itself — derived from the headings it already renders. */}
-          <div className="withrail">
-            <SectionRail items={sections} label={TABS.find(([id]) => id === tab)?.[1] ?? 'this tab'} />
+          {/* A tab is a long page, so it gets a map of itself — derived from the headings it already renders.
+              THE GRID ONLY APPLIES WHEN THERE IS A RAIL. One section needs no map, so the rail renders nothing —
+              and with the two-column grid still on, the content itself took the 196 px rail column and every
+              single-section tab (Chain, Homes, Inference, Applications) was squeezed into a sliver with its
+              numbers stacked one digit per line. The data was all there and none of it was readable. */}
+          <div className={showRail ? 'withrail' : ''}>
+            {showRail && <SectionRail items={sections} label={TABS.find(([id]) => id === tab)?.[1] ?? 'this tab'} />}
             <div ref={body}>
               {tab === 'town' && <TownTab t={t} p={p} />}
               {tab === 'estates' && <EstatesTab t={t} p={p} />}
