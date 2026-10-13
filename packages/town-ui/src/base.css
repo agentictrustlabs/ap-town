@@ -247,6 +247,10 @@ main > section:last-child { margin-bottom: 0; }
    stretches, and is capped so it does not become a 1300 px line of text. */
 .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(268px, 1fr)); gap: 14px; align-items: stretch; }
 .cards > :only-child { max-width: 620px; }
+/* The front door's one action, given room: the button and the sentence that says what signing in does and does
+   not do belong on the same line at desk width, stacked on a phone. */
+.welcome-act { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin: 18px 0 4px; }
+.welcome-act .quiet { max-width: 46ch; }
 .cards-tight { grid-template-columns: repeat(auto-fill, minmax(212px, 1fr)); gap: 12px; }
 .cards-roomy { grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); }
 @media (min-width: 900px) { .cards-roomy { grid-template-columns: repeat(auto-fill, minmax(min(100%, 430px), 1fr)); } }

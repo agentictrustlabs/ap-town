@@ -216,7 +216,7 @@ function Account({ conn }: { conn: Connection }): ReactNode {
   );
 }
 
-export function ConnectButton({ estates }: { estates: Array<{ id: string; home: string }> }): ReactNode {
+export function ConnectButton({ estates, prominent }: { estates: Array<{ id: string; home: string }>; prominent?: boolean }): ReactNode {
   const { conn } = useConnection();
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
@@ -256,7 +256,9 @@ export function ConnectButton({ estates }: { estates: Array<{ id: string; home: 
   const leave = (home: string, hint?: string) => { setBusy(true); void goToHome(home, hint); };
 
   if (conn && !open) return <Account conn={conn} />;
-  if (!open) return <button type="button" className="linkish" onClick={() => setOpen(true)}>Connect</button>;
+  // In the corner it is one link among the areas; on the front door it is THE action, and a page whose only
+  // way in looks like body text leaves the reader hunting for it.
+  if (!open) return <button type="button" className={prominent ? 'button' : 'linkish'} onClick={() => setOpen(true)}>Connect{prominent ? ' at your Home' : ''}</button>;
 
   const chosen = home ?? (estates.length === 1 ? { id: estates[0]!.id, home: estates[0]!.home } : null);
   return (

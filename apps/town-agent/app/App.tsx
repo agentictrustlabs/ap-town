@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { MAP_CSS, SCENE_CSS } from '@ap-town/town-scene';
-import { Link, Loading, Router, useApi, useRoute } from '@ap-town/town-ui';
+import { Link, Loading, Router, setAuthHeader, useApi, useRoute } from '@ap-town/town-ui';
 import type { TownData } from './types';
 import { Overview } from './pages/Overview';
 import { Find } from './pages/Find';
@@ -11,9 +11,22 @@ import { ConnectButton } from './Connect';
 import { Connected } from './pages/Connected';
 import { Estate } from './pages/Estate';
 import { Mcp } from './pages/Mcp';
+import { Welcome } from './pages/Welcome';
+import { connectionToken, useConnection } from './Connect';
+
+// EVERY read this app makes carries the reader's own session, once, here — not on the handful of call sites a
+// developer thought of. The town's API is behind a sign-in, and a page that forgets the header does not show a
+// refusal, it shows nothing.
+setAuthHeader(() => { const t = connectionToken(); return t ? { authorization: `Bearer ${t}` } : undefined; });
 
 function Page({ t }: { t: TownData }): ReactNode {
   const { path } = useRoute();
+  const { conn } = useConnection();
+  // BEHIND A SIGN-IN (the owner's decision, 2026-10-13). Every page but the front door and the leg home reads
+  // this deployment's operational record, so a stranger is shown what a town IS and how to come in, rather than
+  // a page of refusals. The API is gated on the same question — the browser is where a gate is CONVENIENT, never
+  // where it is kept — so this is the sentence, not the lock.
+  if (!conn && path !== '/connected') return <Welcome t={t} />;
   let m: RegExpMatchArray | null;
   if (path === '/' || path === '') return <Overview t={t} />;
   if (path === '/find') return <Find t={t} />;
@@ -28,6 +41,7 @@ function Page({ t }: { t: TownData }): ReactNode {
 }
 
 function Shell(): ReactNode {
+  const { conn } = useConnection();
   const v = useApi<TownData>('/api/town');
   const town = v.state === 'ready' ? v.data : null;
   const naming = town?.services.find((s) => s.id === 'naming')?.hosts[0];
@@ -38,12 +52,15 @@ function Shell(): ReactNode {
       <a className="skip" href="#main">Skip to the page</a>
       <header className="top">
         <Link href="/" className="brand"><span className="brand-mark" aria-hidden="true" />The town{town && <span className="brand-town">{town.town} · chain {town.chain.id}</span>}</Link>
+        {/* A LINK THAT GOES NOWHERE IS WORSE THAN NO LINK. The town's own areas are behind the sign-in, so an
+            unconnected reader is not offered four of them that all render the front door. Names and Skills are
+            other services with their own front doors, and they stay — they were never this portal's to gate. */}
         <nav aria-label="Areas">
-          <Link href="/find">Find</Link>
-          <Link href="/mcp">MCP</Link>
+          {conn && <Link href="/find">Find</Link>}
+          {conn && <Link href="/mcp">MCP</Link>}
           {naming && <a href={`https://${naming}`} rel="noreferrer">Names</a>}
           {skills && <a href={`https://${skills}`} rel="noreferrer">Skills</a>}
-          <Link href="/operations">Pulse</Link>
+          {conn && <Link href="/operations">Pulse</Link>}
         </nav>
         {/* WHO IS ASKING, in the corner, because it changes what every answer on every page can be. It is
             not a sign-in TO the town: the town has no account to hold. It is the session your own Home

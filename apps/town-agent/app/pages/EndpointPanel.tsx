@@ -17,7 +17,7 @@
 //   AND NONE OF IT IS AUTHORITY. Knowing which Worker serves an agent's door says nothing about whether
 //   anybody may send it anything, which is decided inside, against the chain, on every call.
 import { useEffect, useState, type ReactNode } from 'react';
-import { Chip, fmtAgo, fmtInt, fmtMs } from '@ap-town/town-ui';
+import { Chip, fmtAgo, fmtInt, fmtMs, getJson } from '@ap-town/town-ui';
 import type { EndpointInfo } from '../types';
 
 const TOKEN_KEY = 'ap-town.ops-token';
@@ -49,19 +49,21 @@ function metricLine(m: Record<string, number | null>): ReactNode {
 }
 
 export function EndpointPanel({ url, label }: { url: string; label: string }): ReactNode {
-  const [v, setV] = useState<EndpointInfo | null | 'error'>(null);
+  const [v, setV] = useState<EndpointInfo | null | { failed: string }>(null);
   useEffect(() => {
     let live = true; setV(null);
+    // A REFUSAL IS NOT A READING. This parsed every answer as the shape it wanted, so when the API went behind
+    // a sign-in the 401's body became an `EndpointInfo` with no `attribution` and the page died on `a.url` —
+    // one component taking down the whole MCP page (2026-10-13). `getJson` separates the two, and carries the
+    // reader's own session the way every other read here does (the ops token alone was not enough).
     const token = readToken();
-    fetch(`/api/endpoint?url=${encodeURIComponent(url)}`, { headers: { accept: 'application/json', ...(token ? { authorization: `Bearer ${token}` } : {}) } })
-      .then((r) => r.json() as Promise<EndpointInfo>)
-      .then((d) => { if (live) setV(d); })
-      .catch(() => { if (live) setV('error'); });
+    void getJson<EndpointInfo>(`/api/endpoint?url=${encodeURIComponent(url)}`, token ? { authorization: `Bearer ${token}` } : undefined)
+      .then((r) => { if (!live) return; setV(r.ok ? r.data : { failed: r.error.detail ?? r.error.error }); });
     return () => { live = false; };
   }, [url]);
 
   if (v === null) return <p className="quiet small">Reading what serves {label}…</p>;
-  if (v === 'error') return <p className="quiet small">What serves {label} could not be read from here.</p>;
+  if ('failed' in v) return <p className="quiet small">What serves {label} could not be read: {v.failed}</p>;
 
   const a = v.attribution;
   return (

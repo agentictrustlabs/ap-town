@@ -43,8 +43,9 @@ d('town agent', () => {
 // ── THE ESTATE PAGE AND THE MCP CENSUS (spec 435 §4, §5) ──────────────────────────────────────────────────
 // Both routes are read by pages that would look correct while saying the wrong thing, so what is tested here
 // is the distinction they exist to keep: a registry that cannot be asked must not render as an empty town.
+const OPS = 'ops-token-for-tests';
 const envWith = (registry: { fetch(req: Request): Promise<Response> } | undefined) =>
-  ({ TOWN: 'faithchain', PUBLIC_ORIGIN: 'https://town.example', ASSETS: { fetch: async () => new Response('') }, ...(registry ? { REGISTRY: registry } : {}) }) as unknown as Parameters<typeof api>[2];
+  ({ TOWN: 'faithchain', PUBLIC_ORIGIN: 'https://town.example', TOWN_OPS_TOKEN: OPS, ASSETS: { fetch: async () => new Response('') }, ...(registry ? { REGISTRY: registry } : {}) }) as unknown as Parameters<typeof api>[2];
 
 const rosterOf = (rows: unknown[]) => ({
   async fetch(req: Request) {
@@ -58,7 +59,10 @@ const refusing = { async fetch() { return new Response('nope', { status: 502 });
 // mean "a door was down", which is not what any assertion here is about.
 // `api()` takes the path ALREADY stripped of its query, the way the fetch handler hands it over. Passing the
 // whole thing matched no route and every assertion read `undefined`, which looks like a broken route.
-const call = async (pathWithQuery: string, registry?: { fetch(req: Request): Promise<Response> }, authorization: string | null = null) => {
+// SIGNED IN BY DEFAULT. The town's reads are behind a sign-in (2026-10-13), so a caller with no credential is
+// a 401 everywhere but the three public routes — which is a fact about the gate, tested below, and noise in
+// every other assertion. These calls present the ops token unless a case is specifically about who is asking.
+const call = async (pathWithQuery: string, registry?: { fetch(req: Request): Promise<Response> }, authorization: string | null = `Bearer ${OPS}`) => {
   const url = new URL(`https://town.example/api${pathWithQuery}`);
   const path = pathWithQuery.split('?')[0]!;
   const res = await api(path, url, envWith(registry), town, 'town.example', 'https://town.example', authorization, 'GET', up);
@@ -296,14 +300,30 @@ d('what serves an endpoint (spec 437 I4)', () => {
     expect(r.body.source).toBeNull();
   });
 
-  it('withholds the numbers on a public read rather than zeroing them', async () => {
-    // No ops token on this call, so `detail` is false. The shape must carry the refusal, never a 0.
+  // Until 2026-10-13 this read answered a stranger with the attribution and withheld only the numbers. The town's
+  // reads are behind a sign-in now, so the stranger's case is a refusal that NAMES what to do — and the shape that
+  // withholds numbers without zeroing them still has to hold for a reader who is signed in but not an operator
+  // (`readAsOperator`, covered in steward.test.ts where a credential can be minted).
+  it('a stranger is told to connect, by name, and is never handed a zero instead', async () => {
+    const r = await call('/endpoint?url=https%3A%2F%2Fmcp.faithnet.io', rosterOf([]), null);
+    expect(r.status).toBe(401);
+    expect(r.body).toMatchObject({ ok: false, error: 'connect' });
+    expect(r.body.reading).toBeUndefined();
+    expect(r.body.attribution).toBeUndefined();
+  });
+
+  it('answers the attribution and the numbers to a reader the town knows', async () => {
     const r = await call('/endpoint?url=https%3A%2F%2Fmcp.faithnet.io', rosterOf([]));
-    expect(r.body.detail).toBe(false);
-    const reading = r.body.reading as { metrics: unknown } | null;
-    if (reading) { expect(reading.metrics).toBeNull(); }
-    // Either way the attribution — which is public — still answers.
     expect(r.body.attribution).toMatchObject({ how: 'mcp-server', mcpServerId: 'vault', worker: 'demo-mcp-faithnet' });
+  });
+
+  it('the three public routes stay open, because closing them would lock the door from the inside', async () => {
+    // /health is what every prober calls; /home-for is how a person finds WHERE to sign in; /town is what the
+    // connect gate needs to offer a door at all. A gate whose key is inside the house is not a gate.
+    for (const path of ['/health', '/home-for?name=alice.me', '/town']) {
+      const r = await call(path, rosterOf([]), null);
+      expect(r.status, `${path} must answer a stranger`).not.toBe(401);
+    }
   });
 
   it('refuses an empty url rather than attributing nothing to nothing', async () => {

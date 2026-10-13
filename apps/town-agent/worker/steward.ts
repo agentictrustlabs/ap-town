@@ -77,11 +77,15 @@ async function signedBy(keys: Array<JsonWebKey & { kid?: string }>, kid: string 
 }
 
 /**
- * Verify a Home-issued `id_token` and say whether its subject is a declared operator of this town.
+ * WHO IS SIGNED IN — a Home-issued `id_token`, verified, with no question of what they may do.
+ *
+ * This is the first three links of the chain: a declared issuer, its signature, its expiry. It answers "this is
+ * a person with an account at a Home this town knows", which is what the portal's pages are behind. Being an
+ * OPERATOR is a fourth link on top of it, and a different question.
  *
  * `nowMs` and `fetchImpl` are injected so this is testable without a clock or a network.
  */
-export async function readAsOperator(town: TownManifest, authorization: string | null, fetchImpl: typeof fetch = fetch, nowMs = Date.now()): Promise<StewardCheck> {
+export async function verifyHomeToken(town: TownManifest, authorization: string | null, fetchImpl: typeof fetch = fetch, nowMs = Date.now()): Promise<StewardCheck> {
   const raw = (authorization ?? '').replace(/^Bearer\s+/i, '').trim();
   if (!raw || raw.split('.').length !== 3) return { ok: false, reason: 'no id_token presented' };
   const [h, p, sig] = raw.split('.') as [string, string, string];
@@ -112,7 +116,14 @@ export async function readAsOperator(town: TownManifest, authorization: string |
   // The subject is CAIP-10 (`eip155:<chain>:0x…`); the address is what the manifest lists.
   const agent = String(claims.sub ?? '').match(/0x[0-9a-fA-F]{40}/)?.[0]?.toLowerCase() ?? '';
   if (!agent) return { ok: false, reason: 'the token names no Smart Agent' };
-  const operator = declaredOperators(town).find((o) => o.sa === agent);
+  return { ok: true, agent, name: typeof claims.agent_name === 'string' ? claims.agent_name : null, issuer };
+}
+
+/** Signed in AND listed by the manifest as one of this town's operators — what the amounts are behind. */
+export async function readAsOperator(town: TownManifest, authorization: string | null, fetchImpl: typeof fetch = fetch, nowMs = Date.now()): Promise<StewardCheck> {
+  const who = await verifyHomeToken(town, authorization, fetchImpl, nowMs);
+  if (!who.ok) return who;
+  const operator = declaredOperators(town).find((o) => o.sa === who.agent);
   if (!operator) return { ok: false, reason: 'you are signed in, but this town does not list you as one of its operators' };
-  return { ok: true, agent, name: typeof claims.agent_name === 'string' ? claims.agent_name : operator.label, issuer };
+  return { ...who, name: who.name ?? operator.label };
 }

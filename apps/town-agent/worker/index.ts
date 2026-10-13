@@ -15,7 +15,7 @@ import { agentCardHost, contextAgentViews, describe, serviceViews, townSummary, 
 import { samplePulse, readPulse, type PulseSampleV1, type PulseEnv } from './pulse';
 import { recordDay, pulseRecordReadiness, contextAgents, type PulseRecordEnv } from './pulse-record';
 import { PERF_WINDOWS, operatorAuthorized, readPerformance, type InfraRowV1, type PerfWindow } from './pulse-perf';
-import { readAsOperator } from './steward';
+import { readAsOperator, verifyHomeToken } from './steward';
 import { resolveAgentCard, createStandardA2aClient } from '@agenticprimitives/a2a/standard';
 export { HeartbeatDO } from './pulse';
 
@@ -386,6 +386,22 @@ async function runPassVia(env: Env, which: string, authorization: string | null)
 
 /** Exported for its tests: the API's routes are where "could not ask" must not render as "none", and that is
  *  only checkable by calling them with a registry that refuses. */
+/**
+ * WHAT A STRANGER MAY ASK FOR, and it is a short list by the owner's decision (2026-10-13): the town's pages are
+ * behind a sign-in now, so its reads are too — a page gated in the browser while its API answers anybody is not
+ * gated, it is decorated.
+ *
+ * These three stay open because closing them would break the gate itself or the protocol:
+ *   `/health`    — what every prober and `check:town` calls to ask whether this Worker is answering at all;
+ *   `/home-for`  — WHICH HOME A NAME IS ON, which is how a person finds where to sign in. Behind the sign-in it
+ *                  would be a lock whose key is inside the house. It answers from the public registry only.
+ *   `/town`      — the manifest's own description of itself (name, chain, the estates' Homes), which the connect
+ *                  gate needs to offer a door at all, and which the agent card already publishes.
+ * The town's agent card and its `/a2a` door are public elsewhere in this file: an agent nobody can resolve is
+ * not an agent. Everything else — services, estates, endpoints, the graph, the Ask, the Pulse — is a reader's.
+ */
+const PUBLIC_API = new Set(['/health', '/home-for', '/town']);
+
 export async function api(path: string, url: URL, env: Env, town: TownManifest, selfHost: string, origin: string, authorization: string | null = null, method = 'GET', probe: Probe = fetchProbe): Promise<Response> {
   if (path === '/pulse/pass') return method === 'POST' ? runPassVia(env, url.searchParams.get('which') ?? 'status', authorization) : json({ error: 'POST, with the town ops token' }, 405);
   // RECORD THE DAY NOW (spec 436 §5.5 T2). The sampler does this once an hour; an operator may ask for it, which
@@ -404,6 +420,16 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     const landed = await recordDay(env as PulseRecordEnv, all, day, fetch, town, (await infraRowsFrom(env, Date.parse(day))).rows);
     await store.fetch('https://pulse/record-outcome', { method: 'POST', body: JSON.stringify({ at: new Date().toISOString(), day, landed }) }).catch(() => undefined);
     return json({ ok: landed.every((l) => l.ok), day, samples: all.length, landed });
+  }
+  // THE GATE. A verified sign-in at a Home this manifest declares, or the town ops token (scripts and crons).
+  // It is an identity check and nothing more: being signed in says who is asking, never what they may do
+  // (429 D2). What it protects is this deployment's own operational read, not anybody's Home or record.
+  if (!PUBLIC_API.has(path) && path !== '/pulse/pass' && path !== '/pulse/record') {
+    const byToken = operatorAuthorized(env.TOWN_OPS_TOKEN, authorization);
+    const who = byToken ? null : await verifyHomeToken(town, authorization).catch(() => null);
+    if (!byToken && !who?.ok) {
+      return json({ ok: false, error: 'connect', detail: who && !who.ok ? who.reason : 'this town answers its own people — connect at your Home, and this reads' }, 401, { 'cache-control': 'private, no-store' });
+    }
   }
   if (path === '/health') {
     // Readiness is whether the WIRES are in place; `lastRecord` is whether the write actually landed. Two
