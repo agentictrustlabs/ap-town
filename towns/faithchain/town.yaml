@@ -104,6 +104,20 @@ estates:
     # Allowed at block 88347 — hours before it signed `imbrichgoogle.me` at 88482, the first name bought
     # on this estate. One gate per Home: an imbnet name and a faithnet name differ on chain by this.
     namingGate: "0xb59e824C77c5969312De54130935478b8f38aF85"
+    # ON NEUTRAL GROUND SINCE 2026-10-13 (spec 439 F1) — the first estate to project its live set so an
+    # agent in another estate can check a grant without being able to read this estate's chain or vaults.
+    # The id is derived from the estate AGENT's address (never the naming gate: an estate id is permanent
+    # and keys rotate), and this row exists to be cross-checked, because `register` is first-come-wins.
+    # `declaredOnChain: false` is the gap said out loud: until the estate agent writes
+    # `atl:projectionSigner` itself (spec 439 F2.5), this file and ap-federation's `federation.yaml` are
+    # the only public declarations a verifier can hold the registry's answer against.
+    projection:
+      registry: "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b"
+      registryChainId: 34348
+      governance: "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015"   # imbnet.estate
+      estateId: "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84"
+      signer: "0xAdcd7257De9686061C0838154cA77790C79a9EfD"
+      declaredOnChain: false
     # NAMED SO A DASHBOARD IS READABLE. `demo-a2a-faithnet` and `demo-mcp-faithnet` are historical: "demo" says
     # nothing and "a2a"/"mcp" name a protocol rather than a job. These say what each Worker IS and sort together
     # under one prefix, which is what you want the moment a list holds two estates' worth of them.

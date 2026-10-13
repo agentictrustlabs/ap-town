@@ -183,6 +183,14 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         ],
         "estateName": "imbnet.estate",
         "namingGate": "0xb59e824C77c5969312De54130935478b8f38aF85",
+        "projection": {
+          "registry": "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b",
+          "registryChainId": 34348,
+          "governance": "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015",
+          "estateId": "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84",
+          "signer": "0xAdcd7257De9686061C0838154cA77790C79a9EfD",
+          "declaredOnChain": false
+        },
         "workers": [
           "imb-runtime",
           "imb-vault",

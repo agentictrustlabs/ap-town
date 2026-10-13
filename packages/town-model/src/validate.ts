@@ -75,6 +75,23 @@ export function validateTown(raw: unknown): TownValidation {
         gateOwner.set(g, e.id);
       }
     }
+    // THE PROJECTION ROW IS A DECLARATION TO CROSS-CHECK, so a half-written one is worse than none: a
+    // reader who finds a registry and an estate id but no signer cannot tell whether the estate forgot the
+    // signer or whether somebody else holds it. All five fields, or the row is refused (ADR-0013).
+    if (e.projection !== undefined) {
+      const pj = e.projection as Record<string, unknown> | null;
+      if (!pj || typeof pj !== 'object') errors.push(`${at}.projection: an object`);
+      else {
+        for (const k of ['registry', 'governance', 'signer'] as const) {
+          if (typeof pj[k] !== 'string' || !/^0x[0-9a-fA-F]{40}$/.test(String(pj[k]))) errors.push(`${at}.projection.${k}: a 0x address`);
+        }
+        if (typeof pj.estateId !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(String(pj.estateId))) errors.push(`${at}.projection.estateId: a 0x bytes32 (keccak256 of "eip155:<chainId>:<governance>")`);
+        if (!Number.isInteger(pj.registryChainId) || Number(pj.registryChainId) <= 0) errors.push(`${at}.projection.registryChainId: the chain the registry is on`);
+        // Stated, never defaulted: "we have not done the on-chain declaration yet" must be said out loud,
+        // because the absence of the stronger check is exactly what a verifier needs to know.
+        if (typeof pj.declaredOnChain !== 'boolean') errors.push(`${at}.projection.declaredOnChain: true | false — say whether the estate has declared this signer on its own chain`);
+      }
+    }
     for (const [pattern, worker] of Object.entries(e.lanes ?? {})) {
       if (!HOST.test(pattern)) errors.push(`${at}.lanes: "${pattern}" is not a host pattern`);
       if (typeof worker !== 'string' || !worker) errors.push(`${at}.lanes["${pattern}"]: a Worker name`);

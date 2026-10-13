@@ -106,6 +106,35 @@ export interface TownEstate {
    * told an estate has hardware-rooted custody because a name was easier to write than a gap.
    */
   kms?: { tenant: string | null; backend?: string };
+  /**
+   * THE ESTATE'S PROJECTION ON NEUTRAL GROUND — spec 439 F1 / spec 410 §4. The estate commits to its live
+   * set in an `EstateProjectionRegistry` so a counterparty in ANOTHER estate can prove one leaf against a
+   * root it reads itself. Nothing here is authority: a presentation is evidence (ADR-0056), and the
+   * receiving estate still decides under its own mandate, per step.
+   *
+   * WHY THE MANIFEST CARRIES IT AT ALL. `register(estateId, signer)` is first-come-wins — public ground
+   * cannot verify who governs an estate on another chain, so it cannot refuse a squatter. A verifier that
+   * trusts `signerOf` alone trusts whoever registered first. This row is a PUBLIC, REVIEWED declaration to
+   * cross-check it against, and `declaredOnChain` says plainly whether the stronger check exists yet: when
+   * the estate agent writes `atl:projectionSigner` itself (spec 439 F2.5), a verifier reads the estate's own
+   * chain and this row stops being load-bearing.
+   *
+   * `estateId` is `keccak256("eip155:<chainId>:<governance>")` and is PERMANENT, which is why `governance`
+   * is the estate agent's Smart Agent address and never a key (ADR-0010). An estate without one is absent
+   * here rather than registered against a provisional address.
+   */
+  projection?: {
+    /** The registry on neutral ground, and the chain it is on (not necessarily this town's). */
+    registry: string;
+    registryChainId: number;
+    /** The address the id was derived from — the estate agent's SA. */
+    governance: string;
+    estateId: string;
+    /** The key that anchors this estate's roots there. Public by construction; rotatable by itself. */
+    signer: string;
+    /** Has the estate declared this signer on its own chain (`atl:projectionSigner`)? */
+    declaredOnChain: boolean;
+  };
   /** Spec 437 I4 — the platform resources this estate owns, for the Pulse's attribution (never authority). */
   workers?: string[];
   pagesProjects?: string[];

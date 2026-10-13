@@ -17,6 +17,32 @@ describe('town manifest', () => {
     expect(town?.chain.id).toBe(34348);
   });
 
+  it('carries imbnet\'s projection on neutral ground, and says the on-chain declaration is still missing', () => {
+    // Spec 439 F1. The row exists to be cross-checked against a first-come-wins registry, so what it must
+    // never do is read as complete while the stronger check is absent.
+    const { town } = parseTown(faithchain);
+    const imbnet = town?.estates.find((e) => e.id === 'imbnet');
+    expect(imbnet?.projection).toMatchObject({
+      registry: '0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b',
+      registryChainId: 34348,
+      governance: '0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015',
+      estateId: '0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84',
+      declaredOnChain: false,
+    });
+  });
+
+  it('refuses a half-written projection row, and refuses to default `declaredOnChain`', () => {
+    const t = base();
+    (t.estates[0] as any).projection = { registry: '0x' + '11'.repeat(20), registryChainId: 34348, governance: '0x' + '22'.repeat(20), estateId: '0x' + 'ab'.repeat(32) };
+    const half = validateTown(t);
+    expect(half.town).toBeNull();
+    expect(half.errors.some((e) => e.includes('projection.signer'))).toBe(true);
+    expect(half.errors.some((e) => e.includes('projection.declaredOnChain'))).toBe(true);
+    // And an estate id that is not a bytes32 is refused rather than carried: a verifier would read it.
+    (t.estates[0] as any).projection = { registry: '0x' + '11'.repeat(20), registryChainId: 34348, governance: '0x' + '22'.repeat(20), estateId: '0xdeadbeef', signer: '0x' + '33'.repeat(20), declaredOnChain: false };
+    expect(validateTown(t).errors.some((e) => e.includes('projection.estateId'))).toBe(true);
+  });
+
   it('refuses a service host claimed twice and a lane claimed by two estates', () => {
     const t = base();
     t.estates.push({ ...t.estates[0]!, id: 'b' });
