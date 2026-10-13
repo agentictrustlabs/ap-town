@@ -82,6 +82,10 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
     );
   }
   const byBasis = BASIS_ORDER.map((b) => ({ basis: b, rows: rows.filter((r) => r.basis === b) })).filter((x) => x.rows.length);
+  /** How many distinct days a set of rows actually carries — the honest span of a basis total. */
+  const daysCovered = (rs: CostRow[]): number => new Set(rs.flatMap((r) => r.days.map((d) => d.day))).size;
+  const runningMonth = perf.months.find((m) => m.toDate);
+  const monthBilled = runningMonth ? { micro: runningMonth.amountMicroUsd, through: runningMonth.throughDay } : null;
   const days = perf.days;
   const dayTotal = (rs: CostRow[], day: string): number => rs.reduce((n, r) => n + (r.days.find((d) => d.day === day)?.amountMicroUsd ?? 0), 0);
 
@@ -92,14 +96,27 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
           Three numbers, never one: a basis says what a figure IS, and adding two of them makes a total that is true
           of nothing. Billed and effective restate for up to 72 h; derived follows the meters hourly.
         </SectionHead>
+        <Worth months={perf.months} rows={rows} days={days} />
+        {/* TWO KINDS OF TOTAL ON ONE PAGE, and they must not be mistaken for each other. The provider's MONTH is
+            the authoritative figure and the only one that covers the whole month; the basis tiles sum the DAILY
+            rows this window holds, and Azure's collector keeps a rolling week of those. Reading $187 billed
+            beside "this month $323.85" looks like a contradiction until each says what it counts. */}
         <div className="stats">
+          {monthBilled !== null && (
+            <Stat label="This month, billed" value={fmtUsd(monthBilled.micro)}
+              sub={<>the provider&rsquo;s own month, through {monthBilled.through} <LagBadge lag="daily-restated" /></>} />
+          )}
           {byBasis.map(({ basis, rows: rs }) => (
             <Stat key={basis} label={basis} value={fmtUsd(total(rs))}
-              sub={<>{BASIS_WORD[basis]} <LagBadge lag={LAG[basis]} /></>}
+              sub={<>{BASIS_WORD[basis]} · {daysCovered(rs)} day{daysCovered(rs) === 1 ? '' : 's'} of daily rows <LagBadge lag={LAG[basis]} /></>}
               {...(partial(rs) ? { tone: 'warn' as const } : {})} />
           ))}
-          <Stat label="Window" value={`${days.length} day${days.length === 1 ? '' : 's'}`} sub={`${days[0] ?? '—'} → ${days[days.length - 1] ?? '—'}`} />
         </div>
+        {monthBilled !== null && (
+          <p className="quiet">The month is the provider&rsquo;s own figure and covers every day of it. The three
+          basis totals are the daily rows this window holds — fewer days, and a different question: what the
+          tables below are made of.</p>
+        )}
         {perf.readAs?.by === 'connection' && (
           <p className="quiet">Read as <strong>{perf.readAs.name ?? perf.readAs.agent}</strong>, whom this town&rsquo;s
           manifest lists as one of its operators — your Home said who you are and the town checked its own list.
@@ -321,5 +338,72 @@ function Months({ months }: { months: PerfView['months'] }): ReactNode {
       provider&rsquo;s own history, not accumulated from this town&rsquo;s daily rows — only a platform that serves
       months appears here.</p>
     </section>
+  );
+}
+
+/**
+ * WHAT IS BIG, AND WHAT CHANGED — the two questions a cost page is actually opened with, answered before the
+ * tables that let you check the answer.
+ *
+ * Everything here is DERIVED FROM THE FIGURES BELOW IT, never a second source: the biggest line is the biggest
+ * line in the table, and the comparison is against this account's own finished months. Nothing is a threshold
+ * somebody picked — a "25% of the bill" line is a fact about the mix, not a judgment that it is too much, and
+ * the page says which it is.
+ */
+function Worth({ months, rows, days }: { months: PerfView['months']; rows: CostRow[]; days: string[] }): ReactNode {
+  const running = months.find((m) => m.toDate);
+  const done = months.filter((m) => !m.toDate);
+  const recent = done.slice(-6);
+  const baseline = recent.length ? recent.reduce((n, m) => n + m.amountMicroUsd, 0) / recent.length : null;
+
+  // The biggest single thing the provider named, in the month that is running.
+  const topService = running?.byService[0];
+  const monthTotal = running?.amountMicroUsd ?? 0;
+  const share = topService && monthTotal > 0 ? topService.amountMicroUsd / monthTotal : null;
+
+  // The biggest owner across every platform in the window, by what it actually spends.
+  const byOwner = new Map<string, { label: string; micro: number }>();
+  for (const r of rows) {
+    const k = ownerKey(r.owner);
+    const cur = byOwner.get(k) ?? { label: r.owner ? `${r.owner.kind} · ${r.owner.id}` : 'unattributed', micro: 0 };
+    cur.micro += r.days.reduce((n, d) => n + d.amountMicroUsd, 0);
+    byOwner.set(k, cur);
+  }
+  const topOwner = [...byOwner.values()].sort((a, b) => b.micro - a.micro)[0];
+
+  const notes: ReactNode[] = [];
+  if (running && baseline !== null && baseline > 0) {
+    const pace = running.amountMicroUsd / baseline;
+    // Part of a month against a whole one is not a comparison; it is only one once the month is far enough in
+    // to say something, and even then it is a PACE, said as a pace.
+    const dayOfMonth = Number(running.throughDay.slice(8));
+    if (dayOfMonth >= 7) {
+      const projected = (running.amountMicroUsd / dayOfMonth) * 30;
+      notes.push(
+        <li key="pace">
+          At {fmtUsd(running.amountMicroUsd)} through the {dayOfMonth}th, this month is on pace for about{' '}
+          <strong>{fmtUsd(Math.round(projected))}</strong> against a recent monthly average of {fmtUsd(Math.round(baseline))}
+          {projected > baseline * 1.25 ? ' — ahead of it' : projected < baseline * 0.75 ? ' — behind it' : ' — about the same'}.
+          A pace is an arithmetic guess about days that have not happened.
+        </li>,
+      );
+      void pace;
+    }
+  }
+  if (topService && share !== null) {
+    notes.push(<li key="svc"><strong>{topService.key}</strong> is {fmtUsd(topService.amountMicroUsd)} of the month, {Math.round(share * 100)}% of it. That is the mix, not a verdict.</li>);
+  }
+  if (topOwner && topOwner.micro > 0) {
+    notes.push(<li key="owner">Most of what this window can attribute belongs to <strong>{topOwner.label}</strong> ({fmtUsd(topOwner.micro)}).</li>);
+  }
+  const unread = rows.filter((r) => r.days.some((d) => !d.complete)).length;
+  if (unread) notes.push(<li key="partial">{unread} row{unread === 1 ? ' has a day' : 's have days'} that could not be read, so every total here is smaller than the truth rather than wrong.</li>);
+  if (!notes.length) return null;
+  void days;
+  return (
+    <div className="panel" style={{ marginBottom: 'var(--sp-4)' }}>
+      <p className="eyebrow" style={{ margin: '0 0 6px' }}>Worth a look</p>
+      <ul className="plain" style={{ margin: 0 }}>{notes}</ul>
+    </div>
   );
 }

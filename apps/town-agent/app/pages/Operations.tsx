@@ -2,7 +2,7 @@
 // thing an operator comes to know — the Town (services, chain, rules: today's page), the Estates (each estate's heartbeat),
 // the Homes (the estates' run mix), Inference and Chain (the two metered gateways), Applications. Everything here is
 // aggregate and public: probes, rollups, counts. Nothing here is anybody's Home; a person's truth is reached by link.
-import { useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Band, Link, Loading, useRoute, Chip, Stat, Sparkline, UpStrip, WindowPicker, Bar, fmtInt, fmtUsd, fmtMs, fmtAgo, type PulseWindow } from '@ap-town/town-ui';
 import { InfraTab, PerformanceTab, type EstatePerf, type PerfView } from '../pulse/InfraTabs';
 import type { ContextAgentView, TownData } from '../types';
@@ -40,7 +40,11 @@ interface Heartbeat { estate: string; at: string; generation: string; versions: 
 export function Operations({ t, tab = 'town' }: { t: TownData; tab?: Tab }): ReactNode {
   // Cost is measured by the DAY (one pass a day, over whole days), so its tab opens on a week; every other tab
   // opens on the day, which is what an operator looking at health wants.
-  const [window, setWindow] = useState<Window>(tab === 'cost' ? '7d' : '24h');
+  const [window, setWindow] = useState<Window>(tab === 'cost' ? '30d' : '24h');
+  // ARRIVING AT COST FROM ANOTHER TAB must not inherit that tab's window: 24h of a thing billed daily is an
+  // empty page, and the reader did nothing wrong. Cost snaps to a period it can actually answer.
+  const costWindows: Window[] = ['30d', '90d'];
+  useEffect(() => { if (tab === 'cost' && !costWindows.includes(window)) setWindow('30d'); }, [tab]);
   const [token, setToken] = useState<string | null>(readToken);
   const pulse = usePulse(window, token);
   const { go } = useRoute();
@@ -81,7 +85,16 @@ export function Operations({ t, tab = 'town' }: { t: TownData; tab?: Tab }): Rea
       </section>
       <nav className="tabs" aria-label="Pulse">
         {TABS.map(([id, label]) => <Link key={id} href={id === 'town' ? '/operations' : `/operations/${id}`} className={`tab${tab === id ? ' is-on' : ''}`} aria-current={tab === id ? 'page' : undefined}>{label}</Link>)}
-        <span className="tabs-right"><OperatorToken token={token} onChange={setToken} detail={pulse.state === 'ready' && pulse.data.performance.detail} /> <WindowPicker value={window} windows={wide ? ['24h', '7d', '30d', '90d'] : ['24h', '7d', '30d']} onChange={(w) => { setWindow(w); if (tab !== 'town') go(`/operations/${tab}`); }} /></span>
+        {/* COST IS NOT MEASURED IN HOURS. The 24h/7d/30d/90d control is a HEALTH window — how far back to look
+            at probes and metrics — and on the Cost tab it offered a period shorter than the grain of the data:
+            arriving from another tab at 24h produced a page that said "cost is measured by the day, and this
+            window is one", which is a true sentence about an answer nobody asked for. Cost gets periods that
+            match how it is billed, and opens on the month. */}
+        <span className="tabs-right"><OperatorToken token={token} onChange={setToken} detail={pulse.state === 'ready' && pulse.data.performance.detail} />{' '}
+          {tab === 'cost'
+            ? <WindowPicker value={window} windows={['30d', '90d']} labels={{ '30d': 'This month', '90d': 'Three months' }} onChange={(w) => { setWindow(w); go('/operations/cost'); }} />
+            : <WindowPicker value={window} windows={wide ? ['24h', '7d', '30d', '90d'] : ['24h', '7d', '30d']} onChange={(w) => { setWindow(w); if (tab !== 'town') go(`/operations/${tab}`); }} />}
+        </span>
       </nav>
       <Loading v={pulse} what="Reading the pulse">{(p) => (
         <>

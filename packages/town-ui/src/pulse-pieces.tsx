@@ -44,10 +44,12 @@ export function UpStrip({ cells, label }: { cells: Array<boolean | null>; label?
 }
 
 export type PulseWindow = '24h' | '7d' | '30d' | '90d';
-export function WindowPicker({ value, onChange, windows = ['24h', '7d', '30d'] }: { value: PulseWindow; onChange: (w: PulseWindow) => void; windows?: PulseWindow[] }): ReactNode {
+export function WindowPicker({ value, onChange, windows = ['24h', '7d', '30d'], labels }: { value: PulseWindow; onChange: (w: PulseWindow) => void; windows?: PulseWindow[]; labels?: Partial<Record<PulseWindow, string>> }): ReactNode {
+  // `labels` lets a surface name the period in ITS OWN terms — cost is billed by the month, so "This month"
+  // is what a reader is choosing, even though the request underneath is still a span of days.
   return (
     <div className="window-picker" role="group" aria-label="Window">
-      {windows.map((w) => <button key={w} type="button" className={`button button-quiet${w === value ? ' is-on' : ''}`} aria-pressed={w === value} onClick={() => onChange(w)}>{w}</button>)}
+      {windows.map((w) => <button key={w} type="button" className={`button button-quiet${w === value ? ' is-on' : ''}`} aria-pressed={w === value} onClick={() => onChange(w)}>{labels?.[w] ?? w}</button>)}
     </div>
   );
 }
