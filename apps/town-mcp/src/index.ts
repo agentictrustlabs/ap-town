@@ -18,7 +18,7 @@
 // It has no route and no custom domain. Every answer is aggregate infrastructure fact: no person, no vault, no key.
 // It READS; nothing here acts (I8).
 import { Hono } from 'hono';
-import { TOWNS, attributeResource, type CostSampleV1, type InfraSampleV1, type ResourceOwnershipV1, type TownManifest } from '@ap-town/town-model';
+import { TOWNS, attributeResource, type CostMonthV1, type CostSampleV1, type InfraSampleV1, type ResourceOwnershipV1, type TownManifest } from '@ap-town/town-model';
 import { collectCostPass, collectHourlyPass, collectStatusPass, type InfraEnv, type InfraPass } from './infra/passes';
 
 export interface Env extends InfraEnv {
@@ -56,11 +56,16 @@ export const infraId = (s: InfraSampleV1): string => `${s.platform}|${s.account}
  */
 export const costId = (c: CostSampleV1): string => `${c.platform}|${c.account}|${c.day}|${c.resource}|${c.sku ?? ''}|${c.basis}`;
 /** What the store keeps: one row per sample, filed by kind and (for cost) by the day it describes. */
-export interface StoredRow { kind: 'infra' | 'cost'; id: string; at: string; ok: boolean; payload: InfraSampleV1 | CostSampleV1; error?: string }
-export const toRow = (x: InfraSampleV1 | CostSampleV1): StoredRow =>
+/** A whole month as the provider billed it (spec 437 I1): one row per (platform, account, month, basis), and a
+ *  later read of the same month supersedes the earlier — billed figures restate for months, not only for days. */
+export const costMonthId = (c: CostMonthV1): string => `${c.platform}|${c.account}|${c.month}|${c.basis}`;
+export interface StoredRow { kind: 'infra' | 'cost' | 'cost-month'; id: string; at: string; ok: boolean; payload: InfraSampleV1 | CostSampleV1 | CostMonthV1; error?: string }
+export const toRow = (x: InfraSampleV1 | CostSampleV1 | CostMonthV1): StoredRow =>
   x.type === 'ap.infra-sample.v1'
     ? { kind: 'infra', id: infraId(x), at: x.at, ok: x.ok, payload: x, ...(x.error ? { error: x.error } : {}) }
-    : { kind: 'cost', id: costId(x), at: x.asOf, ok: x.ok, payload: x, ...(x.error ? { error: x.error } : {}) };
+    : x.type === 'ap.cost-month.v1'
+      ? { kind: 'cost-month', id: costMonthId(x), at: x.asOf, ok: x.ok, payload: x, ...(x.error ? { error: x.error } : {}) }
+      : { kind: 'cost', id: costId(x), at: x.asOf, ok: x.ok, payload: x, ...(x.error ? { error: x.error } : {}) };
 
 /** The one token the town's own services answer to, compared in constant time. Unset ⇒ the door is closed, and says so. */
 export function authorized(env: Env, authorization: string | null): { ok: true } | { ok: false; status: 401 | 503; error: string } {
@@ -89,7 +94,7 @@ export async function runPass(env: Env, which: 'status' | 'hourly' | 'cost', now
       : [];
     pass = await collectCostPass(town, env, fetchImpl, nowMs, prior);
   }
-  const rows = [...pass.samples, ...pass.costs].map(toRow);
+  const rows = [...pass.samples, ...pass.costs, ...(pass.months ?? [])].map(toRow);
   if (store) for (const batch of batched(rows)) await store.fetch('https://infra/put', { method: 'POST', body: JSON.stringify(batch) });
   for (const u of pass.unreadable) console.warn(`[town-mcp:${which}] ${u}`);
   return pass;
@@ -155,7 +160,7 @@ app.post('/infra/pass', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { which?: string };
   const which = body.which === 'hourly' || body.which === 'cost' ? body.which : 'status';
   const pass = await runPass(c.env, which);
-  return c.json({ ok: true, which, samples: pass.samples.length, costs: pass.costs.length, unreadable: pass.unreadable });
+  return c.json({ ok: true, which, samples: pass.samples.length, costs: pass.costs.length, months: pass.months?.length ?? 0, unreadable: pass.unreadable });
 });
 
 // ── The MCP door (JSON-RPC 2.0) — the Town Ask's harness calls these as tools ───────────────────────────────────────
@@ -301,8 +306,11 @@ export class InfraDO {
     return Response.json({ error: 'not found' }, { status: 404 });
   }
   async alarm(): Promise<void> {
-    this.sql.exec("DELETE FROM rows WHERE kind != 'cost' AND at < ?", Date.now() - RETENTION_MS);
-    this.sql.exec("DELETE FROM rows WHERE kind = 'cost' AND at < ?", Date.now() - COST_RETENTION_MS);
+    // A cost row is kept far longer than a sample, and a MONTH row is the history itself — purging it at the
+    // sample retention would delete the baseline a month's figure is read against (`kind != 'cost'` did exactly
+    // that to `cost-month` until it was named here).
+    this.sql.exec("DELETE FROM rows WHERE kind NOT IN ('cost', 'cost-month') AND at < ?", Date.now() - RETENTION_MS);
+    this.sql.exec("DELETE FROM rows WHERE kind IN ('cost', 'cost-month') AND at < ?", Date.now() - COST_RETENTION_MS);
     await this.state.storage.setAlarm(Date.now() + 3_600_000);
   }
 }

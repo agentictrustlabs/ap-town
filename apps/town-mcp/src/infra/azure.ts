@@ -3,7 +3,7 @@
 // by resource group, daily granularity, over a rolling window — BILLED, refreshed every 4 h with 8–72 h of usage lag
 // and RESTATED, so `daily-restated` and a later read supersedes (I1/I2). A 429 backs off once on the service's
 // retry-after; a second refusal leaves the window `complete: false` (I3).
-import type { CostSampleV1, InfraSampleV1 } from '@ap-town/town-model';
+import type { CostMonthV1, CostSampleV1, InfraSampleV1 } from '@ap-town/town-model';
 import { type FetchLike, failedCost, failedInfra, infraSample, microUsd, num, readJson } from './common';
 
 export interface AzureCfg { tenantId: string; clientId: string; clientSecret: string; subscriptionId: string }
@@ -86,4 +86,64 @@ export async function collectAzureCost(cfg: Pick<AzureCfg, 'subscriptionId'>, to
   }
   if (nonUsd) for (const c of out) { c.complete = false; c.error = `${nonUsd} row(s) not in USD`; }
   return out;
+}
+
+/** One Cost Management query at MONTH granularity, grouped by one dimension. `null` when the scope refused. */
+async function monthlyBy(cfg: Pick<AzureCfg, 'subscriptionId'>, token: string, dimension: 'ServiceName' | 'ResourceGroupName', window: { from: string; to: string }, fetchImpl: FetchLike, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<{ rows: Array<{ month: string; key: string; usd: number }> } | { error: string }> {
+  const url = `${AZURE_ARM}/subscriptions/${encodeURIComponent(cfg.subscriptionId)}/providers/Microsoft.CostManagement/query?api-version=2023-11-01`;
+  const body = JSON.stringify({ type: 'ActualCost', timeframe: 'Custom', timePeriod: { from: `${window.from}T00:00:00Z`, to: `${window.to}T23:59:59Z` }, dataset: { granularity: 'Monthly', aggregation: { totalCost: { name: 'Cost', function: 'Sum' } }, grouping: [{ type: 'Dimension', name: dimension }] } });
+  type Answer = { properties?: { columns?: Array<{ name: string }>; rows?: unknown[][] } };
+  // THE COST API IS RATE-LIMITED PER SUBSCRIPTION, and the cost pass asks it three times in a row (the days,
+  // then the months by service and by scope). Without the same backoff the daily query has, the month history
+  // is the one that loses the race and the whole baseline comes back as one 429 (seen 2026-10-13).
+  let r = await readJson<Answer>(fetchImpl, url, { method: 'POST', headers: { ...auth(token), 'content-type': 'application/json' }, body }, 60_000);
+  if (!r.ok && r.status === 429) {
+    const retry = Number(r.headers?.get('x-ms-ratelimit-microsoft.consumption-retry-after') ?? r.headers?.get('retry-after') ?? '10');
+    await sleep(Math.min(Math.max(retry, 1), 30) * 1000);
+    r = await readJson<Answer>(fetchImpl, url, { method: 'POST', headers: { ...auth(token), 'content-type': 'application/json' }, body }, 60_000);
+  }
+  if (!r.ok) return { error: r.error };
+  const cols = (r.data.properties?.columns ?? []).map((c) => c.name);
+  const iCost = cols.findIndex((c) => ['Cost', 'PreTaxCost', 'CostUSD'].includes(c));
+  // Monthly answers name the period `BillingMonth` where daily ones say `UsageDate`; take either.
+  const iMonth = cols.findIndex((c) => ['BillingMonth', 'UsageDate', 'BillingPeriod'].includes(c));
+  const iKey = cols.indexOf(dimension);
+  if (iCost < 0 || iMonth < 0) return { error: `unexpected columns: ${cols.join(', ')}` };
+  const rows: Array<{ month: string; key: string; usd: number }> = [];
+  for (const row of r.data.properties?.rows ?? []) {
+    const usd = num(row[iCost]); if (usd === null) continue;
+    const raw = String(row[iMonth] ?? '');
+    const month = /^\d{8}$/.test(raw) ? `${raw.slice(0, 4)}-${raw.slice(4, 6)}` : raw.slice(0, 7);
+    if (!/^\d{4}-\d{2}$/.test(month)) continue;
+    rows.push({ month, key: String(iKey >= 0 ? row[iKey] ?? 'unattributed' : 'all'), usd });
+  }
+  return { rows };
+}
+
+/** THE MONTHS THEMSELVES — spec 437 I1, the baseline. Two queries (by service, by resource group) over whole
+ *  months, folded into one row per month: the total, what was bought, and which scope it was billed to. The
+ *  running month is marked `toDate` rather than quietly compared with finished ones. A refusal yields one failed
+ *  row for the window rather than a smaller history (I3). */
+export async function collectAzureMonths(cfg: Pick<AzureCfg, 'subscriptionId'>, token: string, window: { from: string; to: string }, fetchImpl: FetchLike, at: string, sleep?: (ms: number) => Promise<void>): Promise<CostMonthV1[]> {
+  const base = { type: 'ap.cost-month.v1' as const, platform: 'azure' as const, account: cfg.subscriptionId, basis: 'billed' as const, asOf: at, throughDay: window.to };
+  const svc = await monthlyBy(cfg, token, 'ServiceName', window, fetchImpl, sleep);
+  if ('error' in svc) return [{ ...base, month: window.to.slice(0, 7), amountMicroUsd: 0, byService: [], byScope: [], toDate: true, ok: false, error: svc.error }];
+  const scope = await monthlyBy(cfg, token, 'ResourceGroupName', window, fetchImpl, sleep);
+  const thisMonth = at.slice(0, 7);
+  const months = [...new Set(svc.rows.map((r) => r.month))].sort();
+  const biggestFirst = (xs: Array<{ key: string; usd: number }>): Array<{ key: string; amountMicroUsd: number }> =>
+    [...xs].sort((a, b) => b.usd - a.usd).map((x) => ({ key: x.key, amountMicroUsd: microUsd(x.usd) }));
+  return months.map((month) => {
+    const mine = svc.rows.filter((r) => r.month === month);
+    return {
+      ...base, month,
+      amountMicroUsd: microUsd(mine.reduce((n, r) => n + r.usd, 0)),
+      byService: biggestFirst(mine),
+      byScope: 'error' in scope ? [] : biggestFirst(scope.rows.filter((r) => r.month === month)),
+      toDate: month === thisMonth,
+      throughDay: month === thisMonth ? window.to : new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0)).toISOString().slice(0, 10),
+      ok: true,
+      ...('error' in scope ? { error: `the scope split could not be read: ${scope.error}` } : {}),
+    };
+  });
 }

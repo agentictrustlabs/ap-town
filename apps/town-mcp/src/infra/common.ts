@@ -46,6 +46,16 @@ export function previousHour(nowMs: number): { from: string; to: string } {
   const to = Math.floor(nowMs / 3_600_000) * 3_600_000;
   return { from: nowIso(to - 3_600_000), to: nowIso(to) };
 }
+/** The first day of the month `n` months back — the start of a history window whose months are WHOLE. A window
+ *  that began mid-month would report a partial first month as if it were a month, which is the one thing a
+ *  baseline must not do.
+ *
+ *  KEEP `n` AT 12 OR LESS for Azure: Cost Management refuses a range over one year outright ("The time period for
+ *  pulling the data cannot exceed 1 year(s)", seen on 13 — the whole history then came back as one failed row). */
+export function monthsBack(nowMs: number, n: number): string {
+  const d = new Date(nowMs);
+  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - (n - 1), 1)).toISOString().slice(0, 10);
+}
 /** `[day − days + 1, day]` as `YYYY-MM-DD` for a rolling cost window ending yesterday. */
 export function rollingDays(nowMs: number, days: number): { from: string; to: string; days: string[] } {
   const end = Math.floor(nowMs / 86_400_000) * 86_400_000 - 86_400_000;

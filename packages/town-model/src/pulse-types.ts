@@ -23,6 +23,42 @@ export interface InfraSampleV1 {
   error?: string;
 }
 
+/**
+ * A WHOLE MONTH, AS THE PROVIDER BILLED IT — spec 437 I1/I2, the baseline the daily window cannot give.
+ *
+ * The daily rows answer "what is it costing now"; they are collected over a rolling few days and no window of
+ * them can answer "is this month unusual". That question needs the provider's own history, so this is read from
+ * the provider at month granularity and kept: one row per (platform, account, month, basis), with the month's
+ * total and its split by whatever dimension the provider names things by (`byService`) and by resource group
+ * (`byScope`, which is what the manifest attributes).
+ *
+ * `toDate: true` says the month is NOT OVER — the figure is the month so far, and comparing it with a finished
+ * month as though they were the same kind of number is the mistake this flag exists to prevent. A later read of
+ * the same month supersedes the earlier one, because billed figures restate.
+ */
+export interface CostMonthV1 {
+  type: 'ap.cost-month.v1';
+  platform: InfraPlatform;
+  account: string;
+  /** `YYYY-MM`. */
+  month: string;
+  basis: CostSampleV1['basis'];
+  amountMicroUsd: number;
+  /** The provider's own name for what was bought (Azure `ServiceName`), biggest first. */
+  byService: Array<{ key: string; amountMicroUsd: number }>;
+  /** The billing scope the manifest attributes — an Azure resource group — biggest first. */
+  byScope: Array<{ key: string; amountMicroUsd: number }>;
+  /** The month is still running: this is the total SO FAR, never a month to compare with a finished one. */
+  toDate: boolean;
+  /** The last day the figure covers (`YYYY-MM-DD`). On a running month this is what "so far" MEANS, and it is
+   *  shown: a month-to-date through the 12th and one through the 13th are different numbers, and a reader
+   *  comparing ours with the provider's console needs to know which they are holding. */
+  throughDay: string;
+  asOf: string;
+  ok: boolean;
+  error?: string;
+}
+
 export interface CostSampleV1 {
   type: 'ap.cost-sample.v1';
   platform: InfraPlatform;
@@ -76,6 +112,11 @@ export interface PerfReadV1 {
   window: { from: string; to: string };
   infrastructure: Array<{ platform: InfraPlatform; account: string; resource: string; kind: InfraResourceKind; owner: AttributedOwner | null; latest: InfraSampleV1 | null; series: Array<{ at: string; metrics: Record<string, number | null> }> }>;
   cost: Array<{ platform: InfraPlatform; account: string; owner: AttributedOwner | null; basis: 'derived' | 'billed' | 'effective'; days: Array<{ day: string; amountMicroUsd: number; asOf: string; complete: boolean }> }>;
+  /** Spec 437 I1 — whole months as the provider billed them, oldest first: the baseline the window cannot give.
+   *  Operator-only like every other amount; empty on a public read. `claimedMicroUsd` is the part of the month
+   *  billed to a scope the manifest CLAIMS — the total is the whole account, which pays for more than the town —
+   *  and `null` when the provider would not give the scope split, which is different from nothing being claimed. */
+  months: Array<CostMonthV1 & { claimedMicroUsd: number | null }>;
   /** Per estate: the provenance half of performance, as the estate reported it (`EstateHeartbeatV1.performance`). */
   provenance: Record<string, unknown | null>;
   /**

@@ -5,7 +5,7 @@
 // labels (I6); the Unattributed bucket, SHOWN (I4). `detail: false` is the public read — status, lag, the provenance
 // block (aggregate counts, as the heartbeat already is) and the unattributed list; amounts and metrics are the
 // operator's (434 §10). Nothing here is a permission.
-import { attributeResource, type AttributedOwner, type CostSampleV1, type InfraSampleV1, type LagClass, type PerfReadV1, type TownManifest } from '@ap-town/town-model';
+import { attributeResource, type AttributedOwner, type CostMonthV1, type CostSampleV1, type InfraSampleV1, type LagClass, type PerfReadV1, type TownManifest } from '@ap-town/town-model';
 import type { EstateHeartbeatV1 } from '@agenticprimitives/harness/heartbeat';
 import type { PulseSampleV1 } from './pulse';
 import { SAMPLE_INTERVAL_MS } from './pulse';
@@ -15,7 +15,7 @@ export const PERF_WINDOWS: PerfWindow[] = ['24h', '7d', '30d', '90d'];
 export const windowMsOf = (w: string): number => (w === '90d' ? 90 : w === '30d' ? 30 : w === '7d' ? 7 : 1) * 86_400_000;
 
 /** What the town MCP's store hands back (`GET /infra/read`): a sample filed by kind, with the moment it was taken. */
-export interface InfraRowV1 { kind: 'infra' | 'cost'; id: string; at: string; ok: boolean; payload: InfraSampleV1 | CostSampleV1; error?: string }
+export interface InfraRowV1 { kind: 'infra' | 'cost' | 'cost-month'; id: string; at: string; ok: boolean; payload: InfraSampleV1 | CostSampleV1 | CostMonthV1; error?: string }
 
 export type PerfViewV1 = PerfReadV1 & { detail: boolean; days: string[]; sources: Array<{ platform: InfraSampleV1['platform']; account: string; ok: boolean; asOf: string | null; lagClass: LagClass | null; error: string | null }> };
 
@@ -61,6 +61,22 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
     latest: opts.detail ? s : { ...s, metrics: {} },
     series: opts.detail ? [...(seriesInfra.get(id)?.entries() ?? [])].sort(([a], [b]) => a.localeCompare(b)).map(([at, x]) => ({ at, metrics: x.metrics })) : [],
   })).sort((a, b) => a.platform.localeCompare(b.platform) || a.account.localeCompare(b.account) || a.resource.localeCompare(b.resource));
+
+  // ── The MONTHS (spec 437 I1): the provider's own history, the baseline a window cannot give. The latest read
+  //    of a month supersedes the earlier one — billed figures restate for months as they do for days — and the
+  //    running month keeps its `toDate` so no surface compares it with a finished one. Not windowed: a baseline
+  //    is the point, and it is a handful of rows.
+  const latestMonth = new Map<string, { at: string; m: CostMonthV1 }>();
+  for (const s of rows.filter((x) => x.kind === 'cost-month')) { const m = s.payload as CostMonthV1; const cur = latestMonth.get(s.id); if (!cur || cur.at <= s.at) latestMonth.set(s.id, { at: s.at, m }); }
+  // THE PART THAT IS THE TOWN'S, computed HERE because attribution is the manifest's and this is where the
+  // manifest is. A subscription pays for more than one thing — this one also carries an App Service and a
+  // wallet that are nobody's business of the town's — so a month's total is not "what the town cost" and the
+  // claimed part is carried beside it rather than left for a surface to re-derive (a surface tried, from the
+  // portal's own TownData, which does not carry the declarations: every month read $0.00).
+  const months = [...latestMonth.values()].map((x) => x.m).sort((a, b) => a.month.localeCompare(b.month)).map((m) => ({
+    ...m,
+    claimedMicroUsd: m.byScope.length ? m.byScope.filter((x) => attributeResource(town, m.platform, x.key)).reduce((n, x) => n + x.amountMicroUsd, 0) : null,
+  }));
 
   // ── Cost: the latest read of every (platform, account, day, resource, sku) wins; days in the window only ──
   const latestCost = new Map<string, { at: string; c: CostSampleV1 }>();
@@ -124,7 +140,7 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
     if (!cur || at > curAt || (at === curAt && !s.ok)) { sourceMap.set(k, row); seenAt.set(k, at); }
   }
   const complete = [...latestInfra.values()].every((s) => s.ok) && costRows.every((c) => c.complete && c.ok);
-  return { window: { from: new Date(from).toISOString(), to: new Date(opts.nowMs).toISOString() }, infrastructure, cost: opts.detail ? cost : [], provenance, costPerCompletedRun, unattributed, complete, detail: opts.detail, days, sources: [...sourceMap.values()] };
+  return { window: { from: new Date(from).toISOString(), to: new Date(opts.nowMs).toISOString() }, infrastructure, cost: opts.detail ? cost : [], months: opts.detail ? months : [], provenance, costPerCompletedRun, unattributed, complete, detail: opts.detail, days, sources: [...sourceMap.values()] };
 }
 
 /** The operator's read: the one town ops token, compared in constant time; unset ⇒ nobody has detail. */

@@ -11,7 +11,7 @@
 // Attribution is DECLARED in town.yaml (I4), so a row's owner links to the estate or service that claims it and
 // what nothing claims is shown rather than folded away. Amounts are the operator's read, as everywhere.
 import type { ReactNode } from 'react';
-import { Chip, Empty, Link, SectionHead, Sparkline, Stat, BasisBadge, LagBadge, fmtUsd } from '@ap-town/town-ui';
+import { Bar, Chip, Empty, Link, SectionHead, Sparkline, Stat, BasisBadge, LagBadge, fmtUsd } from '@ap-town/town-ui';
 import type { TownData } from '../types';
 import type { PerfView } from './InfraTabs';
 
@@ -55,7 +55,10 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
           the <Link href="/operations/infra">Infra</Link> tab; money is not.
         </SectionHead>
         <Empty title="Paste the town ops token to see the amounts.">
-          The token is at the top right. It unlocks a READ and grants nothing — the town acts for nobody.
+          <strong>Operator</strong>, at the top right of the tabs. The token is the town&rsquo;s own
+          <span className="mono"> TOWN_OPS_TOKEN</span> — the operator keeps it in <span className="mono">ap-town/.env.ops.local</span>,
+          and it is held in this browser tab&rsquo;s session only, never stored. It unlocks a READ and grants nothing:
+          the town acts for nobody, and no amount here is anybody&rsquo;s Home.
         </Empty>
       </section>
     );
@@ -102,6 +105,8 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
         )}
       </section>
 
+      {perf.months.length > 0 && <Months months={perf.months} />}
+
       <section>
         <SectionHead eyebrow="Who spends it" title="By owner" id="by-owner">
           Attribution is declared in <span className="mono">town.yaml</span>, never inferred — each owner links to
@@ -142,6 +147,31 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
           })}</tbody>
         </table>
       </section>
+
+      {perf.months.length > 0 && (() => {
+        const m = perf.months[perf.months.length - 1]!;
+        if (!m.byService.length) return null;
+        const t = m.byService.reduce((n, x) => n + x.amountMicroUsd, 0);
+        return (
+          <section>
+            <SectionHead eyebrow="What the money bought" title={`By service · ${m.month}${m.toDate ? ' so far' : ''}`} id="by-service">
+              The provider&rsquo;s own naming of what was bought, biggest first. This is the line that answers
+              &ldquo;why is this month different&rdquo; — a service that appears, or doubles, is the whole story.
+            </SectionHead>
+            <table className="table">
+              <thead><tr><th scope="col">Service</th><th scope="col" className="num">Cost</th><th scope="col" className="num">Share</th><th scope="col">&nbsp;</th></tr></thead>
+              <tbody>{m.byService.map((x) => (
+                <tr key={x.key}>
+                  <th scope="row">{x.key}</th>
+                  <td className="num">{fmtUsd(x.amountMicroUsd)}</td>
+                  <td className="num">{t > 0 ? `${((x.amountMicroUsd / t) * 100).toFixed(1)}%` : '—'}</td>
+                  <td><Bar ratio={t > 0 ? x.amountMicroUsd / t : 0} /></td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </section>
+        );
+      })()}
 
       <section>
         <SectionHead eyebrow="Day by day" title="Per day" id="per-day">
@@ -200,5 +230,67 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
         )}
       </section>
     </>
+  );
+}
+
+/** A month is only legible against the ones before it, so the history is a table with the change carried in it —
+ *  and the running month is NEVER compared as though it were finished (its `toDate` is the whole point). The
+ *  split is the provider's own naming of what was bought, which is what answers "why is this month different". */
+function Months({ months }: { months: PerfView['months'] }): ReactNode {
+  const done = months.filter((m) => !m.toDate);
+  const running = months.filter((m) => m.toDate);
+  // THE BASELINE MUST NOT DROP THE MONTH THAT MATTERS. An average over "the six before the latest" quietly
+  // excluded September — the $770 month this one is actually being compared with — and read as though spending
+  // had exploded when it has roughly halved. The window is the last six FINISHED months, the months it covers
+  // are named, and the previous month is given on its own because an average over an outlier hides it.
+  const recent = done.slice(-6);
+  const typical = recent.length ? recent.reduce((n, m) => n + m.amountMicroUsd, 0) / recent.length : null;
+  const last = done[done.length - 1];
+  const shown = [...months].reverse();
+  const prevOf = (i: number): typeof months[number] | undefined => shown[i + 1];
+  const top = (m: typeof months[number], n: number): string =>
+    m.byService.slice(0, n).map((x) => `${x.key} ${(x.amountMicroUsd / 1e6).toFixed(2)}`).join(' · ') || '—';
+  // A SUBSCRIPTION IS NOT A TOWN: the total is everything billed to the account, and this one also pays for work
+  // that is not the town's. The claimed part is computed where the manifest is (the worker) and read here.
+  const mine = (m: typeof months[number]): number | null => m.claimedMicroUsd;
+  return (
+    <section>
+      <SectionHead eyebrow="The baseline a window cannot give" title="Month by month" id="months">
+        Whole months as the provider billed them, newest first. The change is against the month before; the month
+        still running carries what it has spent SO FAR and is never compared as though it were finished.
+        <strong> The total is the whole subscription</strong> — this one also pays for work that is not the
+        town&rsquo;s — so each month also shows the part billed to a scope <span className="mono">town.yaml</span> claims.
+      </SectionHead>
+      {typical !== null && running.length > 0 && (
+        <p className="lede">
+          This month through {running[0]!.throughDay}: <strong>{fmtUsd(running[0]!.amountMicroUsd)}</strong>
+          {last && <span className="quiet"> · {last.month} finished at {fmtUsd(last.amountMicroUsd)}</span>}
+          <span className="quiet"> · the {recent.length} finished month{recent.length === 1 ? '' : 's'} {recent[0]!.month}–{recent[recent.length - 1]!.month} averaged {fmtUsd(Math.round(typical))}</span>
+        </p>
+      )}
+      <table className="table">
+        <thead><tr><th scope="col">Month</th><th scope="col" className="num">Total</th><th scope="col" className="num">The town&rsquo;s</th><th scope="col" className="num">Change</th><th scope="col">Mostly</th><th scope="col">Scopes</th></tr></thead>
+        <tbody>{shown.map((m, i) => {
+          const prev = prevOf(i);
+          // A running month against a finished one is not a comparison, so it is not drawn as one.
+          const delta = prev && !m.toDate && !prev.toDate && prev.amountMicroUsd > 0 ? (m.amountMicroUsd - prev.amountMicroUsd) / prev.amountMicroUsd : null;
+          return (
+            <tr key={`${m.platform}|${m.account}|${m.month}`}>
+              <th scope="row" className="mono">{m.month}{m.toDate && <> <Chip tone="warn">through {m.throughDay.slice(8)}</Chip></>}</th>
+              <td className="num">{m.ok ? fmtUsd(m.amountMicroUsd) : <span className="quiet">unreadable</span>}</td>
+              <td className="num">{(() => { const t2 = mine(m); return t2 === null ? <span className="quiet">—</span> : <>{fmtUsd(t2)} <span className="quiet">{m.amountMicroUsd > 0 ? `${Math.round((t2 / m.amountMicroUsd) * 100)}%` : ''}</span></>; })()}</td>
+              {/* A change of −0.4% printed as "-0%", which reads as a bug rather than as "the same". */}
+              <td className="num">{delta === null ? <span className="quiet">—</span> : <span style={{ color: delta > 0.15 ? 'var(--warn-ink, #92400e)' : undefined }}>{Math.round(delta * 100) === 0 ? '0%' : `${delta > 0 ? '+' : ''}${(delta * 100).toFixed(0)}%`}</span>}</td>
+              <td className="quiet">{top(m, 3)}</td>
+              <td className="quiet">{m.byScope.slice(0, 3).map((x) => x.key).join(', ') || '—'}</td>
+            </tr>
+          );
+        })}</tbody>
+      </table>
+      {months.some((m) => m.error) && <p className="quiet"><Chip tone="warn">partial</Chip> {months.find((m) => m.error)!.error}</p>}
+      <p className="quiet">Billed figures restate for up to 72 h, so a recent month can still move. Read from the
+      provider&rsquo;s own history, not accumulated from this town&rsquo;s daily rows — only a platform that serves
+      months appears here.</p>
+    </section>
   );
 }

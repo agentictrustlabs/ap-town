@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import type { TownManifest } from '@ap-town/town-model';
 import { collectCloudflareHourly, deriveCloudflareCost, HOURLY_DATASETS } from '../src/infra/cloudflare';
 import { collectVercelCharges, collectVercelDeployments, parseFocus, projectOf } from '../src/infra/vercel';
-import { collectAzureCost, collectAzureHealth, collectAzureVmMetrics } from '../src/infra/azure';
+import { collectAzureCost, collectAzureHealth, collectAzureMonths, collectAzureVmMetrics } from '../src/infra/azure';
 import { collectGraphdbHealth, collectGraphdbRepositories, parsePrometheus } from '../src/infra/graphdb';
 import { collectCostPass, collectHourlyPass, collectStatusPass, PRICING } from '../src/infra/passes';
 import { attributeResource, declaredResources } from '@ap-town/town-model';
@@ -123,6 +123,30 @@ describe('azure collector', () => {
   // authorization", which is false here — the same credential read every resource group, every VM metric and
   // the whole cost query. The sample must name the provider registration, or the Pulse sends its reader to
   // re-issue a service principal that was never the problem.
+  // Spec 437 I1 — WHOLE MONTHS, the baseline. Monthly answers name the period `BillingMonth` (daily ones say
+  // `UsageDate`), the running month is marked `toDate` so nothing compares it with a finished one, and a refused
+  // SCOPE split leaves the month readable with its reason rather than dropping the month.
+  it('months: BillingMonth is read, the running month is marked to-date, a refused split keeps the month', async () => {
+    const answer = (dim: string) => json({ properties: { columns: [{ name: 'Cost' }, { name: 'BillingMonth' }, { name: dim }, { name: 'Currency' }], rows: [
+      [100, '2026-09-01T00:00:00', dim === 'ServiceName' ? 'Virtual Machines' : 'rg-a', 'USD'],
+      [25, '2026-09-01T00:00:00', dim === 'ServiceName' ? 'Azure Bastion' : 'rg-b', 'USD'],
+      [10, '2026-10-01T00:00:00', dim === 'ServiceName' ? 'Virtual Machines' : 'rg-a', 'USD'],
+    ] } });
+    const ms = await collectAzureMonths(cfg, 'tok', { from: '2026-09-01', to: '2026-10-13' }, fetchOf((_u, init) => answer(String((init as RequestInit)?.body ?? '').includes('ServiceName') ? 'ServiceName' : 'ResourceGroupName')), '2026-10-13T00:00:00.000Z');
+    expect(ms.map((m) => m.month)).toEqual(['2026-09', '2026-10']);
+    expect(ms[0]).toMatchObject({ amountMicroUsd: 125_000_000, toDate: false, ok: true });
+    expect(ms[0]!.byService.map((x) => x.key)).toEqual(['Virtual Machines', 'Azure Bastion']); // biggest first
+    expect(ms[0]!.byScope.map((x) => x.key)).toEqual(['rg-a', 'rg-b']);
+    expect(ms[1]).toMatchObject({ month: '2026-10', amountMicroUsd: 10_000_000, toDate: true, throughDay: '2026-10-13' });
+    // A FINISHED month is covered to its own last day, not to the window's end — otherwise September would claim
+    // to be "through 13 October", which is the sort of label that makes a correct number unbelievable.
+    expect(ms[0]!.throughDay).toBe('2026-09-30');
+
+    const noScope = await collectAzureMonths(cfg, 'tok', { from: '2026-09-01', to: '2026-10-13' }, fetchOf((_u, init) => (String((init as RequestInit)?.body ?? '').includes('ServiceName') ? answer('ServiceName') : json({ error: 'nope' }, 500))), '2026-10-13T00:00:00.000Z');
+    expect(noScope[0]).toMatchObject({ ok: true, amountMicroUsd: 125_000_000, byScope: [] });
+    expect(noScope[0]!.error).toMatch(/scope split could not be read/);
+  });
+
   it('an unregistered Microsoft.ResourceHealth says so, not "auth"', async () => {
     const body = { code: 'AuthError', message: 'An error occured in authentication or authorization. Make sure the resource provider has been registered with this subscription' };
     const [s] = await collectAzureHealth(cfg, 'tok', [vm], fetchOf(() => json(body, 409)), AT);

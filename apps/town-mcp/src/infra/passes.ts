@@ -3,12 +3,12 @@
 // took plus the sources it could not read. A source that is not configured is NOT CONFIGURED on the tab — a failed
 // sample per declared account — never a zero. Attribution is DECLARED in `town.yaml`; a resource listed nowhere is
 // `null` here and lands in the Unattributed bucket the Pulse SHOWS (I4).
-import type { CostSampleV1, InfraSampleV1, PricingV1, TownManifest } from '@ap-town/town-model';
-import { type FetchLike, dayOf, nowIso, previousHour, rollingDays } from './common';
+import type { CostMonthV1, CostSampleV1, InfraSampleV1, PricingV1, TownManifest } from '@ap-town/town-model';
+import { type FetchLike, dayOf, monthsBack, nowIso, previousHour, rollingDays } from './common';
 import { declaredResources } from '@ap-town/town-model';
 import { type CloudflareAccountCfg, collectCloudflareHourly, collectCloudflareStorage, deriveCloudflareCost } from './cloudflare';
 import { collectVercelCharges, collectVercelDeployments } from './vercel';
-import { azureAccessToken, collectAzureCost, collectAzureHealth, collectAzureVmMetrics } from './azure';
+import { azureAccessToken, collectAzureCost, collectAzureHealth, collectAzureMonths, collectAzureVmMetrics } from './azure';
 import { collectGraphdbHealth, collectGraphdbRepositories } from './graphdb';
 import pricingJson from './pricing.json';
 
@@ -26,7 +26,7 @@ export interface InfraEnv {
   GRAPHDB_MONITOR_TOKEN?: string;
 }
 
-export interface InfraPass { samples: InfraSampleV1[]; costs: CostSampleV1[]; unreadable: string[] }
+export interface InfraPass { samples: InfraSampleV1[]; costs: CostSampleV1[]; unreadable: string[]; months?: CostMonthV1[] }
 
 const parseAccounts = (env: InfraEnv): { ok: true; accounts: CloudflareAccountCfg[] } | { ok: false; error: string } => {
   if (!env.CLOUDFLARE_ACCOUNTS) return { ok: false, error: 'CLOUDFLARE_ACCOUNTS unset' };
@@ -80,7 +80,10 @@ export async function collectCostPass(town: TownManifest, env: InfraEnv, fetchIm
   const at = nowIso(nowMs); const out: InfraPass = { samples: [], costs: [], unreadable: [] };
   const roll = rollingDays(nowMs, 7); const yesterday = roll.to;
   if (town.accounts?.vercel) { if (env.VERCEL_TOKEN) out.costs.push(...await collectVercelCharges({ token: env.VERCEL_TOKEN, teamId: town.accounts.vercel.teamId }, roll.from, roll.to, fetchImpl, at)); else { out.unreadable.push('vercel: VERCEL_TOKEN unset'); out.costs.push({ type: 'ap.cost-sample.v1', platform: 'vercel', account: town.accounts.vercel.teamId, day: yesterday, resource: '*', amountMicroUsd: 0, basis: 'billed', asOf: at, complete: false, ok: false, error: 'not configured: VERCEL_TOKEN unset' }); } }
-  if (town.accounts?.azure) { const cfg = azureCfg(env); if (!cfg) { out.unreadable.push('azure: AZURE_* unset'); out.costs.push({ type: 'ap.cost-sample.v1', platform: 'azure', account: town.accounts.azure.subscriptionId, day: yesterday, resource: '*', amountMicroUsd: 0, basis: 'billed', asOf: at, complete: false, ok: false, error: 'not configured: AZURE_* unset' }); } else { const t = await azureAccessToken(cfg, fetchImpl); if (t.ok) out.costs.push(...await collectAzureCost(cfg, t.token, { from: roll.from, to: roll.to }, fetchImpl, at)); else { out.unreadable.push(`azure: ${t.error}`); out.costs.push({ type: 'ap.cost-sample.v1', platform: 'azure', account: cfg.subscriptionId, day: yesterday, resource: '*', amountMicroUsd: 0, basis: 'billed', asOf: at, complete: false, ok: false, error: t.error }); } } }
+  if (town.accounts?.azure) { const cfg = azureCfg(env); if (!cfg) { out.unreadable.push('azure: AZURE_* unset'); out.costs.push({ type: 'ap.cost-sample.v1', platform: 'azure', account: town.accounts.azure.subscriptionId, day: yesterday, resource: '*', amountMicroUsd: 0, basis: 'billed', asOf: at, complete: false, ok: false, error: 'not configured: AZURE_* unset' }); } else { const t = await azureAccessToken(cfg, fetchImpl); if (t.ok) { out.costs.push(...await collectAzureCost(cfg, t.token, { from: roll.from, to: roll.to }, fetchImpl, at)); // THROUGH TODAY, not yesterday: the daily rows stop at yesterday because a part-day is not a day, but a
+      // month-to-date that silently omits today disagrees with the provider's own console by a day's spend and
+      // sends whoever compares them looking for a bug (2026-10-13: $311.21 here against Azure's $323.85).
+      out.months = await collectAzureMonths(cfg, t.token, { from: monthsBack(nowMs, 12), to: dayOf(at) }, fetchImpl, at); for (const m of out.months.filter((x) => !x.ok)) out.unreadable.push(`azure months: ${m.error}`); } else { out.unreadable.push(`azure: ${t.error}`); out.costs.push({ type: 'ap.cost-sample.v1', platform: 'azure', account: cfg.subscriptionId, day: yesterday, resource: '*', amountMicroUsd: 0, basis: 'billed', asOf: at, complete: false, ok: false, error: t.error }); } } }
   if (town.accounts?.cloudflare?.length) {
     const a = parseAccounts(env);
     if (!a.ok) { out.unreadable.push(`cloudflare: ${a.error}`); for (const acct of town.accounts.cloudflare) out.costs.push({ type: 'ap.cost-sample.v1', platform: 'cloudflare', account: acct.id, day: yesterday, resource: '*', amountMicroUsd: 0, basis: 'derived', asOf: at, complete: false, ok: false, error: `not configured: ${a.error}` }); }
