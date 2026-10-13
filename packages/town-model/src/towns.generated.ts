@@ -189,7 +189,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "governance": "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015",
           "estateId": "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84",
           "signer": "0xAdcd7257De9686061C0838154cA77790C79a9EfD",
-          "declaredOnChain": false
+          "declaredOnChain": true
         },
         "workers": [
           "imb-runtime",

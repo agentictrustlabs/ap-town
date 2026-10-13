@@ -117,7 +117,9 @@ estates:
       governance: "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015"   # imbnet.estate
       estateId: "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84"
       signer: "0xAdcd7257De9686061C0838154cA77790C79a9EfD"
-      declaredOnChain: false
+      # DECLARED 2026-10-14: imbnet.estate wrote `atl:projectionSigner` on this chain (tx 0x35045e1b…); the projector and
+      # the federation door read it and compare with neutral ground's `signerOf` — chain-verifiable both ways.
+      declaredOnChain: true
     # NAMED SO A DASHBOARD IS READABLE. `demo-a2a-faithnet` and `demo-mcp-faithnet` are historical: "demo" says
     # nothing and "a2a"/"mcp" name a protocol rather than a job. These say what each Worker IS and sort together
     # under one prefix, which is what you want the moment a list holds two estates' worth of them.
