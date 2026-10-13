@@ -52,6 +52,9 @@ export function townSummary(town: TownManifest) {
   return {
     town: town.town, status: town.status,
     chain: { id: town.chain.id, generation: town.chain.generation, rpc: town.chain.rpc },
+    // Spec 437 I4 — what the town runs on that nothing meters, so the Cost page can show the whole bill's
+    // SHAPE even where it cannot show a figure. Declared, public, and never an amount.
+    ...(town.vendors?.length ? { vendors: town.vendors } : {}),
     // `estateName` and `a2a` ride along so a reader can see WHO answers for an estate and WHERE — the estate's
     // own name on the chain, and the door its agents are reached through. Both are facts the manifest records;
     // neither is authority (spec 429 D2), and the name is the stable one of the two (the URL moves).

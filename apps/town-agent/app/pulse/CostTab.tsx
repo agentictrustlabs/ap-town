@@ -221,6 +221,29 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
         )}
       </section>
 
+      {t.vendors && t.vendors.length > 0 && (
+        <section>
+          <SectionHead eyebrow="What nothing meters" title="The rest of what we run on" id="vendors">
+            Four platforms have APIs that answer, so four platforms are on this page in dollars. The rest of the
+            bill is just as real: source hosting and the CI that builds it, a package registry, eight domains, a
+            key service, a graph database. They are declared in <span className="mono">town.yaml</span> and shown
+            here so that the easy half is not mistaken for the whole — <strong>no amounts</strong>, because these
+            are read from the providers&rsquo; own invoices and that is where to read them.
+          </SectionHead>
+          <table className="table">
+            <thead><tr><th scope="col">What</th><th scope="col">Billing</th><th scope="col">Measured here</th><th scope="col">Where the bill is</th></tr></thead>
+            <tbody>{t.vendors.map((v) => (
+              <tr key={v.id}>
+                <th scope="row"><span className="mono">{v.id}</span><br /><span className="quiet">{v.what}</span>{v.note && <><br /><span className="quiet">{v.note}</span></>}</th>
+                <td><Chip tone={v.billing === 'free' ? 'ok' : v.billing === 'plan' ? 'free' : 'muted'}>{v.billing}</Chip></td>
+                <td>{v.metered ? <Chip tone="ok">on this page</Chip> : <span className="quiet">not metered</span>}</td>
+                <td className="quiet mono break">{v.where ?? '—'}</td>
+              </tr>
+            ))}</tbody>
+          </table>
+        </section>
+      )}
+
       <section>
         <SectionHead eyebrow="Owned by nobody in the manifest" title="Unattributed" id="unattributed">
           Money nothing in <span className="mono">town.yaml</span> claims. It is shown rather than folded into a

@@ -24,6 +24,8 @@ export interface TownData {
   agents?: { town: ContextAgentView | null; estates: Record<string, ContextAgentView> };
   /** A demo persona this deployment offers as a one-click sign-in (`DEMO_CONNECT`); absent ⇒ no demo door. */
   demoConnect?: string;
+  /** Spec 437 I4 — what the town runs on that nothing meters, as the manifest declares it. Never amounts. */
+  vendors?: Array<{ id: string; what: string; billing: 'plan' | 'usage' | 'per-unit' | 'free'; where?: string; note?: string; metered?: string }>;
   card: string;
   /** Spec 437 I4 — the accounts' ids and labels (never a token), for the Infra tab's names. */
   accounts?: { cloudflare?: Array<{ id: string; label: string }>; vercel?: { teamId: string; label?: string }; azure?: { subscriptionId: string; resourceGroups: string[]; label?: string }; graphdb?: { url: string; label?: string } } | null;
