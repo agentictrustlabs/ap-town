@@ -56,7 +56,23 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
   for (const s of infra) { const k = cadence(s); const cur = latestAt.get(k); if (cur === undefined || cur <= s.at) { latestInfra.set(k, s.payload as InfraSampleV1); latestAt.set(k, s.at); } }
   const seriesInfra = new Map<string, Map<string, InfraSampleV1>>();
   for (const s of infra) { if (Date.parse(s.at) < from || !s.ok) continue; const k = cadence(s); const m = seriesInfra.get(k) ?? new Map<string, InfraSampleV1>(); m.set(bucket(s.at), s.payload as InfraSampleV1); seriesInfra.set(k, m); }
-  const infrastructure: PerfReadV1['infrastructure'] = [...latestInfra.entries()].filter(([, s]) => s.resource !== '*' || !s.ok).map(([id, s]) => ({
+  // A DATASET'S FAILURE IS SUPERSEDED BY THE DATASET READING AGAIN. A failed read is filed under a synthetic
+  // id (`d1:*`, `ai:*`, `*`) while a successful one writes a row PER RESOURCE, so nothing newer ever lands on
+  // the failure's id and it is still "the last word" months later. Three such rows were shouting on the Infra
+  // page on 2026-10-13 — "ai: unknown field requests", "d1: unknown field queryBatchTimeMs", "no token for
+  // this account" — every one of them fixed days earlier, with the same datasets reading perfectly beside
+  // them. A synthetic row is dropped once a LATER successful read exists for its platform, account and kind;
+  // a dataset that is genuinely still failing has nothing newer and keeps saying so.
+  // Keyed by ACCOUNT, not by account-and-kind: every pass re-files a dataset failure under the same synthetic
+  // id, so a failure older than the account's newest sample is one the pass has since stopped making. Keying
+  // it by kind left two rows standing on an account with no resources of that kind to supersede them — an
+  // "unknown field" from a collector bug fixed days earlier, with nothing able to retire it.
+  const newestRead = new Map<string, string>();
+  for (const [k, s] of latestInfra) { const g = `${s.platform}|${s.account}`; const at = latestAt.get(k) ?? ''; if (!newestRead.has(g) || newestRead.get(g)! < at) newestRead.set(g, at); }
+  const superseded = (k: string, s: InfraSampleV1): boolean =>
+    !s.ok && s.resource.endsWith('*') && (newestRead.get(`${s.platform}|${s.account}`) ?? '') > (latestAt.get(k) ?? '');
+
+  const infrastructure: PerfReadV1['infrastructure'] = [...latestInfra.entries()].filter(([k, s]) => (s.resource !== '*' || !s.ok) && !superseded(k, s)).map(([id, s]) => ({
     platform: s.platform, account: s.account, resource: s.resource, kind: s.kind, owner: attributeResource(town, s.platform, s.resource, s.kind),
     latest: opts.detail ? s : { ...s, metrics: {} },
     series: opts.detail ? [...(seriesInfra.get(id)?.entries() ?? [])].sort(([a], [b]) => a.localeCompare(b)).map(([at, x]) => ({ at, metrics: x.metrics })) : [],

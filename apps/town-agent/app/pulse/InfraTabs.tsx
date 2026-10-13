@@ -81,8 +81,24 @@ const SHOW = 12;
 
 export function InfraTab({ t, perf }: { t: TownData; perf: PerfView }): ReactNode {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const groups = new Map<string, InfraRow[]>();
-  for (const r of perf.infrastructure) { const k = `${r.platform}|${r.account}`; groups.set(k, [...(groups.get(k) ?? []), r]); }
+  // ONE ROW PER RESOURCE, not per cadence. The view keeps a tile per cadence because a tile carries the `asOf`
+  // and lag that are ITS OWN — but a table that shows an Azure VM twice, once red because Resource Health is
+  // unregistered and once green with its CPU, reads as six resources with three of them broken when it is
+  // three resources that are all up (seen 2026-10-13: "3 / 6 readable"). The row shows the best reading there
+  // is, labelled with the age of THAT reading, and names the cadence that could not be taken rather than
+  // hiding it. The count is of resources, which is what a reader is counting.
+  const merged = new Map<string, { row: InfraRow; failed: InfraRow[] }>();
+  for (const r of perf.infrastructure) {
+    const k = `${r.platform}|${r.account}|${r.kind}|${r.resource}`;
+    const cur = merged.get(k);
+    if (!cur) { merged.set(k, { row: r, failed: [] }); continue; }
+    const better = !cur.row.latest?.ok && !!r.latest?.ok ? r : cur.row;
+    const other = better === cur.row ? r : cur.row;
+    merged.set(k, { row: better, failed: other.latest && !other.latest.ok ? [...cur.failed, other] : cur.failed });
+  }
+  const groups = new Map<string, Array<{ row: InfraRow; failed: InfraRow[] }>>();
+  for (const m of merged.values()) { const k = `${m.row.platform}|${m.row.account}`; groups.set(k, [...(groups.get(k) ?? []), m]); }
+  for (const [, rows] of groups) rows.sort((a, b) => a.row.resource.localeCompare(b.row.resource));
   const unattributedBy = new Map<string, number>();
   for (const u of perf.unattributed) { const k = `${u.platform}|${u.account}`; unattributedBy.set(k, (unattributedBy.get(k) ?? 0) + 1); }
   const costTotal = (days: PerfViewV1['cost'][number]['days']) => days.reduce((n, d) => n + d.amountMicroUsd, 0);
@@ -97,13 +113,15 @@ export function InfraTab({ t, perf }: { t: TownData; perf: PerfView }): ReactNod
       <div className="cards">
         {[...groups.entries()].map(([k, rows]) => {
           const [platform, account] = k.split('|') as [string, string];
-          const live = rows.filter((r) => r.latest?.ok);
+          const live = rows.filter((r) => r.row.latest?.ok);
           return (
             <article key={k} className="card card-wide">
               <span className="card-head"><span><span className="card-title">{PLATFORM_LABEL[platform] ?? platform}</span><br /><span className="card-sub mono">{accountLabel(t, platform, account)}</span></span><Chip tone={live.length === rows.length ? 'ok' : live.length ? 'warn' : 'bad'}>{live.length} / {rows.length} readable</Chip></span>
               <table className="table table-tight">
                 <thead><tr><th scope="col">Resource</th><th scope="col">Kind</th><th scope="col">Owner</th><th scope="col">Status</th><th scope="col">As of</th>{perf.detail && <th scope="col">Last reading</th>}</tr></thead>
-                <tbody>{(expanded.has(k) ? rows : rows.slice(0, SHOW)).map((r) => <tr key={`${r.resource}|${r.kind}|${r.latest?.lagClass ?? ''}`}><th scope="row" className="mono">{r.resource}</th><td>{r.kind}</td><td>{ownerChip(r.owner)}</td><td>{statusChip(r)}{r.latest && !r.latest.ok && <span className="quiet"> {r.latest.error}</span>}</td><td><span className="quiet">{fmtAgo(r.latest?.asOf)}</span> <LagBadge lag={r.latest?.lagClass} /></td>{perf.detail && <td>{keyMetrics(r)}{r.series.length > 1 && (r.series[0]?.metrics.requests !== undefined || r.series[0]?.metrics.cpuPercent !== undefined) && <> <Sparkline points={r.series.map((x) => x.metrics.requests ?? x.metrics.cpuPercent ?? null)} label="over the window" /></>}</td>}</tr>)}</tbody>
+                <tbody>{(expanded.has(k) ? rows : rows.slice(0, SHOW)).map(({ row: r, failed }) => <tr key={`${r.resource}|${r.kind}`}><th scope="row" className="mono">{r.resource}</th><td>{r.kind}</td><td>{ownerChip(r.owner)}</td>{/* An `ok` row may still carry a note — "the newest build is canceled; this is the one serving" — and a note
+     nothing renders is a note nobody wrote. Shown quietly beside the status either way. */}
+              <td>{statusChip(r)}{r.latest?.error && <span className="quiet"> {r.latest.error}</span>}{r.latest?.ok && failed.length > 0 && <span className="quiet"> · its {failed.map((f) => f.latest?.lagClass).join(' and ')} reading could not be taken</span>}</td><td><span className="quiet">{fmtAgo(r.latest?.asOf)}</span> <LagBadge lag={r.latest?.lagClass} /></td>{perf.detail && <td>{keyMetrics(r)}{r.series.length > 1 && (r.series[0]?.metrics.requests !== undefined || r.series[0]?.metrics.cpuPercent !== undefined) && <> <Sparkline points={r.series.map((x) => x.metrics.requests ?? x.metrics.cpuPercent ?? null)} label="over the window" /></>}</td>}</tr>)}</tbody>
               </table>
               {rows.length > SHOW && (
                 <p className="quiet">

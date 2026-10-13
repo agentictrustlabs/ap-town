@@ -207,6 +207,29 @@ export interface TownManifest {
    * Home, no person's record, no act. Empty or absent means nobody: the ops token is then the only way in,
    * which is the safe reading of silence.
    */
+  /**
+   * WHAT THE TOWN RUNS ON THAT NOTHING METERS — spec 437 I4, the other half of attribution.
+   *
+   * The Pulse measures four platforms because four platforms have APIs that answer. The rest of the bill is
+   * real and invisible: source hosting, a package registry, eight domains, a key service, a graph database.
+   * A cost page that shows only what is easy to read teaches its reader that the easy part is the whole, so
+   * the unmetered things are DECLARED here and shown beside the measured ones, labelled as declared.
+   *
+   * NO AMOUNTS LIVE HERE. This file is public; money is the operator's read and comes from the providers.
+   */
+  vendors?: Array<{
+    id: string;
+    /** What it is, in a few words. */
+    what: string;
+    /** How it is paid for: `plan` (a subscription), `usage`, `per-unit` (domains, keys), or `free`. */
+    billing: 'plan' | 'usage' | 'per-unit' | 'free';
+    /** Where to look at the actual bill. */
+    where?: string;
+    /** Anything a reader needs in order not to misread the row. */
+    note?: string;
+    /** Set when the Pulse measures this one, so the page can point at the figure instead of repeating it. */
+    metered?: 'cloudflare' | 'vercel' | 'azure' | 'graphdb';
+  }>;
   operators?: Array<{
     /** The person's Smart Agent, as their Home's `id_token` asserts it (`sub`, CAIP-10). */
     sa: string;

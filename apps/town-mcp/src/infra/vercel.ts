@@ -10,17 +10,34 @@ export const VERCEL_API = 'https://api.vercel.com';
 interface Deployment { uid?: string; name?: string; state?: string; readyState?: string; created?: number; createdAt?: number; ready?: number; buildingAt?: number }
 const statusOf = (state: string | undefined): InfraSampleV1['status'] => (state === 'READY' ? 'up' : state === 'ERROR' || state === 'CANCELED' ? 'down' : state ? 'degraded' : 'unknown');
 
-/** One sample per project: the production deployment that is current, its state and how old it is. */
+/**
+ * One sample per project: WHAT IS SERVING, and what has happened since.
+ *
+ * The newest deployment record is not the site. A canceled build — somebody pushed twice and the first was
+ * dropped — is the newest record and nothing is wrong: the previous READY deployment is still serving. Taking
+ * the newest regardless of state reported `imb-home` as DOWN, "built in 0 ms", while the site was up and the
+ * ready build was 32 minutes old (2026-10-13). So the STATUS comes from the newest READY deployment, and the
+ * newest record is reported beside it when it is not that one — a failed build is worth seeing, as a build
+ * that failed rather than as an outage.
+ */
 export async function collectVercelDeployments(cfg: VercelCfg, projects: string[], fetchImpl: FetchLike, at: string): Promise<InfraSampleV1[]> {
   const nowMs = Date.parse(at);
   return Promise.all(projects.map(async (project) => {
-    const r = await readJson<{ deployments?: Deployment[] }>(fetchImpl, `${VERCEL_API}/v6/deployments?teamId=${encodeURIComponent(cfg.teamId)}&projectId=${encodeURIComponent(project)}&target=production&limit=1`, { headers: { authorization: `Bearer ${cfg.token}` } });
+    const r = await readJson<{ deployments?: Deployment[] }>(fetchImpl, `${VERCEL_API}/v6/deployments?teamId=${encodeURIComponent(cfg.teamId)}&projectId=${encodeURIComponent(project)}&target=production&limit=10`, { headers: { authorization: `Bearer ${cfg.token}` } });
     if (!r.ok) return failedInfra('vercel', cfg.teamId, project, 'deployment', 'live', r.error, at);
-    const d = r.data.deployments?.[0];
-    if (!d) return failedInfra('vercel', cfg.teamId, project, 'deployment', 'live', 'no production deployment', at);
-    const state = d.readyState ?? d.state; const created = num(d.createdAt ?? d.created); const ready = num(d.ready);
+    const all = r.data.deployments ?? [];
+    const stateOf = (x: Deployment): string | undefined => x.readyState ?? x.state;
+    const serving = all.find((x) => stateOf(x) === 'READY');
+    const newest = all[0];
+    if (!serving && !newest) return failedInfra('vercel', cfg.teamId, project, 'deployment', 'live', 'no production deployment', at);
+    const d = serving ?? newest!;
+    const state = stateOf(d); const created = num(d.createdAt ?? d.created); const ready = num(d.ready);
+    // A newer record that is NOT the one serving: say what it was, so a failed or canceled build is visible
+    // without being read as the site being down.
+    const since = newest && newest !== d ? stateOf(newest) : undefined;
     return infraSample({ platform: 'vercel', account: cfg.teamId, resource: project, kind: 'deployment', at, asOf: at, lagClass: 'live', status: statusOf(state),
-      metrics: { ready: state === 'READY' ? 1 : 0, deployAgeMs: ready ?? created ? nowMs - (ready ?? created!) : null, buildMs: ready !== null && created !== null ? ready - created : null } });
+      metrics: { ready: state === 'READY' ? 1 : 0, deployAgeMs: ready ?? created ? nowMs - (ready ?? created!) : null, buildMs: ready !== null && created !== null ? ready - created : null },
+      ...(since ? { error: `the newest build is ${since.toLowerCase()}; this is the one serving` } : {}) });
   }));
 }
 

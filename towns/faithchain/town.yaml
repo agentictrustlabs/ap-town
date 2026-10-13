@@ -20,6 +20,23 @@ accounts:
   azure: { subscriptionId: 5a656e13-849d-4b56-9101-53f987cf971b, resourceGroups: [rg-faithnet, rg-akcs-pilot-westus], label: faithchain-node }
   graphdb: { url: https://graphdb.agentkg.io, label: ontotext }
 
+# WHAT THE TOWN RUNS ON THAT NOTHING METERS (spec 437 I4). The Pulse measures four platforms because four
+# have APIs that answer; the rest of the bill is real and invisible. Declared here so the Inventory page can
+# show it beside the measured half, labelled as declared. NO AMOUNTS: this file is public, and money is the
+# operator's read — the figures come from the providers, on the Cost tab.
+vendors:
+  - { id: cloudflare, what: 'Workers, Durable Objects, D1, KV, Queues, Vectorize, Pages and DNS — most of what the town is', billing: usage, metered: cloudflare, where: 'dash.cloudflare.com (two accounts)', note: 'a platform fee per account; the meters themselves sit inside the included tiers at this volume' }
+  - { id: azure, what: 'the chain node, and the AKCS key-custody pilot (VMs, Postgres, registry, bastion, key vault)', billing: usage, metered: azure, where: 'portal.azure.com — subscription 5a656e13…', note: 'the largest line by a wide margin; the AKCS pilot is most of it' }
+  - { id: vercel, what: 'the estates'' Homes and the developer site', billing: plan, metered: vercel, where: 'vercel.com/rpedersen3s-projects', note: 'a Pro team; build minutes are most of the usage' }
+  - { id: graphdb, what: 'Ontotext GraphDB — the public knowledge graph the registry reads', billing: plan, metered: graphdb, where: graphdb.agentkg.io, note: 'health and repositories are measured; the hosting bill is not in any account the Pulse reads' }
+  - { id: github, what: 'source for every repository, and the CI that builds and releases them', billing: plan, where: 'github.com/agentictrustlabs + RichCanvas3', note: 'seats are the plan; Actions minutes on PRIVATE repositories are the variable part — public ones are unmetered' }
+  - { id: npm, what: 'the published @agenticprimitives packages every product installs', billing: free, where: npmjs.com/org/agenticprimitives, note: 'public packages; publishing is GitHub OIDC trusted publishing, so there is no token and no cost' }
+  - { id: domains, what: 'eight zones — faithnet.me/.io/.ai, impact-agent.me/.io/.ai, agentkg.io, agenticprimitives.dev', billing: per-unit, note: 'four on Cloudflare DNS, four on Vercel DNS; renewals are annual and .ai is the expensive one' }
+  - { id: gcp-kms, what: 'three keys in the a2a keyring — relay, envelope, interactions-session', billing: per-unit, where: 'console.cloud.google.com — project churchcore2', note: 'custodies BASE SEPOLIA only; faithchain is on AKCS. Cents per key-version per month plus operations' }
+  - { id: cloudflare-email, what: 'Email Sending and Email Routing — the one rail the estates send and receive on', billing: usage, where: 'inside the Cloudflare accounts', note: 'a Worker may only send to addresses verified in the account, so an invitation to a stranger needs a rail no estate currently has' }
+  - { id: upstash-redis, what: 'Vercel KV — the Home broker''s nonces and sessions', billing: usage, where: 'inside the Vercel team', note: 'no separate line appears on the invoice at this volume' }
+  - { id: google-oauth, what: 'sign-in with Google at a Home', billing: free, where: 'console.cloud.google.com' }
+
 # WHO MAY READ THE OPERATOR VIEW (spec 437 I7) — by Smart Agent, verified from the `id_token` their own Home
 # issues when they Connect at the portal. It replaces pasting the shared ops token into a browser: a secret
 # cannot be attributed to a person or revoked for one of them. The token still works, for scripts and crons.
