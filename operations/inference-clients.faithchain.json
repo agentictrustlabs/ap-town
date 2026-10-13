@@ -14,6 +14,21 @@
       ],
       "keyHash": "03c8982ebc42688f745c880e8c96cec8ebe01461b3370e41ce9a1143949122ae",
       "registeredAt": "2026-10-10"
+    },
+    {
+      "principal": "0x193b496d366113b765c70bf9230687d685cc7a92",
+      "estate": "imbnet",
+      "kind": "estate-app",
+      "label": "imbnet-runtime",
+      "profiles": [
+        "planner-fast",
+        "composer-default",
+        "answer-stream",
+        "judge-thorough",
+        "selection-structured"
+      ],
+      "keyHash": "b6e60e633a826030b353d857258417a2e74e8c5ce981d87668cb858e3a220a5b",
+      "registeredAt": "2026-10-13"
     }
   ]
 }
