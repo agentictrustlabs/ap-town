@@ -54,11 +54,12 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
           Every amount on this page is the operator&rsquo;s read. Status and what runs where are public and are on
           the <Link href="/operations/infra">Infra</Link> tab; money is not.
         </SectionHead>
-        <Empty title="Paste the town ops token to see the amounts.">
-          <strong>Operator</strong>, at the top right of the tabs. The token is the town&rsquo;s own
-          <span className="mono"> TOWN_OPS_TOKEN</span> — the operator keeps it in <span className="mono">ap-town/.env.ops.local</span>,
-          and it is held in this browser tab&rsquo;s session only, never stored. It unlocks a READ and grants nothing:
-          the town acts for nobody, and no amount here is anybody&rsquo;s Home.
+        <Empty title="Connect, and the amounts are here.">
+          <strong>Connect</strong> in the corner signs you in at your own Home; if this town&rsquo;s manifest lists
+          you as one of its operators, the amounts open with no secret to find. A shared token still works for
+          scripts — <span className="mono">TOWN_OPS_TOKEN</span> through <strong>Operator</strong> beside the tabs —
+          but a person should not have to paste one. Either way it unlocks a READ and grants nothing: the town acts
+          for nobody, and no amount here is anybody&rsquo;s Home.
         </Empty>
       </section>
     );
@@ -99,6 +100,11 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
           ))}
           <Stat label="Window" value={`${days.length} day${days.length === 1 ? '' : 's'}`} sub={`${days[0] ?? '—'} → ${days[days.length - 1] ?? '—'}`} />
         </div>
+        {perf.readAs?.by === 'connection' && (
+          <p className="quiet">Read as <strong>{perf.readAs.name ?? perf.readAs.agent}</strong>, whom this town&rsquo;s
+          manifest lists as one of its operators — your Home said who you are and the town checked its own list.
+          No token was pasted and none was needed.</p>
+        )}
         {byBasis.some(({ rows: rs }) => partial(rs)) && (
           <p className="quiet"><Chip tone="warn">partial</Chip> At least one day or one source could not be read. Those
           totals are smaller than the truth, and are marked rather than quietly completed.</p>

@@ -96,6 +96,18 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "label": "ontotext"
       }
     },
+    "operators": [
+      {
+        "sa": "0x840bb6480c7bb37910631db62f7212f0ba73f3a8",
+        "label": "Town Operator",
+        "note": "operates the faithchain town services; custodian of discovery.registry"
+      },
+      {
+        "sa": "0x6142b0fca982f6701cf2248bf368ab44a48c5725",
+        "label": "Demo Admin",
+        "note": "charters the town and estate context agents (spec 436 §5.5)"
+      }
+    ],
     "estates": [
       {
         "id": "faithnet",

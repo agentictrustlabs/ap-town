@@ -17,7 +17,12 @@ export interface EstatePerf {
 }
 type InfraRow = PerfViewV1['infrastructure'][number];
 /** The portal holds no provider credential: the town MCP collects, and when it cannot be asked the view says so. */
-export type PerfView = PerfViewV1 & { unavailable?: string };
+export type PerfView = PerfViewV1 & {
+  unavailable?: string;
+  /** Spec 437 I7 — which read answered: the shared ops token, or the reader's own connection. Shown, because
+   *  a page that silently has amounts is a page nobody can explain the next time it does not. */
+  readAs?: { by: 'token' } | { by: 'connection'; name: string | null; agent: string };
+};
 type ChainLatest = { latency?: { upstreamP50Ms?: number; upstreamP95Ms?: number }; totals?: { requests?: number } } | null;
 
 const PLATFORM_LABEL: Record<string, string> = { cloudflare: 'Cloudflare', vercel: 'Vercel', azure: 'Azure', graphdb: 'GraphDB', 'chain-node': 'Chain node' };

@@ -20,6 +20,15 @@ accounts:
   azure: { subscriptionId: 5a656e13-849d-4b56-9101-53f987cf971b, resourceGroups: [rg-faithnet, rg-akcs-pilot-westus], label: faithchain-node }
   graphdb: { url: https://graphdb.agentkg.io, label: ontotext }
 
+# WHO MAY READ THE OPERATOR VIEW (spec 437 I7) — by Smart Agent, verified from the `id_token` their own Home
+# issues when they Connect at the portal. It replaces pasting the shared ops token into a browser: a secret
+# cannot be attributed to a person or revoked for one of them. The token still works, for scripts and crons.
+# Listing somebody here GRANTS THEM NOTHING (429 D2): it unlocks a read of aggregate numbers this deployment
+# already holds — no Home, no person's record, no act. Absent or empty means nobody, which is the safe reading.
+operators:
+  - { sa: '0x840bb6480c7bb37910631db62f7212f0ba73f3a8', label: Town Operator, note: 'operates the faithchain town services; custodian of discovery.registry' }
+  - { sa: '0x6142b0fca982f6701cf2248bf368ab44a48c5725', label: Demo Admin, note: 'charters the town and estate context agents (spec 436 §5.5)' }
+
 estates:
   - id: faithnet
     repo: agentictrustlabs/ap-home

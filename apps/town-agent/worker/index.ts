@@ -15,6 +15,7 @@ import { agentCardHost, contextAgentViews, describe, serviceViews, townSummary, 
 import { samplePulse, readPulse, type PulseSampleV1, type PulseEnv } from './pulse';
 import { recordDay, pulseRecordReadiness, contextAgents, type PulseRecordEnv } from './pulse-record';
 import { PERF_WINDOWS, operatorAuthorized, readPerformance, type InfraRowV1, type PerfWindow } from './pulse-perf';
+import { readAsOperator } from './steward';
 import { resolveAgentCard, createStandardA2aClient } from '@agenticprimitives/a2a/standard';
 export { HeartbeatDO } from './pulse';
 
@@ -556,12 +557,22 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     const from = nowMs - (window === '90d' ? 90 : window === '30d' ? 30 : window === '7d' ? 7 : 1) * 86_400_000;
     const r = await env.HEARTBEAT.get(env.HEARTBEAT.idFromName(town.town)).fetch(`https://pulse/read?from=${from}`);
     const samples = (await r.json()) as PulseSampleV1[];
-    // Spec 437 / 434 §10: infra STATUS and the provenance block are public; cost amounts and infra metrics are the operator's
-    // (the one town ops token, `authorization: Bearer …`) — withheld, said so (`detail: false`), never zeroed.
-    const detail = operatorAuthorized(env.TOWN_OPS_TOKEN, authorization);
+    // Spec 437 / 434 §10: infra STATUS and the provenance block are public; cost amounts and infra metrics are the
+    // operator's — withheld, said so (`detail: false`), never zeroed.
+    //
+    // TWO WAYS TO BE THE OPERATOR, and the second is the one a person should use. The ops token stays for scripts
+    // and crons, where a bearer is the right shape. A PERSON instead connects at their own Home and the portal
+    // sends the `id_token` it was given: this town verifies it against that Home's published keys and looks the
+    // subject up in the manifest's `operators`. Neither grants anything — both unlock a READ of numbers already
+    // held here (429 D2) — but one can be attributed to a person and revoked for them alone, and the other
+    // cannot. The reader is told which one answered for them.
+    const byToken = operatorAuthorized(env.TOWN_OPS_TOKEN, authorization);
+    const asOperator = byToken ? null : await readAsOperator(town, authorization).catch(() => null);
+    const detail = byToken || !!asOperator?.ok;
+    const readAs = byToken ? { by: 'token' as const } : asOperator?.ok ? { by: 'connection' as const, name: asOperator.name, agent: asOperator.agent } : undefined;
     const infra = await infraRowsFrom(env, from);
     const performance = readPerformance(town, samples, infra.rows, { window, nowMs, detail });
-    return json({ ...readPulse(town, samples, window === '90d' ? '30d' : window), performance: { ...performance, ...(infra.unavailable ? { unavailable: infra.unavailable } : {}) } }, 200, detail ? { 'cache-control': 'private, no-store' } : { 'cache-control': 'public, max-age=60' });
+    return json({ ...readPulse(town, samples, window === '90d' ? '30d' : window), performance: { ...performance, ...(infra.unavailable ? { unavailable: infra.unavailable } : {}), ...(readAs ? { readAs } : {}) } }, 200, detail ? { 'cache-control': 'private, no-store' } : { 'cache-control': 'public, max-age=60' });
   }
   // THE TOWN ASK (spec 436 §5.5 T4): a question goes to the context agent's A2A door as a stranger; the portal relays
   // the answer and names who said it. No key, no session, no rewrite here. Until the agent is chartered: said so.

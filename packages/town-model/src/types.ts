@@ -195,6 +195,26 @@ export interface TownManifest {
   services: TownService[];
   /** Spec 437 I4 — the accounts the town's resources live in (ids and labels; never a token). */
   accounts?: import('./pulse-types').TownAccountsV1;
+  /**
+   * WHO MAY READ THE OPERATOR VIEW, by Smart Agent — the town's amounts and per-resource metrics (spec 437 I7).
+   *
+   * A list, declared here, because the alternative was one shared bearer token that everybody who may look has
+   * to hold: a secret cannot be attributed to a person, cannot be revoked for one of them, and ends up in a
+   * shell history. A person signed in at their own Home presents an `id_token` instead, this town verifies it
+   * against that Home's published keys, and the subject is looked up here.
+   *
+   * It grants NOTHING (429 D2). It unlocks a read of aggregate numbers this deployment already holds — no
+   * Home, no person's record, no act. Empty or absent means nobody: the ops token is then the only way in,
+   * which is the safe reading of silence.
+   */
+  operators?: Array<{
+    /** The person's Smart Agent, as their Home's `id_token` asserts it (`sub`, CAIP-10). */
+    sa: string;
+    /** What to call them on the page when they are reading. */
+    label: string;
+    /** Why they are listed — for whoever reads this file in a year. */
+    note?: string;
+  }>;
 }
 
 /**
