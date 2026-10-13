@@ -20,11 +20,21 @@ const kindOf = (resourceId: string): InfraSampleV1['kind'] => (/\/virtualMachine
 const shortName = (resourceId: string): string => resourceId.split('/').pop() ?? resourceId;
 const auth = (token: string): HeadersInit => ({ authorization: `Bearer ${token}` });
 
+/** Resource Health answers 409 AuthError when its PROVIDER is not registered on the subscription, and its message
+ *  opens with "authentication or authorization" — which reads as a bad credential and is not one. Reader cannot
+ *  register a provider (`/register/action` is a write), so the remedy belongs to the subscription's owner and the
+ *  sample should say so rather than send whoever reads the Pulse back to the service principal. Seen 2026-10-13:
+ *  the same token read every resource group, every VM metric and the whole cost query. */
+const healthError = (error: string): string =>
+  /resource provider has been registered/i.test(error)
+    ? 'Microsoft.ResourceHealth is not registered on this subscription, so no resource reports a status. The subscription\'s owner registers it once: az provider register --namespace Microsoft.ResourceHealth. The credential is fine — metrics and cost read with it.'
+    : error;
+
 /** Resource Health's availability state per resource. */
 export async function collectAzureHealth(cfg: Pick<AzureCfg, 'subscriptionId'>, token: string, resourceIds: string[], fetchImpl: FetchLike, at: string): Promise<InfraSampleV1[]> {
   return Promise.all(resourceIds.map(async (rid) => {
     const r = await readJson<{ properties?: { availabilityState?: string; summary?: string; reportedTime?: string } }>(fetchImpl, `${AZURE_ARM}${rid}/providers/Microsoft.ResourceHealth/availabilityStatuses/current?api-version=2022-10-01`, { headers: auth(token) });
-    if (!r.ok) return failedInfra('azure', cfg.subscriptionId, shortName(rid), kindOf(rid), 'live', r.error, at);
+    if (!r.ok) return failedInfra('azure', cfg.subscriptionId, shortName(rid), kindOf(rid), 'live', healthError(r.error), at);
     const state = r.data.properties?.availabilityState;
     const status: InfraSampleV1['status'] = state === 'Available' ? 'up' : state === 'Unavailable' ? 'down' : state === 'Degraded' ? 'degraded' : 'unknown';
     return infraSample({ platform: 'azure', account: cfg.subscriptionId, resource: shortName(rid), kind: kindOf(rid), at, asOf: r.data.properties?.reportedTime ?? at, lagClass: 'live', status, metrics: { available: status === 'up' ? 1 : 0 } });

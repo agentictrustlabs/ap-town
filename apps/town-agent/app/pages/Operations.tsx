@@ -66,8 +66,17 @@ export function Operations({ t, tab = 'town' }: { t: TownData; tab?: Tab }): Rea
               (() => { const d = t.services.filter((s) => s.signals.healthy === 'down').length; const u = t.services.filter((s) => s.signals.healthy === 'up' || s.signals.healthy === 'self').length; const pr = t.services.filter((s) => s.signals.healthy !== 'unobserved').length;
                 return d > 0 ? { label: 'Services answering', value: `${u} of ${pr}`, sub: `${d} not answering`, tone: 'bad' as const }
                              : { label: 'Services answering', value: `${u} of ${pr}`, sub: 'probed just now', tone: 'ok' as const }; })(),
+              // NOT READING ≠ NOT CONFIGURED. A source with no token says so in its own error ("not configured: …",
+              // the collectors' word); anything else is a source that HAS its credential and still could not be
+              // read — Azure with its Resource Health provider unregistered, a provider 503. Calling that "not
+              // configured" sends whoever reads this tile to re-issue a credential that was never the problem
+              // (2026-10-13). The chips below carry each reason; this line only has to count the right things.
               (() => { const src = pulse.data.performance.sources ?? []; const okN = src.filter((x) => x.ok).length;
-                return { label: 'Infra sources', value: src.length ? `${okN} of ${src.length}` : '—', sub: src.length ? (okN === src.length ? 'all reading' : `${src.length - okN} not configured`) : 'none yet', ...(src.length && okN < src.length ? { tone: 'warn' as const } : {}) }; })(),
+                const unconfigured = src.filter((x) => !x.ok && /^not configured/i.test(x.error ?? '')).length;
+                const unread = src.length - okN - unconfigured;
+                const sub = okN === src.length ? 'all reading'
+                  : [unconfigured ? `${unconfigured} not configured` : '', unread ? `${unread} not reading` : ''].filter(Boolean).join(' · ');
+                return { label: 'Infra sources', value: src.length ? `${okN} of ${src.length}` : '—', sub: src.length ? sub : 'none yet', ...(src.length && okN < src.length ? { tone: 'warn' as const } : {}) }; })(),
               { label: 'Last sample', value: pulse.data.sampledAt ? fmtAgo(pulse.data.sampledAt) : '—', sub: pulse.data.sampledAt ? 'the sampler runs every 5 min' : 'no sample yet' },
               { label: 'This window', value: window, sub: pulse.data.performance.detail ? 'operator read' : 'public read' },
             ]}

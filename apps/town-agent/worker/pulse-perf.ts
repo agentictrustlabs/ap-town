@@ -40,13 +40,22 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
   const stepMs = Math.max(SAMPLE_INTERVAL_MS, Math.round(ms / 96));
   const bucket = (at: string): string => new Date(Math.floor(Date.parse(at) / stepMs) * stepMs).toISOString();
 
-  // ── Infrastructure: latest per resource (any age — a quiet source still shows its last word), series in the window ──
+  // ── Infrastructure: latest per resource AND CADENCE (any age — a quiet source still shows its last word) ──
+  //
+  // Per cadence, because a resource can be read by two passes and the faster one is always the newer row.
+  // `infraId` is (platform, account, kind, resource) — no lag class — so an Azure VM's five-minute Resource
+  // Health sample and its hourly Monitor metrics share one id, and "newest wins" meant the status row
+  // permanently buried the metrics row: three VMs reporting real CPU, and the Performance tab saying "No VM
+  // readings (Azure not configured or no VM listed)" (2026-10-13). GraphDB is read by both passes too.
+  // One tile per cadence keeps I2 honest — each carries the `asOf` and lag class that are actually ITS OWN,
+  // which a merged tile could not do with one label.
   const infra = rows.filter((s) => s.kind === 'infra');
+  const cadence = (s: InfraRowV1): string => `${s.id}|${(s.payload as InfraSampleV1).lagClass}`;
   const latestInfra = new Map<string, InfraSampleV1>();
   const latestAt = new Map<string, string>();
-  for (const s of infra) { const cur = latestAt.get(s.id); if (cur === undefined || cur <= s.at) { latestInfra.set(s.id, s.payload as InfraSampleV1); latestAt.set(s.id, s.at); } }
+  for (const s of infra) { const k = cadence(s); const cur = latestAt.get(k); if (cur === undefined || cur <= s.at) { latestInfra.set(k, s.payload as InfraSampleV1); latestAt.set(k, s.at); } }
   const seriesInfra = new Map<string, Map<string, InfraSampleV1>>();
-  for (const s of infra) { if (Date.parse(s.at) < from || !s.ok) continue; const m = seriesInfra.get(s.id) ?? new Map<string, InfraSampleV1>(); m.set(bucket(s.at), s.payload as InfraSampleV1); seriesInfra.set(s.id, m); }
+  for (const s of infra) { if (Date.parse(s.at) < from || !s.ok) continue; const k = cadence(s); const m = seriesInfra.get(k) ?? new Map<string, InfraSampleV1>(); m.set(bucket(s.at), s.payload as InfraSampleV1); seriesInfra.set(k, m); }
   const infrastructure: PerfReadV1['infrastructure'] = [...latestInfra.entries()].filter(([, s]) => s.resource !== '*' || !s.ok).map(([id, s]) => ({
     platform: s.platform, account: s.account, resource: s.resource, kind: s.kind, owner: attributeResource(town, s.platform, s.resource, s.kind),
     latest: opts.detail ? s : { ...s, metrics: {} },

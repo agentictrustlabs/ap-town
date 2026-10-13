@@ -118,6 +118,19 @@ describe('azure collector', () => {
     const m = await collectAzureVmMetrics(cfg, 'tok', vm, { from: 'a', to: 'b' }, fetchOf(() => json({ value: [{ name: { value: 'Percentage CPU' }, timeseries: [{ data: [{ timeStamp: 't1', average: 10, maximum: 30 }, { timeStamp: 't2', average: 12.5, maximum: 44 }] }] }, { name: { value: 'Available Memory Bytes' }, timeseries: [{ data: [{ timeStamp: 't2', average: 8e9 }] }] }, { name: { value: 'Network In Total' }, timeseries: [{ data: [{ timeStamp: 't2', total: 123 }] }] }] })), AT);
     expect(m).toMatchObject({ kind: 'vm', lagClass: 'hourly', status: 'up', asOf: 't2', metrics: { cpuPercent: 12.5, cpuMaxPercent: 44, memoryAvailableBytes: 8e9, networkInBytes: 123 } });
   });
+
+  // The body Azure actually returned on 2026-10-13, verbatim. Its first words are "authentication or
+  // authorization", which is false here — the same credential read every resource group, every VM metric and
+  // the whole cost query. The sample must name the provider registration, or the Pulse sends its reader to
+  // re-issue a service principal that was never the problem.
+  it('an unregistered Microsoft.ResourceHealth says so, not "auth"', async () => {
+    const body = { code: 'AuthError', message: 'An error occured in authentication or authorization. Make sure the resource provider has been registered with this subscription' };
+    const [s] = await collectAzureHealth(cfg, 'tok', [vm], fetchOf(() => json(body, 409)), AT);
+    expect(s).toMatchObject({ ok: false, status: 'unknown', resource: 'besu-1' });
+    expect(s!.error).toMatch(/Microsoft\.ResourceHealth is not registered/);
+    expect(s!.error).toMatch(/az provider register --namespace Microsoft\.ResourceHealth/);
+    expect(s!.error).not.toMatch(/authentication or authorization/);
+  });
   it('cost: daily rows by resource group, billed; a 429 backs off once on retry-after, a second refusal is a failed, incomplete row', async () => {
     let calls = 0; const waits: number[] = [];
     const answer = json({ properties: { columns: [{ name: 'Cost' }, { name: 'UsageDate' }, { name: 'ResourceGroupName' }, { name: 'Currency' }], rows: [[4.2, 20261008, 'rg-faithnet', 'USD'], [0.3, 20261009, 'rg-faithnet', 'USD']] } });

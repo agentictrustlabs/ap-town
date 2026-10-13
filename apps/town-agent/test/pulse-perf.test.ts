@@ -53,6 +53,26 @@ describe('readPerformance (spec 437 §5)', () => {
     expect(det.infrastructure.find((r) => r.resource === 'demo-a2a-faithnet')!.latest!.metrics).toEqual({ requests: 100, errors: 1 });
     expect(det.infrastructure.find((r) => r.resource === 'demo-a2a-faithnet')!.series).toHaveLength(1);
   });
+
+  // A resource read by TWO passes keeps a tile per cadence. Azure's VMs are the case: Resource Health every
+  // five minutes, Monitor metrics hourly, one `infraId` between them. Keyed by id alone the newer status row
+  // buried the metrics for good — three VMs reporting CPU while the Performance tab said "No VM readings
+  // (Azure not configured or no VM listed)" (seen live 2026-10-13, the day Azure was first configured).
+  it('a resource read at two cadences keeps both tiles, each with its own asOf and lag class', () => {
+    const vm = { platform: 'azure' as const, account: 'sub1', resource: 'faithnet-vm', kind: 'vm' as const };
+    const rows: InfraRowV1[] = [
+      toInfraSample(infra({ ...vm, lagClass: 'hourly', at: new Date(NOW - 1_800_000).toISOString(), asOf: new Date(NOW - 1_800_000).toISOString(), status: 'up', metrics: { cpuPercent: 5.5, memoryAvailableBytes: 8e9 } })),
+      toInfraSample(infra({ ...vm, lagClass: 'live', at: new Date(NOW - 60_000).toISOString(), asOf: new Date(NOW - 60_000).toISOString(), status: 'unknown', ok: false, error: 'Microsoft.ResourceHealth is not registered', metrics: {} })),
+    ];
+    const det = readPerformance(town, [], rows, { window: '24h', nowMs: NOW, detail: true });
+    const mine = det.infrastructure.filter((r) => r.resource === 'faithnet-vm');
+    expect(mine).toHaveLength(2);
+    expect(mine.find((r) => r.latest!.lagClass === 'hourly')!.latest).toMatchObject({ status: 'up', ok: true, metrics: { cpuPercent: 5.5 } });
+    expect(mine.find((r) => r.latest!.lagClass === 'live')!.latest).toMatchObject({ status: 'unknown', ok: false });
+    // The SOURCE still reports its most recent word, which is the failure — a partial read stays partial (I3).
+    expect(det.sources.find((s) => s.platform === 'azure')).toMatchObject({ ok: false });
+    expect(det.complete).toBe(false);
+  });
   it('cost per completed run = (inference receipts + the estate\'s attributed infra cost) ÷ completed runs, with both components and lag labels; the provenance block is the estate\'s own', () => {
     const perf = { type: 'ap.estate-performance.v1', window: '24h', runs: { total: 3, byOutcome: {} } };
     const samples: PulseSampleV1[] = [hb('2026-10-09T23:50:00Z', 100, 400_000), hb('2026-10-10T11:55:00Z', 50, 200_000, perf)];
