@@ -123,6 +123,14 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         ],
         "estateName": "faithnet.estate",
         "namingGate": "0x640D577Bcb3fd860743ED315620085704c1483E9",
+        "projection": {
+          "registry": "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b",
+          "registryChainId": 34348,
+          "governance": "0x3273f419FDfc7eA1Bf14372C4A9CA5fC43818F64",
+          "estateId": "0x465f13a19d48b6bd58e9c792956cbf477cd35ed395fdd38dbe8250e262e40264",
+          "signer": "0x9d0C710b73a9E0CD103A1A7034F871C852d8657e",
+          "declaredOnChain": true
+        },
         "kms": {
           "tenant": "faithnet"
         },

@@ -42,6 +42,17 @@ estates:
     # root at block 78766; it signed nate-the-baker, richcanvas45, x102abc, nate-trial-889 while it was
     # the only gate on the chain). This is what makes the estate a question the CHAIN answers.
     namingGate: "0x640D577Bcb3fd860743ED315620085704c1483E9"
+    # ON NEUTRAL GROUND SINCE 2026-10-14 (spec 439; ap-federation federation.yaml). The estate agent `faithnet.estate`
+    # is PERSONA-CUSTODIED — salt 2 over the demo-admin persona, the owner's choice ("a type of .estate for each") —
+    # and is NOT `faith-estate.workspace`, which stays the Pulse's context agent (436 §5.5). It declared its
+    # projection signer on this chain, so the registration is chain-verifiable both ways.
+    projection:
+      registry: "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b"
+      registryChainId: 34348
+      governance: "0x3273f419FDfc7eA1Bf14372C4A9CA5fC43818F64"   # faithnet.estate
+      estateId: "0x465f13a19d48b6bd58e9c792956cbf477cd35ed395fdd38dbe8250e262e40264"
+      signer: "0x9d0C710b73a9E0CD103A1A7034F871C852d8657e"
+      declaredOnChain: true
     kms: { tenant: faithnet }
     # Spec 437 I4 — the estate's own Cloudflare Workers (its A2A runtime, its vault, its edge, its Home MCP, its
     # approval door) and its Vercel project (the Home itself). The unsuffixed twins are the same apps' dev
