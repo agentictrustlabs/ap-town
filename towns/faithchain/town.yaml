@@ -275,7 +275,11 @@ services:
     probe: https://akcs-pilot.faithnet.io/healthz
     azureResources: [/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-AKCS-PILOT-WESTUS/providers/Microsoft.Compute/virtualMachines/vm-akcs-pilot-0,
                      /subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-AKCS-PILOT-WESTUS/providers/Microsoft.Compute/virtualMachines/vm-akcs-tunnel-pilot]
-    description: Key custody (AKCS) — a tenant per estate; keys are delegates, never identities.
+    # THE FEDERATION'S SHARED OPERATOR (ap-federation spec 440 §A, 2026-10-14): one AKCS operator serves every town;
+    # the operator record — host, tenants, callers, the four conditions — is `federation.yaml#kms` in ap-federation
+    # and this row declares it BY REFERENCE. One tenant per estate, always (a tenant is a derivation root). Not
+    # neutral ground, not a root, not required: `key-custody` is a port.
+    description: Key custody (AKCS) — the federation's shared operator (ap-federation federation.yaml#kms); a tenant per estate, never shared; keys are delegates, never identities.
 
   # ── Applications ──────────────────────────────────────────────────────────────────────────────────────────
   # LISTED, NEVER MOVED (spec 429 §1) — the people-group MCP beside `people-groups.svc`, deployed from ap-demos

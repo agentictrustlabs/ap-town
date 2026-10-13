@@ -394,7 +394,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-AKCS-PILOT-WESTUS/providers/Microsoft.Compute/virtualMachines/vm-akcs-pilot-0",
           "/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-AKCS-PILOT-WESTUS/providers/Microsoft.Compute/virtualMachines/vm-akcs-tunnel-pilot"
         ],
-        "description": "Key custody (AKCS) — a tenant per estate; keys are delegates, never identities."
+        "description": "Key custody (AKCS) — the federation's shared operator (ap-federation federation.yaml#kms); a tenant per estate, never shared; keys are delegates, never identities."
       },
       {
         "id": "people-groups-mcp",
