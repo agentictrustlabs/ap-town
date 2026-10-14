@@ -1,9 +1,16 @@
 /**
- * REGISTER (spec 431 §5.1). One button on a free name, on a root, on the home page. Not connected → Connect (the
- * Home's front door; a new person comes back nameless). Connected → the name is for the person themself (their own
- * .me, when they have none yet) or for a NEW agent they will custody — a second person, an organization, a service…
- * — and the Home opens in a popup with the kind, the label and the ending filled in; when the signatures land the
- * popup comes back here, closes, and this page shows the new name. The Home's part is the signatures.
+ * REGISTER (spec 431 §5.1). Not connected → Connect (the Home's front door; a new person comes back nameless).
+ * Connected → the name is for the person themself (their own .me, when they have none yet) or for a NEW agent they
+ * will custody — a second person, an organization, a service… — and the Home opens in a popup with the kind, the
+ * label and the ending filled in; when the signatures land the popup comes back here, closes, and this page shows
+ * the new name. The Home's part is the signatures.
+ *
+ * WHERE THIS MOUNTS, and where it no longer does. A name you have already typed goes to the step page
+ * (`/register/<name>`, spec 430 N6) — that is what `FindName`'s Register button does, and this component is not
+ * involved. What is left for this one is the case the step page cannot serve: a person on a ROOT page who wants a
+ * `.org` and has not chosen the word yet. It opens the Home with the ending filled in and the label blank, and
+ * carries `KindPicker` for every other kind. Between the step page landing and 2026-10-14 it was exported and
+ * mounted nowhere.
  */
 import { useState, type ReactNode } from 'react';
 import type { PlaceKind } from '@ap-town/town-scene';
@@ -56,6 +63,9 @@ export function Register({ label, tld, price }: { label: string; tld: string; pr
   const [about, setAbout] = useState('');
   const profile = { ...(displayName ? { displayName } : {}), ...(about ? { about } : {}) };
   const name = label ? `${label}.${tld}` : `a .${tld} name`;
+  // With no label there is nothing to fill in, and saying the Home "opens with it filled in" would be a lie: the
+  // word is chosen there. One phrase, both ways round.
+  const opens = label ? 'Your Home opens with it filled in' : `Your Home opens on .${tld} with the word still to choose`;
   const cost = price ? ` for ${price.coins} ${price.coin}` : '';
   if (!session) {
     return (
@@ -72,23 +82,23 @@ export function Register({ label, tld, price }: { label: string; tld: string; pr
     <div className="home-cta register" aria-busy={!!busy}>
       {own && (
         <>
-          <p><strong>Make {name} your own name{cost}.</strong> You are connected as <span className="mono">{session.address.slice(0, 6)}…{session.address.slice(-4)}</span> and present no name yet. Your Home opens with it filled in; two taps there, and this page shows the name as yours.</p>
+          <p><strong>Make {name} your own name{cost}.</strong> You are connected as <span className="mono">{session.address.slice(0, 6)}…{session.address.slice(-4)}</span> and present no name yet. {opens}; two taps there, and this page shows the name as yours.</p>
           <div className="home-cta-row"><button type="button" className="button" disabled={!!busy} onClick={() => void run(handoffHref(estate, { claim: label, tld, ...profile }))}>{`Buy ${name} at your Home →`}</button></div>
           <Waiting busy={busy} cancel={cancel} />
         </>
       )}
       {!own && kinds.length > 0 && (
         <>
-          <p><strong>Register {name}{cost} as a new agent you keep.</strong> {session.name ? <>You are connected as <strong>{session.name}</strong>. </> : null}The ending decides what it is: {kinds.map((k) => k.label.toLowerCase()).join(' or ')}. Your Home opens, creates the agent with its own treasury, buys the name, and this page shows it.</p>
+          <p><strong>Register {name}{cost} as a new agent you keep.</strong> {session.name ? <>You are connected as <strong>{session.name}</strong>. </> : null}The ending decides what it is: {kinds.map((k) => k.label.toLowerCase()).join(' or ')}. {opens}, creates the agent with its own treasury, buys the name, and this page shows it.</p>
           <div className="home-cta-row">
-            {kinds.map((k) => <button key={k.kind} type="button" className="button" disabled={!!busy} onClick={() => void run(handoffHref(estate, { charter: k.kind, claim: label, tld, ...profile }))}><Glyph kind={KIND_OF_TLD[tld] ?? 'service'} size={22} /> {`${k.label} named ${label || `….${tld}`} →`}</button>)}
+            {kinds.map((k) => <button key={k.kind} type="button" className="button" disabled={!!busy} onClick={() => void run(handoffHref(estate, { charter: k.kind, claim: label, tld, ...profile }))}><Glyph kind={KIND_OF_TLD[tld] ?? 'service'} size={22} /> {label ? `${k.label} named ${label} →` : `${k.label}, named at your Home →`}</button>)}
             <Waiting busy={busy} cancel={cancel} />
             {tld === 'me' && session.name && <span className="quiet">Your own name is <Link href={nameHref(session.name)}>{session.name}</Link>; a second .me is a persona — another name of yours with its own agent.</span>}
           </div>
         </>
       )}
       {!own && kinds.length === 0 && (
-        <p>A .{tld} name is claimed by the kind of agent it names, from that agent's own Home page. <a href={handoffHref(estate, { claim: label, tld })} rel="noreferrer">Open your Home with it filled in →</a></p>
+        <p>A .{tld} name is claimed by the kind of agent it names, from that agent's own Home page — a treasury is named when the agent that holds it is created, not on its own. <a href={handoffHref(estate, { claim: label, tld })} rel="noreferrer">{label ? 'Open your Home with it filled in →' : `Open your Home on .${tld} →`}</a></p>
       )}
       {(own || kinds.length > 0) && label && (
         <p className="quiet">

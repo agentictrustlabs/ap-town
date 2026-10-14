@@ -3,6 +3,7 @@ import { useApi } from '../api';
 import type { RootPage } from '../api-types';
 import { Link, nameHref, rootHref, useRoute } from '../router';
 import { FindName } from '../find-name';
+import { Register } from '../register';
 import { rootScene } from '../scenes';
 import { Addr, Chip, Glyph, Loading, Scene, Stamped } from '../ui';
 
@@ -26,6 +27,12 @@ export function Root({ tld }: { tld: string }): ReactNode {
             <h2>{p.root.priced ? 'Find your .' + p.root.tld + ' name' : 'Claim a .' + p.root.tld + ' name'}</h2>
             <FindName tld={p.root.tld} names={p.root.names} />
             {p.root.priced && <p className="quiet">{[['3 letters', 4], ['4', 3], ['5', 2], ['6–7', 1.5], ['8 and up', 1]].map(([len, m]) => `${len}: ${Math.min(49, Math.floor((p.root.baseCoins ?? 0) * Number(m)))} SHQ`).join(' · ')}. Once, never again — no rent, no resale.</p>}
+            {/* FOR SOMEONE WHO HAS NO LABEL YET. The box above needs a word typed into it before anything happens,
+                so a person who knows they want an organization and has not settled on its name had nowhere to
+                start: the only kind picker in the app was on /me, which you have to know about. This opens the
+                Home with the ending already chosen and the label left to choose there, and carries the picker for
+                every other kind. No price here — it depends on the label's length, and the ladder is printed above. */}
+            <Register label="" tld={p.root.tld} />
           </section>
         )}
         {p.names.length > 0 && <section><Scene scene={rootScene(p)} legend={`The .${p.root.tld} street: this page of its names, each drawn as ${p.root.names ?? 'an agent'}. Press one to open it.`} /></section>}
