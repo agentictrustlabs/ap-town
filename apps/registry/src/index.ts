@@ -9,7 +9,7 @@
 import { resolveCapabilityWord, capabilityIdsInText, type CapabilityResolution } from './capability-resolution.js';
 import { CAPABILITY_SYNONYMS } from './whitelabel.js';
 import { Hono } from 'hono';
-import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike, applyRelevanceCutoff, facetsOverMatches, parseUpstreamRegistries } from '@agenticprimitives/registry-kit/projection';
+import { ARD_WELL_KNOWN_PATH, ardEntryForAgent, ardRegistryEntry, ardManifest, type ArdEntry, planArdSearch, ardSearchResponse, ardExploreResponse, parseAgentsFilter, ardAgentsResponse, ardError, type RankedLike, applyRelevanceCutoff, facetsOverMatches, parseUpstreamRegistries } from '@agenticprimitives/registry-kit/projection';
 import { ACP_REGISTRY_PATH, acpRegistry } from './acp.js';
 import { cors } from 'hono/cors';
 import { createStandardA2aServer, type AgentCardV1, type MessageV1, type PartV1 } from '@agenticprimitives/a2a/standard';
@@ -48,6 +48,13 @@ interface Env {
   MCP_URL?: string;
   AGENT_NAME?: string;
   A2A_PUBLIC_ORIGIN?: string;
+  /** Cards this estate PUBLISHES that the knowledge graph has not indexed — comma-separated well-known URLs.
+   *  The entry is DERIVED by fetching each card, never typed here: this var names a pointer, and a card that does
+   *  not answer is omitted with a note rather than listed on faith. It exists because the catalog's other source
+   *  is the indexed graph, and an agent can be live, signed and bound to its account while the indexer has never
+   *  had a reason to project it — which is how the one agent with a verifiable card became the one nobody could
+   *  find (2026-10-14). */
+  CATALOG_CARDS?: string;
   /** The estate's ARD catalog root — `urn:air:<verified domain>:catalog:root` (spec 439 §5). Set per deployment,
    *  because the domain is one somebody PROVED they own at an index, and a guessed one names a domain nobody did.
    *  Unset ⇒ `/.well-known/ai-catalog.json` says so and declares no identifier rather than inventing one. */
@@ -815,11 +822,38 @@ app.get(ARD_WELL_KNOWN_PATH, async (c) => {
 // It declares no identifier when the deployment has not been told one. A catalog claiming
 // `urn:air:<domain>:catalog:root` for a domain nobody proved is the same mistake as a URN naming a domain nobody
 // verified, and an absent field is honest where a guessed one is not.
+/** One entry for a card this estate publishes, derived by READING the card. Returns null when the card does not
+ *  answer or does not look like one: an entry for something unreachable is a listing nobody can follow. */
+async function declaredCardEntry(cardUrl: string): Promise<(ArdEntry & Record<string, unknown>) | null> {
+  const r = await fetch(cardUrl, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(6000) }).catch(() => null);
+  if (!r?.ok) return null;
+  const card = (await r.json().catch(() => null)) as Record<string, unknown> | null;
+  if (!card || typeof card.name !== 'string') return null;
+  const host = new URL(cardUrl).host;
+  const short = host.split('.')[0]!.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+  return {
+    identifier: `urn:air:${host}:agent:${short}`,
+    displayName: card.name,
+    type: 'application/a2a-agent-card+json',
+    url: cardUrl,
+    ...(typeof card.description === 'string' ? { description: card.description } : {}),
+    // Said per entry, because "the index found it" and "the estate declared it" are different claims and a reader
+    // should not have to guess which one they are reading.
+    source: 'declared by this estate',
+    // Whether the card carries a signature at all. Evidence a reader can act on: verifying it is their own act.
+    signed: Array.isArray(card.signatures) && (card.signatures as unknown[]).length > 0,
+  } as ArdEntry & Record<string, unknown>;
+}
+
 app.get('/.well-known/ai-catalog.json', async (c) => {
   const origin = registryOrigin(c);
   const mcp = await mcpGet(c.env, '/search?q=&limit=500').catch((e) => ({ ok: false, error: String(e) }));
   if (!mcp?.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: mcp?.error ?? 'discovery MCP unavailable' } }, 500);
-  const entries = (mcp.results as AgentResult[]).map((r) => ardEntryForAgent(r).entry).filter((e): e is NonNullable<typeof e> => !!e);
+  const indexed = (mcp.results as AgentResult[]).map((r) => ardEntryForAgent(r).entry).filter((e): e is NonNullable<typeof e> => !!e);
+  const declaredUrls = (c.env.CATALOG_CARDS ?? '').split(',').map((u) => u.trim()).filter(Boolean);
+  const declared = (await Promise.all(declaredUrls.map(declaredCardEntry))).filter((e): e is ArdEntry & Record<string, unknown> => !!e);
+  const unreachable = declaredUrls.length - declared.length;
+  const entries = [...declared, ...indexed];
   const manifest = ardManifest([ardRegistryEntry(origin, REGISTRY_DISPLAY), ...entries]);
   const urn = c.env.CATALOG_URN?.trim();
   return c.json({
@@ -832,6 +866,7 @@ app.get('/.well-known/ai-catalog.json', async (c) => {
     updatedAt: new Date().toISOString(),
     // Said in the document, because a reader of a directory has no other way to learn it.
     authority: 'none — this catalog is a listing. Whether any agent here may act is decided at its estate, per step, under a mandate its principal signed.',
+    ...(unreachable > 0 ? { declaredButUnreachable: `${unreachable} card(s) this estate declares did not answer and are NOT listed` } : {}),
     // SERVE THE TYPE WE CLAIM. The index record says `application/ai-catalog+json`; answering with a generic
     // `application/json` is the shape mismatch our own index reader reports about other entries, and we do not get
     // to publish a check we fail.
