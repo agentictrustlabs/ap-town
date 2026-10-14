@@ -42,6 +42,9 @@ export interface FindResult {
    *  page's size, whether the knowledge base held more, and how many rows the question's own words added. */
   page?: { limit: number; returned: number; truncated: boolean; named: number };
   results: FindHit[]; error?: string;
+  /** The registry's SUBSTRING read of a name-shaped question — authoritative and untruncated where the ranked
+   *  page is neither. Absent when the question was a sentence rather than a label. */
+  named?: FindHit[] | null;
 }
 export interface Facets { ok: boolean; agentTypes: Array<{ value: string; count: number }>; kinds: Array<{ value: string; count: number }>; capabilityIds: Array<{ value: string; count: number }>; undeclaredType?: number }
 export interface AgentDetail {

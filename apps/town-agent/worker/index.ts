@@ -328,6 +328,12 @@ const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =
   new Response(JSON.stringify(body, null, 2), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'access-control-allow-origin': '*', ...extra } });
 
 /** Ask a bound town service for JSON; `null` when it is not bound or does not answer (said so, never guessed). */
+/** A query that could be a name or part of one: one token of name characters, optionally with an ending. The
+ *  registry's substring door is only asked for these — "a translation service" is a sentence, not a label. */
+export function nameShaped(q: string): boolean {
+  return /^[a-z0-9-]{3,63}(\.[a-z]{2,20})?$/.test(q.trim().toLowerCase());
+}
+
 async function ask<T>(svc: { fetch(req: Request): Promise<Response> } | undefined, url: string, init?: RequestInit): Promise<T | null> {
   if (!svc) return null;
   try { const r = await svc.fetch(new Request(url, { ...init, headers: { accept: 'application/json', ...(init?.headers ?? {}) } })); return r.ok ? ((await r.json()) as T) : null; } catch { return null; }
@@ -551,8 +557,39 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     if (!q && !type && !registered) return json({ error: 'say what you are looking for' }, 400);
     const mandates: Record<string, unknown> = { requireRegistered: registered };
     if (type) { if (['person', 'org', 'service'].includes(type)) mandates.requireKind = type; else mandates.requireAgentType = type; }
-    const r = await ask<Record<string, unknown>>(env.REGISTRY, 'https://registry/discover', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ ...(q ? { intent: { need: q } } : {}), mandates }) });
-    return r ? json({ query: q, type, registered, ...r }) : json({ error: 'the registry could not be asked just now' }, 502);
+    // TWO DOORS, BECAUSE THEY ARE TWO QUESTIONS — and this only ever asked through one of them.
+    //
+    // `/discover` takes an intent `need`, which RANKS a page of the knowledge base, and a `query`, which is a
+    // precise substring FILTER (registry index.ts:717). The portal sent only the first, so typing a name read a
+    // page of 100 agents and ranked them: `nathan.me` came back rank 1 of 120, with 109 of those 120 scoring
+    // 0.14 or less, and `zzz` came back as 100 unrelated agents rather than nothing. Through the other door
+    // `nath` is 21 rows that all contain "nath", untruncated, and `zzz` is none — which is what makes "no agent
+    // is named that, register it" an honest thing for the page to say (measured 2026-10-14).
+    //
+    // So a name-shaped word is asked BOTH ways and the answers stay apart: `named` is a lookup, `results` is a
+    // ranking. Neither is edited here — the portal adds nothing to the registry's answer (D2) — and a question
+    // that is not name-shaped asks once, as before.
+    const call = (body: Record<string, unknown>) => ask<Record<string, unknown>>(env.REGISTRY, 'https://registry/discover', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const [r, byName] = await Promise.all([
+      call({ ...(q ? { intent: { need: q } } : {}), mandates }),
+      nameShaped(q) ? call({ query: q, mandates }) : Promise.resolve(null),
+    ]);
+    return r ? json({ query: q, type, registered, ...r, ...(byName ? { named: (byName as { results?: unknown[] }).results ?? [] } : {}) }) : json({ error: 'the registry could not be asked just now' }, 502);
+  }
+  // IS THIS NAME FREE — the naming service's fact, never inferred from the registry's list. "The registry has no
+  // record of it" and "nobody has it" are different sentences, and only the second one may invite a registration.
+  if (path === '/name-check') {
+    const name = (url.searchParams.get('name') ?? '').trim().toLowerCase();
+    if (!/^[a-z0-9-]{1,63}\.[a-z]{2,20}$/.test(name)) return json({ error: 'not a name' }, 400);
+    const host = town.services.find((s) => s.id === 'naming')?.hosts[0];
+    if (!host) return json({ error: 'this town runs no naming service' }, 404);
+    try {
+      const r = await fetch(`https://${host}/api/name/${encodeURIComponent(name)}`, { headers: { accept: 'application/json' } });
+      const b = (await r.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!r.ok || !b) return json({ error: 'the naming service could not be asked just now' }, 502);
+      // Only what the card needs, and only from the naming service's own answer.
+      return json({ name, status: b.status ?? null, kind: b.kind ?? null, price: b.price ?? null, invalid: b.invalid ?? null, names: b.names ?? null, host }, 200, { 'cache-control': 'public, max-age=5' });
+    } catch (e) { return json({ error: `the naming service could not be reached: ${(e as Error).message}` }, 502); }
   }
   if (path === '/facets') {
     const r = await ask<unknown>(env.REGISTRY, 'https://registry/facets');
