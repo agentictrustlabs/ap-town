@@ -76,12 +76,12 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
   // 2026-10-14). This asks the service for the names CONTAINING what was typed, across every ending when the box
   // offers a choice of ending, and within this one on a root page. Two characters is enough: it is a browse aid,
   // and the availability answer beside it is the one anybody acts on.
-  const [like, setLike] = useState<{ hits: Array<{ name: string; tld: string; kind: PlaceKind }>; total: number } | null>(null);
+  const [like, setLike] = useState<{ hits: Array<{ name: string; tld: string; kind: PlaceKind; names: string | null }>; total: number } | null>(null);
   useEffect(() => {
     if (label.length < 2) { setLike(null); return; }
     let live = true;
     const t = window.setTimeout(async () => {
-      const r = await getJson<{ hits: Array<{ name: string; tld: string; kind: PlaceKind }>; total: number }>(`/api/names-like?q=${encodeURIComponent(label)}${end ? `&tld=${encodeURIComponent(end)}` : ''}`);
+      const r = await getJson<{ hits: Array<{ name: string; tld: string; kind: PlaceKind; names: string | null }>; total: number }>(`/api/names-like?q=${encodeURIComponent(label)}${end ? `&tld=${encodeURIComponent(end)}` : ''}`);
       if (live) setLike(r.ok ? { hits: r.data.hits, total: r.data.total } : null);
     }, 300);
     return () => { live = false; window.clearTimeout(t); };
@@ -117,6 +117,29 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
       {label.length > 0 && label.length < 3 && <p className="quiet">Three characters or more.</p>}
       {v.state === 'checking' && <p className="loading" role="status">Checking {name}…</p>}
       {v.state === 'error' && <p className="search-problem" role="alert">{v.detail}</p>}
+      {/* WHAT ALREADY EXISTS, FIRST. This sat under the availability rows, so "people-groups.svc exists" arrived
+          below ten lines of "people-group.me is available" and nobody saw it (owner, 2026-10-14). Someone typing a
+          partial name is usually looking for a thing, not pricing a new one — and there are few of these and ten
+          of those. When an ending is chosen the row below answers that one name in full, so it is not repeated
+          here; with no ending chosen there is nothing above to repeat. */}
+      {(() => { const rest = (like?.hits ?? []).filter((h) => h.name !== name); return like && rest.length > 0 && (
+        <div className="like">
+          <p className="quiet">{(() => { const n = like.total - (like.hits.length - rest.length); const other = like.hits.length !== rest.length ? 'other ' : ''; return n === 1 ? `One ${other}name already contains` : `${n} ${other}names already contain`; })()} &ldquo;{label}&rdquo;{end ? `, ending in .${end}` : ''}:</p>
+          <ul className="rows">
+            {rest.slice(0, 8).map((h) => (
+              <li key={h.name} className="row">
+                <Glyph kind={h.kind} lit />
+                <span className="row-main">
+                  <Link href={nameHref(h.name)} className="row-name">{h.name}</Link>
+                  {h.names && <span className="row-sub">{h.names}</span>}
+                </span>
+                <Chip kind="registered" />
+              </li>
+            ))}
+          </ul>
+          {like.total - (like.hits.length - rest.length) > 8 && <p className="quiet">and {like.total - (like.hits.length - rest.length) - 8} more.</p>}
+        </div>
+      ); })()}
       {/* THE LABEL UNDER EVERY ENDING. Register only where a PERSON may charter one: `.workspace`, `.treasury` and
           `.registry` are named when the agent that holds them is created, so a button there would send somebody to
           a ceremony that does not exist. They are still shown, with what they are, because "free but not yours to
@@ -156,22 +179,6 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
           )}
         </div>
       )}
-      {/* The name in the row above is not repeated here: it has already been answered, with its price and its
-          status, and listing it again as "a name like itself" reads as a second, weaker answer. */}
-      {(() => { const rest = (like?.hits ?? []).filter((h) => h.name !== name); return like && rest.length > 0 && (
-        <div className="like">
-          <p className="quiet">{rest.length === 1 ? 'One other name' : `${like.total - (like.hits.length - rest.length)} other names`} already {rest.length === 1 ? 'contains' : 'contain'} &ldquo;{label}&rdquo;{end ? `, ending in .${end}` : ''}:</p>
-          <ul className="rows">
-            {rest.slice(0, 8).map((h) => (
-              <li key={h.name} className="row">
-                <Glyph kind={h.kind} />
-                <span className="row-main"><Link href={nameHref(h.name)} className="row-name">{h.name}</Link></span>
-              </li>
-            ))}
-          </ul>
-          {like.total - (like.hits.length - rest.length) > 8 && <p className="quiet">and {like.total - (like.hits.length - rest.length) - 8} more.</p>}
-        </div>
-      ); })()}
     </div>
   );
 }
