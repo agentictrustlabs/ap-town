@@ -38,7 +38,7 @@ const profileResolverAbi = [
   { type: 'function', name: 'isRegistered', stateMutability: 'view', inputs: [{ name: 'agent', type: 'address' }], outputs: [{ type: 'bool' }] },
 ] as const;
 
-export function chainFor(town: TownManifest, rpcUrl: string): Chain {
+export function chainFor(town: TownManifest, rpcUrl: string, fetchFn?: (url: string, init: RequestInit) => Promise<Response>): Chain {
   const d = { ...(getDeployments(town.chain.deployment as Parameters<typeof getDeployments>[0]) as object), ...(town.chain.deploymentOverlay ?? {}) } as unknown as {
     agentNameRegistry: Address; agentNameUniversalResolver: Address; agentProfileResolver: Address;
     permissionlessSubregistries?: Record<string, Address>; permissionlessSubregistry?: Address; permissionlessSubregistryDemoAgent?: Address;
@@ -47,7 +47,9 @@ export function chainFor(town: TownManifest, rpcUrl: string): Chain {
   if (!d?.agentNameRegistry || !d.agentNameUniversalResolver) throw new Error(`no naming contracts in the "${town.chain.deployment}" deployment`);
   const subregistries = Object.fromEntries(Object.entries(d.permissionlessSubregistries ?? {}).map(([k, v]) => [k, v])) as Record<string, Address>;
   // Calls made in the same tick share HTTP requests, forty to a request (the gateway refuses a batch over fifty).
-  const client = createPublicClient({ transport: http(rpcUrl, { batch: { batchSize: 40, wait: 8 }, retryCount: 1 }) }) as PublicClient;
+  // `fetchFn` is how the call leaves: the service binding when there is one, the public hostname otherwise. The
+  // batching is unchanged — only the road.
+  const client = createPublicClient({ transport: http(rpcUrl, { batch: { batchSize: 40, wait: 8 }, retryCount: 1, ...(fetchFn ? { fetchFn: fetchFn as never } : {}) }) }) as PublicClient;
   const naming = new AgentNamingClient({ rpcUrl, chainId: town.chain.id, registry: d.agentNameRegistry, universalResolver: d.agentNameUniversalResolver, profileResolver: d.agentProfileResolver, subregistries });
   const read = (address: Address, abi: unknown) => <T,>(fn: string, args: readonly unknown[] = []) =>
     client.readContract({ address, abi: abi as never, functionName: fn as never, args: args as never }) as Promise<T>;

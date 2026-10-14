@@ -26,6 +26,16 @@ custom_domain = true
 TOWN = "faithchain"
 
 # The town's registry — asked only "is this agent listed?" (one of the four signals; spec 430 D5).
+# THE CHAIN, REACHED AS A BINDING AND NOT OVER THE PUBLIC INTERNET. The gateway is a Worker on this same
+# Cloudflare account, and a Worker that fetches another one by its PUBLIC hostname hangs under concurrency: six
+# simultaneous reads of /api/town or /api/name left four cancelled by the runtime ("your Worker's code had hung"),
+# while /api/health — which reads no chain — answered all six, and the gateway itself answered twelve
+# concurrent requests from outside without a wobble (measured 2026-10-14). A binding is a direct call: no edge,
+# no loopback.
+[[env.faithnet.services]]
+binding = "CHAIN"
+service = "faithchain-rpc-gateway"
+
 [[env.faithnet.services]]
 binding = "REGISTRY"
 service = "demo-discovery-a2a-faithnet"

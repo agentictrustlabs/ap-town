@@ -12,6 +12,9 @@ interface Env {
   TOWN: string;
   /** SECRET: the town's chain gateway with this Worker's own read-only app token. */
   RPC_URL: string;
+  /** The town's chain gateway as a SERVICE BINDING. Same account, so reaching it by hostname hangs under
+   *  concurrency; absent, the reads still go over the public hostname and the old behaviour stands. */
+  CHAIN?: { fetch(req: Request): Promise<Response> };
   ASSETS: { fetch(req: Request): Promise<Response> };
   /** The town's registry Worker — asked only whether an agent is listed. */
   REGISTRY?: { fetch(req: Request): Promise<Response> };
@@ -29,11 +32,33 @@ function townOf(env: Env): TownManifest {
   return t;
 }
 
+/**
+ * ONE BATCH PER REQUEST, AND THE REASON IS NOT OPTIONAL.
+ *
+ * The client batches forty calls into one HTTP request, and it keeps its batch schedulers in a MODULE-SCOPED map
+ * keyed by the RPC url (`createBatchScheduler`, `id: url`). Every request in an isolate therefore shares one
+ * scheduler — so a second request can join a batch whose fetch was issued inside the FIRST request's I/O context,
+ * and in this runtime that promise can never settle for it. The symptom is not an error: the runtime cancels the
+ * request with "your Worker's code had hung and would never generate a response" and the reader gets a 500.
+ *
+ * Measured 2026-10-14, before the fix: six simultaneous reads of /api/name left four cancelled; eight of /api/town
+ * left six. /api/health, which reads no chain, answered every one. The batch owner survived; whoever joined it did
+ * not.
+ *
+ * A nonce in the url gives each request its own scheduler id, so a batch is never shared across requests. It costs
+ * one query parameter the gateway ignores, and it keeps the batching — which is what makes 301 label reads eight
+ * HTTP calls instead of 301.
+ */
+function rpcUrlForThisRequest(env: Env): string {
+  const base = env.RPC_URL.trim();
+  return `${base}${base.includes('?') ? '&' : '?'}b=${crypto.randomUUID()}`;
+}
+
 function ctxOf(env: Env): Ctx {
   if (!env.RPC_URL?.trim()) throw new Error('RPC_URL is not configured — the naming service reads no unnamed chain');
   const town = townOf(env);
   return {
-    town, chain: chainFor(town, env.RPC_URL.trim()),
+    town, chain: chainFor(town, rpcUrlForThisRequest(env), env.CHAIN ? (url, init) => env.CHAIN!.fetch(new Request(url, init)) : undefined),
     // One question to the registry. An answer it cannot give is `null` ("could not be asked"), never a guess.
     async listed(agent: Address) {
       if (!env.REGISTRY) return null;
