@@ -9,7 +9,7 @@ interface Env {
 }
 
 /** The registry's public documents — the only paths this host passes through. */
-export const REGISTRY_PATHS = ['/.well-known/ard.json', '/registry/v1/latest/registry.json'] as const;
+export const REGISTRY_PATHS = ['/.well-known/ard.json', '/.well-known/ai-catalog.json', '/registry/v1/latest/registry.json'] as const;
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {

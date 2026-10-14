@@ -48,6 +48,10 @@ interface Env {
   MCP_URL?: string;
   AGENT_NAME?: string;
   A2A_PUBLIC_ORIGIN?: string;
+  /** The estate's ARD catalog root — `urn:air:<verified domain>:catalog:root` (spec 439 §5). Set per deployment,
+   *  because the domain is one somebody PROVED they own at an index, and a guessed one names a domain nobody did.
+   *  Unset ⇒ `/.well-known/ai-catalog.json` says so and declares no identifier rather than inventing one. */
+  CATALOG_URN?: string;
   // Service binding to demo-discovery-mcp (production; Workers can't fetch each other by public URL).
   MCP?: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
 }
@@ -801,6 +805,34 @@ app.get(ARD_WELL_KNOWN_PATH, async (c) => {
   if (!mcp?.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: mcp?.error ?? 'discovery MCP unavailable' } }, 500);
   const entries = (mcp.results as AgentResult[]).map((r) => ardEntryForAgent(r).entry).filter((e): e is NonNullable<typeof e> => !!e);
   return c.json(ardManifest([ardRegistryEntry(origin, REGISTRY_DISPLAY), ...entries]), 200, { 'cache-control': 'public, max-age=300' });
+});
+
+// THE SAME ENTRIES, DECLARED AS A CATALOG (spec 439 §5 / §7.9). The NANDA index's entry shape IS the AI Catalog
+// shape and Ring 0 already pins `ard`, so this document adds no vocabulary: it is the ARD manifest with the two
+// fields that say what the document itself is. An index that lists us as `urn:air:<domain>:catalog:root` points
+// here, and the list of agents stays OURS — adding one later needs no round trip to anybody's directory.
+//
+// It declares no identifier when the deployment has not been told one. A catalog claiming
+// `urn:air:<domain>:catalog:root` for a domain nobody proved is the same mistake as a URN naming a domain nobody
+// verified, and an absent field is honest where a guessed one is not.
+app.get('/.well-known/ai-catalog.json', async (c) => {
+  const origin = registryOrigin(c);
+  const mcp = await mcpGet(c.env, '/search?q=&limit=500').catch((e) => ({ ok: false, error: String(e) }));
+  if (!mcp?.ok) return c.json({ error: { code: 'INTERNAL_ERROR', message: mcp?.error ?? 'discovery MCP unavailable' } }, 500);
+  const entries = (mcp.results as AgentResult[]).map((r) => ardEntryForAgent(r).entry).filter((e): e is NonNullable<typeof e> => !!e);
+  const manifest = ardManifest([ardRegistryEntry(origin, REGISTRY_DISPLAY), ...entries]);
+  const urn = c.env.CATALOG_URN?.trim();
+  return c.json({
+    ...manifest,
+    type: 'application/ai-catalog+json',
+    ...(urn ? { identifier: urn } : { identifierAbsent: 'this deployment was not told its catalog URN, and a URN names a domain somebody proved' }),
+    // REGISTRY_DISPLAY is the registry's full ARD descriptor, not a name — putting it here printed an object
+    // where a reader expects a label.
+    displayName: REGISTRY_DISPLAY.displayName ?? REGISTRY_DISPLAY.name,
+    updatedAt: new Date().toISOString(),
+    // Said in the document, because a reader of a directory has no other way to learn it.
+    authority: 'none — this catalog is a listing. Whether any agent here may act is decided at its estate, per step, under a mandate its principal signed.',
+  }, 200, { 'cache-control': 'public, max-age=300' });
 });
 
 /** The ids the registry's agents declare right now (the /facets aggregate) — what a capability word resolves against. */

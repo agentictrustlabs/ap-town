@@ -28,6 +28,9 @@ pattern = "discovery-a2a.faithnet.io"
 custom_domain = true
 
 [env.faithnet.vars]
+# spec 439 §5 — the ARD catalog root this estate publishes under its VERIFIED domain. A NANDA index entry of
+# `urn:air:faithnet.io:catalog:root` points at /.well-known/ai-catalog.json here; the list of agents stays ours.
+CATALOG_URN = "urn:air:faithnet.io:catalog:root"
 # spec 346: the discovery agent IS the `.registry` operator — a typed name claimed on 34348 by a service SA that
 # declared `atl:agentType = registry` and created `urn:ap:registry:faithnet-agents` on AgentRegistryBase.
 AGENT_NAME = "discovery.registry"  # town:agent
