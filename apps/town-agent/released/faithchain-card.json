@@ -1,0 +1,137 @@
+{
+  "type": "ap.town-card-release.v1",
+  "town": "faithchain",
+  "origin": "https://town.faithnet.io",
+  "releaseId": "rel-20261014094336",
+  "releasedAt": "2026-10-14T09:43:37.376Z",
+  "card": {
+    "name": "faithchain town",
+    "description": "The faithchain town's own agent: which estates live on chain 34348, which services they share, and whether each is up. It lists; it never grants — whether you may use a service is your own delegation's question.",
+    "version": "0.1.0",
+    "supportedInterfaces": [
+      {
+        "url": "https://town.faithnet.io/a2a",
+        "protocolBinding": "JSONRPC",
+        "protocolVersion": "1.0"
+      }
+    ],
+    "capabilities": {
+      "streaming": false,
+      "pushNotifications": false
+    },
+    "defaultInputModes": [
+      "text/plain",
+      "application/json"
+    ],
+    "defaultOutputModes": [
+      "text/plain",
+      "application/json"
+    ],
+    "provider": {
+      "organization": "The faithchain town",
+      "url": "https://town.faithnet.io"
+    },
+    "documentationUrl": "https://town.faithnet.io/",
+    "skills": [
+      {
+        "id": "town.describe",
+        "name": "Describe the town",
+        "description": "The chain, the estates and every listed service, each with its signals: listed · healthy · compatible.",
+        "tags": [
+          "town",
+          "directory",
+          "health"
+        ],
+        "examples": [
+          "what is in this town?",
+          "which services are up?"
+        ]
+      },
+      {
+        "id": "town.service",
+        "name": "One service",
+        "description": "One listed service by id — what it is, who deploys it, where it lives, and its signals.",
+        "tags": [
+          "town",
+          "service",
+          "health"
+        ],
+        "examples": [
+          "registry",
+          "skills",
+          "kms"
+        ]
+      },
+      {
+        "id": "town.estate",
+        "name": "One estate",
+        "description": "One estate of this town by id — where it lives, the name roots it may give and the gate that authorizes them, whose keys hold it, the MCP servers it declares, and which agents answer at its hosts. Membership is INFERRED from each agent's own on-chain endpoint and every row says so; no attestation of membership exists yet. Args: a data part { \"skill\": \"town.estate\", \"id\": \"<estate id>\" }, or name the estate in the text.",
+        "tags": [
+          "town",
+          "estate",
+          "directory"
+        ],
+        "examples": [
+          "tell me about the faithnet estate",
+          "which agents are in imbnet?"
+        ]
+      },
+      {
+        "id": "town.mcp",
+        "name": "The MCP servers",
+        "description": "Which MCP servers this town runs, which each estate runs, and which agents serve a door of their own. The first two are DECLARED in the town manifest; the third is read from the chain. What an agent has ATTACHED is absent by construction: those are records in its owner's vault under her own grant. No tool lists — those belong to each server's own signed manifest. An endpoint says where a server listens, never that you may use it.",
+        "tags": [
+          "town",
+          "mcp",
+          "directory"
+        ],
+        "examples": [
+          "which mcp servers are here?",
+          "what mcp does faithnet run?"
+        ]
+      }
+    ],
+    "signatures": [
+      {
+        "protected": "eyJhbGciOiJFUzI1NiIsImtpZCI6IjlMYkVNbXhRNjZUU1lwUmREbzJlMTk3TlkyaXNSQTkxMXVTcjV2NDVuNG8ifQ",
+        "signature": "hR02ty7AE0yv_e-bX0i3heY02uJZFVnWboKD7PyPLwJCZ8mL92-wkL1azWR9iN8PvuHh0BLd039W-GmhS4k0-w"
+      }
+    ]
+  },
+  "jwks": {
+    "keys": [
+      {
+        "kty": "EC",
+        "x": "e2sL8JaTAkqBlsod0l1DHFRpIRK2uiZYWCsWMis9zXw",
+        "y": "u8-SGDVy86Qe542rSR-UphrUGZXKPSI9WEOoCTJM_8k",
+        "crv": "P-256",
+        "kid": "9LbEMmxQ66TSYpRdDo2e197NY2isRA911uSr5v45n4o",
+        "alg": "ES256",
+        "use": "sig"
+      }
+    ]
+  },
+  "smartAgentBinding": {
+    "binding": {
+      "canonicalAgentId": "eip155:34348:0xababad83e69b4cfbf1b90c1c70561d6d770beef4",
+      "cardResourceId": "faithchain.town.card",
+      "cardReleaseId": "rel-20261014094336",
+      "cardUri": "https://town.faithnet.io/.well-known/agent-card.json",
+      "unsignedCardDigest": "sha256:fade4b016508d99dd4dab8318d9f211e932f34135944d44b71a9ed306296f05b",
+      "signedCardDigest": "sha256:3ab1168efa6b21c793a6424dc664854efa8497a72d1cf655801471cc3f5bb871",
+      "signerKeyThumbprint": "9LbEMmxQ66TSYpRdDo2e197NY2isRA911uSr5v45n4o",
+      "validFrom": 1791971016,
+      "validUntil": 1823507016
+    },
+    "chainId": 34348,
+    "verifyingContract": "0xababad83e69b4cfbf1b90c1c70561d6d770beef4",
+    "signature": "0x2b4e2257f3ce8808d892604bfa919b0523c8db66a55717332acfaf612f3c382f3795169f345b414946945b57c3a7a21754f0b1b558f20f1ec4eebcd30b50332e1b"
+  },
+  "verify": [
+    "Fetch the card. Strip `signatures`. Canonicalize with RFC 8785 and sha256 it: that is `unsignedCardDigest`.",
+    "Fetch /.well-known/jwks.json. The key whose RFC 7638 thumbprint equals the JWS `kid` verifies the detached payload.",
+    "Fetch /.well-known/agent-card-binding.json. It names both digests and that same thumbprint.",
+    "Verify the binding's EIP-712 digest against 0xababad83e69b4cfbf1b90c1c70561d6d770beef4 with ERC-1271 on chain 34348. Only then is this that agent's card.",
+    "None of it is authority. A card is evidence of what an agent says it does, never permission to make it do anything."
+  ]
+}

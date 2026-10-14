@@ -16,6 +16,8 @@ import { samplePulse, readPulse, type PulseSampleV1, type PulseEnv } from './pul
 import { recordDay, pulseRecordReadiness, contextAgents, type PulseRecordEnv } from './pulse-record';
 import { PERF_WINDOWS, operatorAuthorized, readPerformance, type InfraRowV1, type PerfWindow } from './pulse-perf';
 import { readAsOperator, verifyHomeToken } from './steward';
+import { cardContentDigest } from '@agenticprimitives/agent-profile/a2a';
+import faithchainRelease from '../released/faithchain-card.json';
 import { resolveAgentCard, createStandardA2aClient } from '@agenticprimitives/a2a/standard';
 export { HeartbeatDO } from './pulse';
 
@@ -96,6 +98,26 @@ export function townOf(env: Env): TownManifest {
   const t = TOWNS[env.TOWN];
   if (!t) throw new Error(`TOWN "${env.TOWN}" is not a town this build knows (${Object.keys(TOWNS).join(', ')})`);
   return t;
+}
+
+/** A released card bundle: the signed card, the key that signed it, and the agent's binding over both digests. */
+export interface CardReleaseV1 {
+  type: 'ap.town-card-release.v1';
+  town: string; origin: string; releaseId: string; releasedAt: string;
+  card: AgentCardV1 & { signatures: Array<{ protected: string; signature: string }> };
+  jwks: { keys: JsonWebKey[] };
+  smartAgentBinding: { binding: { unsignedCardDigest: string; signedCardDigest: string; signerKeyThumbprint: string; [k: string]: unknown }; chainId: number; verifyingContract: string; signature: string };
+  verify: string[];
+}
+
+const RELEASES: Record<string, CardReleaseV1> = { faithchain: faithchainRelease as unknown as CardReleaseV1 };
+
+/** The release for this town, or `null` when it has none. A release made for ANOTHER origin is not this town's
+ *  card: the binding names a `cardUri`, so serving it here would be a signature over a URL nobody is reading. */
+export function releaseFor(town: string, origin: string): CardReleaseV1 | null {
+  const r = RELEASES[town];
+  if (!r) return null;
+  return r.origin.replace(/\/$/, '') === origin.replace(/\/$/, '') ? r : null;
 }
 
 export function cardFor(town: TownManifest, origin: string): AgentCardV1 {
@@ -769,8 +791,44 @@ export default {
     const selfHost = new URL(origin).host;
     const card = cardFor(town, origin);
 
+    // THE RELEASED CARD, SERVED VERBATIM (spec 347 §4.2). Not rebuilt per request: a signature covers exact bytes,
+    // so re-deriving the card here would serve whatever the manifest says this minute under a signature made for
+    // something else. Three documents, and a reader needs all three — the card, the key that signed it, and the
+    // AGENT'S OWN statement that the key is its. A JWS alone proves somebody signed these bytes; only the binding
+    // makes them this agent's, which is the question 27 of 29 entries in the live NANDA index cannot answer.
     if (req.method === 'GET' && (url.pathname === '/.well-known/agent-card.json' || url.pathname === '/.well-known/agent.json')) {
-      return json(card, 200, { 'cache-control': 'public, max-age=300', etag: `"${town.town}-${VERSION}"` });
+      const rel = releaseFor(town.town, origin);
+      if (!rel) {
+        // No release for this town: serve the built card and SAY it is unsigned, rather than let a reader assume
+        // the absence of a signature means the absence of a doctrine (ADR-0013 — a labelled difference, never a
+        // silent substitution).
+        return json(card, 200, { 'cache-control': 'public, max-age=300', etag: `"${town.town}-${VERSION}"`, 'x-ap-card-source': 'built-unreleased' });
+      }
+      // DRIFT IS REPORTED, NEVER RESOLVED HERE. If the manifest would now build different bytes, the release is
+      // still what is served and what the binding covers; the header says the draft has moved on.
+      const drift = cardContentDigest(card) !== rel.smartAgentBinding.binding.unsignedCardDigest;
+      return json(rel.card, 200, {
+        'cache-control': 'public, max-age=300',
+        etag: `"${town.town}-${rel.releaseId}"`,
+        'x-ap-card-source': 'released',
+        'x-ap-card-release': rel.releaseId,
+        'x-ap-card-binding': `${origin}/.well-known/agent-card-binding.json`,
+        ...(drift ? { 'x-ap-card-draft': 'stale — the manifest would now build different bytes; this release is unchanged' } : {}),
+      });
+    }
+    // The key material for the JWS above. A thumbprint in a `kid` is not a key; without this a reader has a
+    // signature they cannot check.
+    if (req.method === 'GET' && url.pathname === '/.well-known/jwks.json') {
+      const rel = releaseFor(town.town, origin);
+      if (!rel) return json({ keys: [] }, 200, { 'cache-control': 'public, max-age=300', 'x-ap-card-source': 'built-unreleased' });
+      return json(rel.jwks, 200, { 'cache-control': 'public, max-age=3600' });
+    }
+    // The agent's own EIP-712 statement that this card and this key are its, validated through ERC-1271 on chain.
+    // Evidence, never authority: it says whose card this is, and nothing about what anyone may ask the agent to do.
+    if (req.method === 'GET' && url.pathname === '/.well-known/agent-card-binding.json') {
+      const rel = releaseFor(town.town, origin);
+      if (!rel) return json({ error: 'no_release', detail: 'this town has no released card, so there is no binding' }, 404);
+      return json({ ...rel.smartAgentBinding, verify: rel.verify }, 200, { 'cache-control': 'public, max-age=3600' });
     }
     if (url.pathname.startsWith('/api/')) {
       // Read-only, with two exceptions, both the operator's: tell the town MCP to collect now

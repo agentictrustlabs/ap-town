@@ -13,3 +13,6 @@ live-gates-report.json
 
 # No root lock committed (as ap-home): the install resolves the pinned set fresh.
 pnpm-lock.yaml
+
+# The card-signing key and the released bundle inputs: operator-held, never committed.
+.secrets/
