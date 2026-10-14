@@ -832,7 +832,10 @@ app.get('/.well-known/ai-catalog.json', async (c) => {
     updatedAt: new Date().toISOString(),
     // Said in the document, because a reader of a directory has no other way to learn it.
     authority: 'none — this catalog is a listing. Whether any agent here may act is decided at its estate, per step, under a mandate its principal signed.',
-  }, 200, { 'cache-control': 'public, max-age=300' });
+    // SERVE THE TYPE WE CLAIM. The index record says `application/ai-catalog+json`; answering with a generic
+    // `application/json` is the shape mismatch our own index reader reports about other entries, and we do not get
+    // to publish a check we fail.
+  }, 200, { 'cache-control': 'public, max-age=300', 'content-type': 'application/ai-catalog+json; charset=utf-8' });
 });
 
 /** The ids the registry's agents declare right now (the /facets aggregate) — what a capability word resolves against. */
