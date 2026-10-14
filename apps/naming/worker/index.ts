@@ -6,7 +6,7 @@ import { TOWNS, type TownManifest } from '@ap-town/town-model';
 import { isAddress } from 'viem';
 import type { Address, ApiError } from '../src/api-types';
 import { chainFor } from './chain';
-import { addressView, coinsView, displayManyView, displayView, estatesOf, nameView, rootPage, searchView, townView, type Ctx } from './views';
+import { addressView, coinsView, displayManyView, displayView, estatesOf, nameView, rootPage, searchView, townView, type Ctx, namesLike } from './views';
 
 interface Env {
   TOWN: string;
@@ -55,12 +55,18 @@ async function api(url: URL, env: Env): Promise<Response> {
   const ctx = ctxOf(env);
   if (path === '/town') return json(await townView(ctx), 200, 60);
   if (path === '/search') return json(await searchView(ctx, url.searchParams.get('q') ?? ''), 200, 15);
+  // Names that CONTAIN what was typed — a different question from "is this one free", and the one that makes a
+  // partial name find anything (spec 430; owner, 2026-10-14).
+  if (path === '/names-like') {
+    const t = (url.searchParams.get('tld') ?? '').trim().toLowerCase();
+    return json(await namesLike(ctx, url.searchParams.get('q') ?? '', /^[a-z0-9-]{1,63}$/.test(t) ? t : null), 200, 60);
+  }
   let m = path.match(/^\/name\/(.+)$/);
   if (m) {
     // A name mid-ceremony (claimed, not yet presented) has met readers that throw on empty answers; say what failed,
     // as JSON, rather than let the platform's error page stand in — the page retries a fresh read.
     try { return json(await nameView(ctx, m[1]!), 200, 20); }
-    catch (e) { console.error('nameView', m[1], e instanceof Error ? e.stack ?? e.message : String(e)); return fail(502, 'read_failed', `The chain read failed: ${e instanceof Error ? e.message.slice(0, 200) : String(e)}`); }
+    catch (e) { console.error('nameView', m[1], e instanceof Error ? e.stack ?? e.message : String(e)); return fail(502, 'read_failed', `The chain read failed: ${clean(e)}`); }
   }
   m = path.match(/^\/address\/(0x[0-9a-fA-F]{40})$/);
   if (m) return json(await addressView(ctx, m[1] as Address), 200, 20);
@@ -83,6 +89,13 @@ async function api(url: URL, env: Env): Promise<Response> {
   return fail(404, 'not_found');
 }
 
+/** An upstream failure, said in one line. A gateway that fails serves an HTML page, and the client puts that
+ *  page's text in the error message — which the app then rendered where a name's price should be. */
+function clean(e: unknown): string {
+  const raw = e instanceof Error ? e.message : String(e);
+  return raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
 export default {
   async fetch(req: Request, env: Env, exec: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
@@ -102,7 +115,7 @@ export default {
     }
     let res: Response;
     try { res = await api(url, env); }
-    catch (e) { return fail(502, 'chain_read_failed', String((e as Error).message).slice(0, 300)); }
+    catch (e) { return fail(502, 'chain_read_failed', clean(e)); }
     if (res.status === 200 && res.headers.get('cache-control')?.startsWith('public')) exec.waitUntil(cache.put(key, res.clone()));
     return res;
   },

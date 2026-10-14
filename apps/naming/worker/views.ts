@@ -10,6 +10,7 @@ import type {
   Address, AddressView, Banner, CanRow, DisplayView, EstateOfAgent, EstateRef, Hex, NameRow, NameView, RecordRow,
   RootPage, RootView, SearchRow, SearchView, Signal, Stamp, TownView,
 } from '../src/api-types';
+import type { PlaceKind } from '@ap-town/town-scene';
 import { ZERO, ZERO_NODE, type Chain } from './chain';
 import { NOUN, RECORD_LABEL, RULE_WORDS, kindOfTld, kindOfType, nounOfTld, typeOfTld } from './words';
 
@@ -499,4 +500,63 @@ export async function searchView(ctx: Ctx, query: string): Promise<SearchView> {
     return { name: `${q}.${r.tld}`, tld: r.tld, names: r.names, kind: r.kind, status, agent: exists ? nz(target) : null, by, coins };
   });
   return { ...s, kind: 'label', label: q, rows };
+}
+
+// ── names that CONTAIN what you typed ────────────────────────────────────────────────────────────────────────
+//
+// The box asked one question — "is `nath.me` free?" — and so typing part of a name you were looking for answered
+// about a name nobody has (owner, 2026-10-14). Finding `nathan.me` from `nath` is a different question, and this
+// is it.
+//
+// FROM CHAIN STORAGE, like everything else here (ADR-0012): the registry contract hands back every child
+// labelhash under a root, each label is read from storage, and the match is a plain substring over those labels.
+// No log scan and no index of our own — the reads batch forty to an HTTP request, so the whole town is a handful
+// of calls. The answer is CACHED for a few minutes because it is a browse aid; whether a particular name is free
+// is asked uncached, every time, and that is the answer anyone acts on.
+export interface LabelHit { name: string; label: string; tld: string; kind: PlaceKind; names: string | null }
+
+const LABELS_TTL_S = 600;
+/** Labels read per HTTP batch. The client packs forty calls into one request; asking for every label at once
+ *  therefore put eight requests on the gateway in the same instant, and the first time it ran, a reader asking
+ *  the ordinary question — "is this name free?" — got a 502 out of the gateway instead of an answer. One batch in
+ *  flight at a time is a few seconds cold, once every ten minutes, and nobody else's read pays for it. */
+const LABEL_CHUNK = 40;
+
+/** Every registered label under every typed root, from the chain, cached at the edge. */
+async function allLabels(ctx: Ctx): Promise<LabelHit[]> {
+  const key = new Request(`https://naming.internal/labels/${ctx.town.town}`);
+  const cache = (globalThis as { caches?: { default?: Cache } }).caches?.default;
+  const hit = await cache?.match(key).catch(() => undefined);
+  if (hit) return (await hit.json()) as LabelHit[];
+  const roots = (await rootViews(ctx)).filter((r) => !r.legacy);
+  // One batched pass for the child lists, then the labels in chunks — never the whole town at once.
+  const childLists = await Promise.all(roots.map((r) => ctx.chain.reg<Hex[]>('childLabelhashes', [namehash(r.tld) as Hex]).catch(() => [] as Hex[])));
+  const wanted = roots.flatMap((r, i) => (childLists[i] ?? []).map((h) => ({ r, node: keccak256(concat([namehash(r.tld) as Hex, h])) as Hex })));
+  const all: LabelHit[] = [];
+  for (let i = 0; i < wanted.length; i += LABEL_CHUNK) {
+    const chunk = wanted.slice(i, i + LABEL_CHUNK);
+    const labels = await Promise.all(chunk.map((w) => ctx.chain.reg<string>('label', [w.node]).catch(() => '')));
+    labels.forEach((label, j) => { const w = chunk[j]!; if (label) all.push({ name: displayOf(`${label}.${w.r.tld}`), label, tld: w.r.tld, kind: w.r.kind, names: w.r.names }); });
+  }
+  await cache?.put(key, new Response(JSON.stringify(all), { headers: { 'content-type': 'application/json', 'cache-control': `max-age=${LABELS_TTL_S}` } })).catch(() => undefined);
+  return all;
+}
+
+/**
+ * Names containing `q`, the ones that START with it first, then the rest — each group alphabetical so the order
+ * is a property of the names and not of the order the chain happens to hold them in. A type filter is a hard
+ * filter here as everywhere: it removes, it never re-orders.
+ */
+export async function namesLike(ctx: Ctx, query: string, tld: string | null, limit = 60): Promise<Stamp & { label: string; tld: string | null; hits: LabelHit[]; total: number; scanned: number }> {
+  const s = await stamp(ctx);
+  const q = query.trim().toLowerCase();
+  if (q.length < 2 || !/^[a-z0-9-]{2,63}$/.test(q)) return { ...s, label: q, tld, hits: [], total: 0, scanned: 0 };
+  // A browse aid never costs anyone an answer: if the scan cannot be finished, this says it found nothing rather
+  // than failing the request that carries the availability answer beside it.
+  const all = await allLabels(ctx).catch(() => [] as LabelHit[]);
+  const pool = tld ? all.filter((h) => h.tld === tld) : all;
+  const starts = pool.filter((h) => h.label.startsWith(q)).sort((a, b) => a.label.localeCompare(b.label) || a.tld.localeCompare(b.tld));
+  const inside = pool.filter((h) => !h.label.startsWith(q) && h.label.includes(q)).sort((a, b) => a.label.localeCompare(b.label) || a.tld.localeCompare(b.tld));
+  const hits = [...starts, ...inside];
+  return { ...s, label: q, tld, hits: hits.slice(0, limit), total: hits.length, scanned: all.length };
 }

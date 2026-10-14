@@ -14,6 +14,7 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { getJson } from './api';
 import type { NameView } from './api-types';
+import type { PlaceKind } from '@ap-town/town-scene';
 import { Link, nameHref, registerHref, rootHref, useRoute } from './router';
 import { KIND_OF_TLD } from './register';
 import { Chip, Glyph } from './ui';
@@ -45,6 +46,21 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
     return () => { live = false; window.clearTimeout(t); };
   }, [label, end]);
   const name = `${label}.${end}`;
+  // NAMES THAT ALREADY EXIST — the other half of a search box, and the half this one did not have. Typing `nath`
+  // asked only whether `nath.me` was free, so looking for `nathan.me` answered about a name nobody holds (owner,
+  // 2026-10-14). This asks the service for the names CONTAINING what was typed, across every ending when the box
+  // offers a choice of ending, and within this one on a root page. Two characters is enough: it is a browse aid,
+  // and the availability answer beside it is the one anybody acts on.
+  const [like, setLike] = useState<{ hits: Array<{ name: string; tld: string; kind: PlaceKind }>; total: number } | null>(null);
+  useEffect(() => {
+    if (label.length < 2) { setLike(null); return; }
+    let live = true;
+    const t = window.setTimeout(async () => {
+      const r = await getJson<{ hits: Array<{ name: string; tld: string; kind: PlaceKind }>; total: number }>(`/api/names-like?q=${encodeURIComponent(label)}${choices ? '' : `&tld=${encodeURIComponent(tld)}`}`);
+      if (live) setLike(r.ok ? { hits: r.data.hits, total: r.data.total } : null);
+    }, 300);
+    return () => { live = false; window.clearTimeout(t); };
+  }, [label, tld, choices]);
   // Register leads to the step page (430 N6: the ENS register screen), connected or not.
   const register = () => go(registerHref(name));
   const onSubmit = (e: FormEvent) => { e.preventDefault(); if (v.state === 'ready' && v.data.status === 'available') register(); else if (label.length >= 3) go(nameHref(name)); };
@@ -83,6 +99,22 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
           )}
         </div>
       )}
+      {/* The name in the row above is not repeated here: it has already been answered, with its price and its
+          status, and listing it again as "a name like itself" reads as a second, weaker answer. */}
+      {(() => { const rest = (like?.hits ?? []).filter((h) => h.name !== name); return like && rest.length > 0 && (
+        <div className="like">
+          <p className="quiet">{rest.length === 1 ? 'One other name' : `${like.total - (like.hits.length - rest.length)} other names`} already {rest.length === 1 ? 'contains' : 'contain'} &ldquo;{label}&rdquo;{choices ? '' : `, ending in .${tld}`}:</p>
+          <ul className="rows">
+            {rest.slice(0, 8).map((h) => (
+              <li key={h.name} className="row">
+                <Glyph kind={h.kind} />
+                <span className="row-main"><Link href={nameHref(h.name)} className="row-name">{h.name}</Link></span>
+              </li>
+            ))}
+          </ul>
+          {like.total - (like.hits.length - rest.length) > 8 && <p className="quiet">and {like.total - (like.hits.length - rest.length) - 8} more.</p>}
+        </div>
+      ); })()}
     </div>
   );
 }
