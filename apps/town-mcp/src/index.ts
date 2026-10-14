@@ -18,7 +18,7 @@
 // It has no route and no custom domain. Every answer is aggregate infrastructure fact: no person, no vault, no key.
 // It READS; nothing here acts (I8).
 import { Hono } from 'hono';
-import { TOWNS, attributeResource, type CostMonthV1, type CostSampleV1, type InfraSampleV1, type ResourceOwnershipV1, type TownManifest } from '@ap-town/town-model';
+import { TOWNS, attributeCost, attributeResource, dropSupersededCostRows, type CostMonthV1, type CostSampleV1, type InfraSampleV1, type ResourceOwnershipV1, type TownManifest } from '@ap-town/town-model';
 import { collectCostPass, collectHourlyPass, collectStatusPass, type InfraEnv, type InfraPass } from './infra/passes';
 
 export interface Env extends InfraEnv {
@@ -226,8 +226,8 @@ async function callTool(env: Env, name: string, args: Record<string, unknown>): 
     const latest = new Map<string, CostSampleV1>();
     for (const r of rows) { const cur = latest.get(r.id); const c = r.payload as CostSampleV1; if (!cur || cur.asOf <= c.asOf) latest.set(r.id, c); }
     const groups = new Map<string, { owner: string | null; platform: string; basis: string; microUsd: number; days: Set<string>; complete: boolean; asOf: string }>();
-    for (const c of latest.values()) {
-      const o = c.resource === '*' ? null : attributeResource(town, c.platform, c.resource);
+    for (const c of dropSupersededCostRows([...latest.values()])) {
+      const o = attributeCost(town, c);
       if (args.owner && !(o && (o.id === args.owner || `${o.kind}:${o.id}` === args.owner))) continue;
       const key = `${c.platform}|${o ? `${o.kind}:${o.id}` : 'unattributed'}|${c.basis}`;
       const g = groups.get(key) ?? { owner: o ? `${o.kind}:${o.id}` : null, platform: c.platform, basis: c.basis, microUsd: 0, days: new Set<string>(), complete: true, asOf: c.asOf };

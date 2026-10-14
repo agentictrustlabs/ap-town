@@ -196,6 +196,8 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
         );
       })()}
 
+      {perf.costByResource.length > 0 && <ByMachine perf={perf} t={t} />}
+
       <section>
         <SectionHead eyebrow="Day by day" title="Per day" id="per-day">
           A day is missing, not zero, when its read did not land — the cost pass restates, so a later read of the
@@ -405,5 +407,85 @@ function Worth({ months, rows, days }: { months: PerfView['months']; rows: CostR
       <p className="eyebrow" style={{ margin: '0 0 6px' }}>Worth a look</p>
       <ul className="plain" style={{ margin: 0 }}>{notes}</ul>
     </div>
+  );
+}
+
+/**
+ * WHAT EACH MACHINE COSTS, AND WHETHER THE COST IS LOAD — the first question anybody asks of a bill.
+ *
+ * Every row carries its cheapest and dearest whole day beside its mean, and the CPU the Infra pass measured on
+ * the same resource where there is one. The two together answer a question the owner-level tables cannot: an
+ * allocated machine costs the same idle as saturated, so a FLAT row at 0.3% CPU is not a machine working cheaply,
+ * it is a machine being paid for. "Spread" is how far the window's days move at all — under 5% is flat, and flat
+ * means the amount is allocation, not usage. The lever on a flat row is its size or its existence; the lever on a
+ * moving row is the work going through it.
+ */
+function ByMachine({ perf, t }: { perf: PerfView; t: TownData }): ReactNode {
+  const rows = perf.costByResource;
+  // The share column is a share of the SAME basis, never of a total that added billed to effective (I1).
+  const sumOf = new Map<string, number>();
+  for (const r of rows) sumOf.set(r.basis, (sumOf.get(r.basis) ?? 0) + r.microUsd);
+  // The same resource name the Infra pass reports, so a VM's cost and its CPU meet on one line.
+  const busy = (resource: string): { cpu: number | null; max: number | null; kind: string } | null => {
+    const i = perf.infrastructure.find((x) => x.resource === resource && x.latest?.metrics && 'cpuPercent' in x.latest.metrics);
+    if (!i?.latest) return null;
+    return { cpu: i.latest.metrics.cpuPercent ?? null, max: i.latest.metrics.cpuMaxPercent ?? null, kind: i.kind };
+  };
+  const spread = (r: PerfView['costByResource'][number]): number | null =>
+    r.highDayMicroUsd > 0 ? (r.highDayMicroUsd - r.lowDayMicroUsd) / r.highDayMicroUsd : null;
+  // A row whose name is some other row's SCOPE is a whole resource group, billed for days before the per-resource
+  // read existed. It is real money and it is not a machine, so it says so rather than sitting among them unmarked.
+  const groups = new Set(rows.map((r) => r.scope).filter((x): x is string => !!x).map((x) => x.toLowerCase()));
+  // NOT EVERY CHARGE IS A DAILY CHARGE. The key vault's $5.00 landed on ONE day of the window because it is a
+  // monthly fee; multiplying it by thirty claimed $150 a month for a $5 service. A resource billed on far fewer
+  // days than the window covers is charged on some other cycle, and this will not project it. Measured against
+  // the widest-covered resource on the same platform rather than against the window, because the window's oldest
+  // day may simply not have been read yet.
+  const span = new Map<string, number>();
+  for (const r of rows) span.set(r.platform, Math.max(span.get(r.platform) ?? 0, r.days));
+  const daily = (r: PerfView['costByResource'][number]): boolean => r.days >= (span.get(r.platform) ?? r.days) - 1;
+  return (
+    <section>
+      <SectionHead eyebrow="Which machine" title="By resource" id="by-resource">
+        One row per billed resource, biggest first, with a month at the window&rsquo;s own pace beside it. The
+        <strong> spread</strong> column is the distance between the window&rsquo;s cheapest and dearest whole day:
+        flat means the charge is for the resource EXISTING, not for the work it did, and no amount of idling will
+        reduce it. Where the Infra pass measures the same resource, how busy it actually is sits beside what it
+        costs — the pair is the argument for resizing something. A provider keeps rating a day after it ends
+        — Azure for about two — so the per-day figure is taken over the days it has FINISHED, and the
+        window’s own total reads low by whatever of its tail is still arriving.
+      </SectionHead>
+      <table className="table">
+        <thead><tr><th scope="col">Resource</th><th scope="col">Owner</th><th scope="col" className="num">Window</th><th scope="col" className="num">Per day</th><th scope="col" className="num">Per month</th><th scope="col">Busy</th></tr></thead>
+        <tbody>{rows.map((r) => {
+          const sp = spread(r); const b = busy(r.resource);
+          return (
+            <tr key={`${r.platform}|${r.account}|${r.resource}|${r.basis}`}>
+              {/* Eight columns did not fit the content width and the money was clipped off the right edge, which
+                  is the one thing this table exists to show. The scope, the spread and the basis each ride with
+                  the figure they qualify instead of taking a column of their own. */}
+              <th scope="row" className="wrap">
+                <span className="mono">{r.resource}</span>
+                {groups.has(r.resource.toLowerCase()) && <> <Chip tone="muted">whole group</Chip></>}
+                {r.scope && <><br /><span className="quiet">in {r.scope}</span></>}
+              </th>
+              <td>{ownerCell(r.owner)}</td>
+              <td className="num">{fmtUsd(r.microUsd)}<br /><span className="quiet"><BasisBadge basis={r.basis} /> {(sumOf.get(r.basis) ?? 0) > 0 ? `${((r.microUsd / (sumOf.get(r.basis) ?? 1)) * 100).toFixed(0)}%` : ''}</span></td>
+              <td className="num">{fmtUsd(r.perDayMicroUsd)}<br />{sp === null || !daily(r)
+                ? <span className="quiet" title={daily(r) ? 'no settled day in this window yet' : 'one charge, not a daily rate'}>{r.settledDays < r.days ? `${r.settledDays}/${r.days}d` : '—'}</span>
+                : sp < 0.05 ? <Chip tone="ok">flat</Chip> : <Chip tone="warn">{`±${(sp * 100).toFixed(0)}%`}</Chip>}</td>
+              <td className="num">{groups.has(r.resource.toLowerCase()) ? <span className="quiet" title="a group row covers only the days before the per-resource read; projecting a month from it would double what its own machines already say">—</span>
+                : !daily(r) ? <span className="quiet" title={`billed on ${r.days} day(s) of this window, so it is not a daily charge — a monthly fee projected by thirty would be thirty times wrong`}>not daily</span>
+                : fmtUsd(r.perDayMicroUsd * 30)}</td>
+              <td className="quiet">{b === null ? <span title="nothing meters this resource's load">—</span> : `${(b.cpu ?? 0).toFixed(2)}%${b.max !== null ? ` · peak ${b.max.toFixed(1)}%` : ''}`}</td>
+            </tr>
+          );
+        })}</tbody>
+      </table>
+      <p className="quiet">
+        Per month is this window&rsquo;s own pace &times; 30, not a forecast and not a provider figure &mdash; the
+        billed months are above. {t.town === 'faithchain' ? 'A resource with no owner is one the manifest claims through its group rather than by name.' : ''}
+      </p>
+    </section>
   );
 }

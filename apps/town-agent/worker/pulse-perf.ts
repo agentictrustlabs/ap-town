@@ -5,7 +5,7 @@
 // labels (I6); the Unattributed bucket, SHOWN (I4). `detail: false` is the public read — status, lag, the provenance
 // block (aggregate counts, as the heartbeat already is) and the unattributed list; amounts and metrics are the
 // operator's (434 §10). Nothing here is a permission.
-import { attributeResource, type AttributedOwner, type CostMonthV1, type CostSampleV1, type InfraSampleV1, type LagClass, type PerfReadV1, type TownManifest } from '@ap-town/town-model';
+import { attributeCost, attributeResource, dropSupersededCostRows, type AttributedOwner, type CostMonthV1, type CostSampleV1, type InfraSampleV1, type LagClass, type PerfReadV1, type TownManifest } from '@ap-town/town-model';
 import type { EstateHeartbeatV1 } from '@agenticprimitives/harness/heartbeat';
 import type { PulseSampleV1 } from './pulse';
 import { SAMPLE_INTERVAL_MS } from './pulse';
@@ -97,11 +97,11 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
   // ── Cost: the latest read of every (platform, account, day, resource, sku) wins; days in the window only ──
   const latestCost = new Map<string, { at: string; c: CostSampleV1 }>();
   for (const s of rows.filter((x) => x.kind === 'cost')) { const c = s.payload as CostSampleV1; if (!daySet.has(c.day)) continue; const cur = latestCost.get(s.id); if (!cur || cur.at <= s.at) latestCost.set(s.id, { at: s.at, c }); }
-  const costRows = [...latestCost.values()].map((x) => x.c);
+  const costRows = dropSupersededCostRows([...latestCost.values()].map((x) => x.c));
   const ownerKey = (o: AttributedOwner | null): string => (o ? `${o.kind}:${o.id}` : 'unattributed');
   const costGroups = new Map<string, { platform: CostSampleV1['platform']; account: string; owner: AttributedOwner | null; basis: CostSampleV1['basis']; byDay: Map<string, { amountMicroUsd: number; asOf: string; complete: boolean }> }>();
   for (const c of costRows) {
-    const owner = c.resource === '*' ? null : attributeResource(town, c.platform, c.resource);
+    const owner = attributeCost(town, c);
     const k = `${c.platform}|${c.account}|${ownerKey(owner)}|${c.basis}`;
     const g = costGroups.get(k) ?? { platform: c.platform, account: c.account, owner, basis: c.basis, byDay: new Map() };
     const d = g.byDay.get(c.day) ?? { amountMicroUsd: 0, asOf: c.asOf, complete: true };
@@ -109,6 +109,28 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
     g.byDay.set(c.day, d); costGroups.set(k, g);
   }
   const cost: PerfReadV1['cost'] = [...costGroups.values()].map((g) => ({ platform: g.platform, account: g.account, owner: g.owner, basis: g.basis, days: [...g.byDay.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([day, d]) => ({ day, ...d })) }));
+
+  // ── Cost per RESOURCE: the same rows, grouped by the machine instead of by the owner ──
+  // Partial days are excluded from the low/high spread, because today's half-day is always the cheapest day and
+  // would make every flat line look like it falls.
+  const byRes = new Map<string, { r: PerfReadV1['costByResource'][number]; byDay: Map<string, number>; partial: Set<string> }>();
+  for (const c of costRows) {
+    if (c.resource === '*') continue;
+    const k = `${c.platform}|${c.account}|${c.resource}|${c.basis}`;
+    const g = byRes.get(k) ?? { r: { platform: c.platform, account: c.account, resource: c.resource, ...(c.scope ? { scope: c.scope } : {}), owner: attributeCost(town, c), basis: c.basis, microUsd: 0, days: 0, settledDays: 0, perDayMicroUsd: 0, lowDayMicroUsd: 0, highDayMicroUsd: 0, complete: true }, byDay: new Map(), partial: new Set() };
+    g.r.microUsd += c.ok ? c.amountMicroUsd : 0;
+    g.byDay.set(c.day, (g.byDay.get(c.day) ?? 0) + (c.ok ? c.amountMicroUsd : 0));
+    if (!c.complete) g.partial.add(c.day);
+    g.r.complete = g.r.complete && c.ok;
+    byRes.set(k, g);
+  }
+  const costByResource: PerfReadV1['costByResource'] = [...byRes.values()].map(({ r, byDay, partial }) => {
+    const whole = [...byDay.entries()].filter(([d]) => !partial.has(d)).map(([, v]) => v);
+    // The mean is over SETTLED days where there are any: today's elapsed hours are not a day's cost, and dividing
+    // by them understates every per-day figure and every month projected from one.
+    const mean = whole.length ? whole.reduce((n, v) => n + v, 0) / whole.length : byDay.size ? r.microUsd / byDay.size : 0;
+    return { ...r, days: byDay.size, settledDays: whole.length, perDayMicroUsd: Math.round(mean), lowDayMicroUsd: whole.length ? Math.min(...whole) : 0, highDayMicroUsd: whole.length ? Math.max(...whole) : 0 };
+  }).sort((a, b) => b.microUsd - a.microUsd);
 
   // ── Provenance: the estate's own performance block, as reported ──
   const provenance: PerfReadV1['provenance'] = {}; const costPerCompletedRun: PerfReadV1['costPerCompletedRun'] = {};
@@ -124,7 +146,7 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
     const completedRuns = hbs.reduce((n, h) => n + h.runs.completed, 0);
     const inferenceKnown = hbs.filter((h) => h.inferenceMicroUsd !== null);
     const inferenceMicroUsd = inferenceKnown.reduce((n, h) => n + (h.inferenceMicroUsd ?? 0), 0);
-    const ours = costRows.filter((c) => { const o = c.resource === '*' ? null : attributeResource(town, c.platform, c.resource); return o?.kind === 'estate' && o.id === e.id; });
+    const ours = costRows.filter((c) => { const o = attributeCost(town, c); return o?.kind === 'estate' && o.id === e.id; });
     // ONE basis, named — never the sum of two (I1). A provider that invoiced nothing because the usage sat inside
     // a plan's allowance still consumed something, so `effective` is preferred over a true but useless $0.00
     // `billed`; our own `derived` estimate is the last resort.
@@ -156,7 +178,7 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
     if (!cur || at > curAt || (at === curAt && !s.ok)) { sourceMap.set(k, row); seenAt.set(k, at); }
   }
   const complete = [...latestInfra.values()].every((s) => s.ok) && costRows.every((c) => c.complete && c.ok);
-  return { window: { from: new Date(from).toISOString(), to: new Date(opts.nowMs).toISOString() }, infrastructure, cost: opts.detail ? cost : [], months: opts.detail ? months : [], provenance, costPerCompletedRun, unattributed, complete, detail: opts.detail, days, sources: [...sourceMap.values()] };
+  return { window: { from: new Date(from).toISOString(), to: new Date(opts.nowMs).toISOString() }, infrastructure, cost: opts.detail ? cost : [], costByResource: opts.detail ? costByResource : [], months: opts.detail ? months : [], provenance, costPerCompletedRun, unattributed, complete, detail: opts.detail, days, sources: [...sourceMap.values()] };
 }
 
 /** The operator's read: the one town ops token, compared in constant time; unset ⇒ nobody has detail. */

@@ -64,7 +64,11 @@ export async function collectAzureVmMetrics(cfg: Pick<AzureCfg, 'subscriptionId'
 /** Cost per day × resource group over `[from, to]` (`YYYY-MM-DD`). Backs off once on 429; `complete:false` when the scope still refuses. */
 export async function collectAzureCost(cfg: Pick<AzureCfg, 'subscriptionId'>, token: string, window: { from: string; to: string }, fetchImpl: FetchLike, at: string, sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms))): Promise<CostSampleV1[]> {
   const url = `${AZURE_ARM}/subscriptions/${encodeURIComponent(cfg.subscriptionId)}/providers/Microsoft.CostManagement/query?api-version=2023-11-01`;
-  const body = JSON.stringify({ type: 'ActualCost', timeframe: 'Custom', timePeriod: { from: `${window.from}T00:00:00Z`, to: `${window.to}T23:59:59Z` }, dataset: { granularity: 'Daily', aggregation: { totalCost: { name: 'Cost', function: 'Sum' } }, grouping: [{ type: 'Dimension', name: 'ResourceGroupName' }] } });
+  // PER RESOURCE, not per group: "rg-akcs-pilot-westus costs $20 a day" does not say which machine, and the
+  // first question anybody asks of a cost is which machine. Two groupings is the API's limit, so the group
+  // rides along as the row's SCOPE — attribution needs it, because the manifest claims whole groups and only
+  // three of the twenty-one billed resources are declared individually.
+  const body = JSON.stringify({ type: 'ActualCost', timeframe: 'Custom', timePeriod: { from: `${window.from}T00:00:00Z`, to: `${window.to}T23:59:59Z` }, dataset: { granularity: 'Daily', aggregation: { totalCost: { name: 'Cost', function: 'Sum' } }, grouping: [{ type: 'Dimension', name: 'ResourceId' }, { type: 'Dimension', name: 'ResourceGroupName' }] } });
   type Answer = { properties?: { columns?: Array<{ name: string }>; rows?: unknown[][] } };
   let r = await readJson<Answer>(fetchImpl, url, { method: 'POST', headers: { ...auth(token), 'content-type': 'application/json' }, body }, 60_000);
   if (!r.ok && r.status === 429) {
@@ -75,14 +79,23 @@ export async function collectAzureCost(cfg: Pick<AzureCfg, 'subscriptionId'>, to
   if (!r.ok) return [failedCost('azure', cfg.subscriptionId, window.to, '*', 'billed', r.error, at)];
   const cols = (r.data.properties?.columns ?? []).map((c) => c.name);
   const ix = (names: string[]): number => cols.findIndex((c) => names.includes(c));
-  const iCost = ix(['Cost', 'PreTaxCost', 'CostUSD']), iDay = ix(['UsageDate', 'BillingPeriod']), iRg = ix(['ResourceGroupName', 'ResourceGroup']), iCur = ix(['Currency']);
+  const iCost = ix(['Cost', 'PreTaxCost', 'CostUSD']), iDay = ix(['UsageDate', 'BillingPeriod']), iRg = ix(['ResourceGroupName', 'ResourceGroup']), iCur = ix(['Currency']), iRid = ix(['ResourceId']);
   if (iCost < 0 || iDay < 0) return [failedCost('azure', cfg.subscriptionId, window.to, '*', 'billed', `unexpected columns: ${cols.join(', ')}`, at)];
   const out: CostSampleV1[] = []; let nonUsd = 0;
   for (const row of r.data.properties?.rows ?? []) {
     const cost = num(row[iCost]); const d = String(row[iDay] ?? ''); const day = /^\d{8}$/.test(d) ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}` : d.slice(0, 10);
     if (cost === null || !/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
     if (iCur >= 0 && row[iCur] && row[iCur] !== 'USD') nonUsd += 1;
-    out.push({ type: 'ap.cost-sample.v1', platform: 'azure', account: cfg.subscriptionId, day, resource: String(iRg >= 0 ? row[iRg] ?? 'unattributed' : 'subscription'), amountMicroUsd: microUsd(cost), basis: 'billed', asOf: at, complete: true, ok: true });
+    const group = String(iRg >= 0 ? row[iRg] ?? 'unattributed' : 'subscription');
+    // The resource id's last segment is its name, which is what the manifest and the metrics both use.
+    const resource = iRid >= 0 && row[iRid] ? String(row[iRid]).split('/').pop() || group : group;
+    // A DAY IS NOT FINISHED WHEN IT ENDS — Azure keeps rating it for about two more. Measured on 2026-10-14:
+    // the bastion read 6.96, 6.96, 6.96, 6.96, 6.96, 6.67, 4.93 for the seven days to yesterday. The first five
+    // are the same number; the last two are the same machine with its charges still arriving. Calling those
+    // complete made every flat resource look like it varied by a third and dragged every per-day mean down.
+    // So a day is complete two days after it ends, and until then it is a partial read that says so.
+    const settled = day <= new Date(Date.parse(`${at.slice(0, 10)}T00:00:00Z`) - 2 * 86_400_000).toISOString().slice(0, 10);
+    out.push({ type: 'ap.cost-sample.v1', platform: 'azure', account: cfg.subscriptionId, day, resource, ...(group !== resource ? { scope: group } : {}), amountMicroUsd: microUsd(cost), basis: 'billed', asOf: at, complete: settled, ok: true });
   }
   if (nonUsd) for (const c of out) { c.complete = false; c.error = `${nonUsd} row(s) not in USD`; }
   return out;

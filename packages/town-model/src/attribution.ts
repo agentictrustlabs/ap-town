@@ -2,7 +2,7 @@
 // because two sides read it and neither should own it: the town MCP (which collects the samples) and the portal (which
 // draws them). Declared, never guessed: a resource listed nowhere is `null` — the Unattributed bucket the Pulse SHOWS.
 // Nothing here is authority; an owner is a label on a cost row.
-import type { AttributedOwner, InfraPlatform, InfraSampleV1 } from './pulse-types';
+import type { AttributedOwner, CostSampleV1, InfraPlatform, InfraSampleV1 } from './pulse-types';
 import type { TownEstate, TownManifest, TownService } from './types';
 
 /** Every resource the manifest declares, by platform — the lists the status and metrics passes walk. */
@@ -31,3 +31,37 @@ export function attributeResource(town: TownManifest, platform: InfraPlatform, r
   return null;
 }
 
+
+/**
+ * WHO OWNS A COST ROW — the resource first, then the scope it was billed under.
+ *
+ * A cost row names a machine (`faithnet-vm`, `bas-akcs-pilot`) while the manifest mostly claims whole resource
+ * GROUPS, because three of the twenty-one billed resources are declared and the rest are the disks, endpoints and
+ * registries nobody lists one by one. Attributing the resource alone would read most of the bill as unattributed;
+ * attributing only the group would lose which machine the money went to. So: the resource's own declaration wins
+ * — that is the specific claim — and the group answers for everything inside it that nothing claims.
+ *
+ * `*` is the whole-account row a platform reports when it cannot break itself down, and it belongs to nobody.
+ */
+export function attributeCost(town: TownManifest, c: Pick<CostSampleV1, 'platform' | 'resource' | 'scope'>): AttributedOwner | null {
+  if (c.resource === '*') return null;
+  return attributeResource(town, c.platform, c.resource) ?? (c.scope ? attributeResource(town, c.platform, c.scope) : null);
+}
+
+/**
+ * THE SAME DAY, READ AT TWO GRANULARITIES — drop the coarser row.
+ *
+ * The Azure collector used to bill a whole resource GROUP per day; it now bills each RESOURCE and names the group
+ * as the row's scope. Both are in the store, keyed differently, both true — and summing them doubles every Azure
+ * day that the two passes overlap. A finer row therefore SUPERSEDES the coarser one it decomposes: for each
+ * (platform, account, day) a row whose `resource` is some other row's `scope` is dropped.
+ *
+ * Deleting the old rows instead would be tidier and worse: a restated history is unauditable, and the next
+ * provider to change its own granularity would silently double again. This is derived at read time, so it holds
+ * for whatever is in the store.
+ */
+export function dropSupersededCostRows<T extends Pick<CostSampleV1, 'platform' | 'account' | 'day' | 'resource' | 'scope'>>(rows: T[]): T[] {
+  const decomposed = new Set<string>();
+  for (const r of rows) if (r.scope) decomposed.add(`${r.platform}|${r.account}|${r.day}|${r.scope.toLowerCase()}`);
+  return decomposed.size ? rows.filter((r) => !decomposed.has(`${r.platform}|${r.account}|${r.day}|${r.resource.toLowerCase()}`)) : rows;
+}

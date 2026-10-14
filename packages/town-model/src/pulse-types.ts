@@ -67,6 +67,11 @@ export interface CostSampleV1 {
   day: string;
   resource: string;
   sku?: string;
+  /** The billing scope the resource was billed under — an Azure resource GROUP. Carried so a per-resource row
+   *  can still be attributed when the manifest claims the group rather than the individual resource: of the 21
+   *  resources in these groups only the three VMs are declared, and the bastion, the database and the registry
+   *  are most of the money. Attribution tries the resource first, then this. */
+  scope?: string;
   amountMicroUsd: number;
   /**
    * How the number was arrived at — NEVER summed across bases without the label (I1):
@@ -112,6 +117,27 @@ export interface PerfReadV1 {
   window: { from: string; to: string };
   infrastructure: Array<{ platform: InfraPlatform; account: string; resource: string; kind: InfraResourceKind; owner: AttributedOwner | null; latest: InfraSampleV1 | null; series: Array<{ at: string; metrics: Record<string, number | null> }> }>;
   cost: Array<{ platform: InfraPlatform; account: string; owner: AttributedOwner | null; basis: 'derived' | 'billed' | 'effective'; days: Array<{ day: string; amountMicroUsd: number; asOf: string; complete: boolean }> }>;
+  /**
+   * WHAT EACH MACHINE COSTS — one row per billed resource over the window, biggest first.
+   *
+   * The `cost` rows above answer "what does this estate cost", which is the question a budget asks. This answers
+   * the question anybody actually asks first — WHICH MACHINE — and, by carrying the cheapest and dearest day of
+   * the window beside the mean, whether the amount moves at all. It mostly does not: an allocated VM costs the
+   * same idle as it does saturated, so a flat line is the finding, not noise. Operator-only, like every amount.
+   */
+  costByResource: Array<{
+    platform: InfraPlatform; account: string; resource: string;
+    /** The billing scope it sat in — an Azure resource group — when that is not the resource itself. */
+    scope?: string;
+    owner: AttributedOwner | null; basis: 'derived' | 'billed' | 'effective';
+    microUsd: number; days: number; perDayMicroUsd: number;
+    /** Of those days, how many the provider has finished rating — the ones `perDay` and the spread are taken over.
+     *  Fewer than `days` means the window's tail is still arriving, which is why its total reads low. */
+    settledDays: number;
+    /** The cheapest and dearest SETTLED day in the window: equal-ish ⇒ the cost is allocation, not load. */
+    lowDayMicroUsd: number; highDayMicroUsd: number;
+    complete: boolean;
+  }>;
   /** Spec 437 I1 — whole months as the provider billed them, oldest first: the baseline the window cannot give.
    *  Operator-only like every other amount; empty on a public read. `claimedMicroUsd` is the part of the month
    *  billed to a scope the manifest CLAIMS — the total is the whole account, which pays for more than the town —

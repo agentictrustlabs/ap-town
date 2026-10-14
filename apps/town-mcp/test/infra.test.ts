@@ -5,7 +5,7 @@ import { collectVercelCharges, collectVercelDeployments, parseFocus, projectOf }
 import { collectAzureCost, collectAzureHealth, collectAzureMonths, collectAzureVmMetrics } from '../src/infra/azure';
 import { collectGraphdbHealth, collectGraphdbRepositories, parsePrometheus } from '../src/infra/graphdb';
 import { collectCostPass, collectHourlyPass, collectStatusPass, PRICING } from '../src/infra/passes';
-import { attributeResource, declaredResources } from '@ap-town/town-model';
+import { attributeCost, attributeResource, declaredResources, dropSupersededCostRows } from '@ap-town/town-model';
 
 const AT = '2026-10-10T12:03:00.000Z';
 type Route = (url: string, init?: RequestInit) => Response | Promise<Response>;
@@ -251,5 +251,37 @@ describe('the passes and the attribution (I4, I7)', () => {
     // 30 GB for one day of a 30-day month = 1 GB-month; 5 GB-month/30 included → (1 − 0.1667) × 0.75 $
     expect(a.find((c) => c.sku === 'd1.storageGbMonth')!.amountMicroUsd).toBe(Math.round((1 - 5 / 30) * 750_000));
     expect(out.costs.filter((c) => c.account === 'acctB').every((c) => c.ok === false || c.complete === false)).toBe(true);
+  });
+});
+
+describe('cost rows name a machine, and the group answers for the rest (2026-10-13)', () => {
+  const town = {
+    town: 'faithchain', estates: [{ id: 'faithnet', azureResources: ['/subscriptions/s/resourceGroups/rg-faithnet/providers/Microsoft.Compute/virtualMachines/faithnet-vm'], azureResourceGroups: ['rg-faithnet'] }],
+    services: [{ id: 'kms', worker: 'w', azureResourceGroups: ['rg-akcs-pilot-westus'] }],
+  } as unknown as Parameters<typeof attributeCost>[0];
+  const row = (resource: string, scope: string, day = '2026-10-12') => ({ platform: 'azure' as const, account: 's', day, resource, scope });
+
+  it('attributes a declared resource to its own owner and an undeclared one to its group', () => {
+    // The VM is named in the manifest — the specific claim wins even though its group is claimed too.
+    expect(attributeCost(town, row('faithnet-vm', 'rg-faithnet'))).toEqual({ kind: 'estate', id: 'faithnet' });
+    // The bastion, the database, the registry: nobody lists them one by one, and they are most of the money.
+    expect(attributeCost(town, row('bas-akcs-pilot', 'rg-akcs-pilot-westus'))).toEqual({ kind: 'service', id: 'kms' });
+    // A resource in a group nothing claims stays unattributed — the bucket the Pulse shows rather than hides.
+    expect(attributeCost(town, row('vm-elsewhere', 'rg-someone-else'))).toBeNull();
+    // The whole-account row belongs to nobody, scope or not.
+    expect(attributeCost(town, { platform: 'vercel', resource: '*' })).toBeNull();
+  });
+
+  it('a per-resource read supersedes the per-group read of the same day, so nothing doubles', () => {
+    const rows = [
+      { platform: 'azure' as const, account: 's', day: '2026-10-12', resource: 'rg-faithnet' },          // the old pass
+      row('faithnet-vm', 'rg-faithnet'), row('faithnet-osdisk', 'rg-faithnet'),                           // the new one
+      { platform: 'azure' as const, account: 's', day: '2026-10-13', resource: 'rg-faithnet' },          // a day the new pass has not covered
+    ];
+    const kept = dropSupersededCostRows(rows).map((r) => `${r.day}:${r.resource}`);
+    expect(kept).toEqual(['2026-10-12:faithnet-vm', '2026-10-12:faithnet-osdisk', '2026-10-13:rg-faithnet']);
+    // Rows with no scope anywhere are left exactly as they are — every other platform still reports one level.
+    const flat = [{ platform: 'cloudflare' as const, account: 'a', day: '2026-10-12', resource: 'demo-a2a' }];
+    expect(dropSupersededCostRows(flat)).toEqual(flat);
   });
 });

@@ -205,6 +205,10 @@ main > section:last-child { margin-bottom: 0; }
 /* A column of figures is read down, so it is aligned down. */
 .table th.num, .table td.num { text-align: right; }
 .table tbody th { font-weight: 600; white-space: nowrap; }
+/* A ROW HEADER THAT IS A LONG MACHINE NAME sets the whole column's width and squeezes the money off the right
+   edge: one Vercel project name took 545 px of an 876 px table and the four amount columns scrolled out of sight
+   (measured 2026-10-13). `wrap` lets that one cell break instead of the table. */
+.table tbody th.wrap { white-space: normal; overflow-wrap: anywhere; max-width: 230px; }
 .record-key { display: block; color: var(--muted); font-weight: 400; font-size: .78rem; }
 @media (max-width: 560px) { .table tbody th { white-space: normal; } }
 .rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
