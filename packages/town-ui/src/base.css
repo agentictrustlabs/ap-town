@@ -310,6 +310,11 @@ a.card:hover, button.card:hover { border-color: var(--accent); box-shadow: var(-
 .top .who { display: inline-flex; align-items: center; gap: 8px; font-size: .92rem; }
 .top .who .mono { color: var(--muted); }
 .search-suffix { align-self: center; color: var(--muted); }
+/* THE ENDING AS A CONTROL, where the fixed `.me` used to sit: it has to read as the same piece of the search box
+   rather than as a form field bolted beside it, so it keeps the suffix's muted colour and gains only the affordance
+   that says it can be opened. */
+.search-tld { border: 1px solid var(--line); border-radius: 8px; background: var(--surface); padding: 6px 8px; font: inherit; color: var(--fg); cursor: pointer; }
+.search-tld:hover { border-color: var(--accent); }
 .connect-estate { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px 18px; }
 .connect-estate h2 { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; margin-top: 0; }
 .roster { margin-top: 12px; }

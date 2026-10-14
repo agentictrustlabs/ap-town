@@ -3,19 +3,28 @@ import { useApi } from '../api';
 import type { TownView } from '../api-types';
 import { Link, rootHref } from '../router';
 import { FindName } from '../find-name';
+import { CHARTER_KINDS } from '../session';
 import { townScene } from '../scenes';
 import { Glyph, Loading, Scene, Stamped } from '../ui';
 
 export function Home(): ReactNode {
   const v = useApi<TownView>('/api/town');
+  // THE ENDINGS THIS BOX OFFERS: the ones a person may charter, which is the registrable set and nothing wider —
+  // a legacy root (.impact, .agent) cannot be bought, and .treasury is named when its holder is created, so
+  // offering either here would end in a refusal. The list is static so the box is usable on first paint; what a
+  // name under each ending NAMES comes from the town's own read as soon as it lands, rather than being restated
+  // here (the service is the authority on that sentence).
+  const named = v.state === 'ready' ? new Map(v.data.roots.map((r) => [r.tld, r.names])) : null;
+  const choices = CHARTER_KINDS.map((k) => ({ tld: k.tld, label: k.label, names: named?.get(k.tld) ?? null }));
   return (
     <>
       <section className="hero">
         <h1>Every name in the town.</h1>
         <p className="lede">A name is an address card for an agent. Its ending says what the agent is: a person, an organization, a service. A name gives nobody authority.</p>
-        {/* Find and register, first (owner, 2026-10-06): a person's name ends in .me; the other endings are below. */}
-        <FindName tld="me" names="a person" />
-        <p className="quiet">For an organization, a service or another kind, open its ending below. Looking something up? The box in the header takes a name, a label or an address.</p>
+        {/* Find and register, first (owner, 2026-10-06), under ANY ending (owner, 2026-10-14): the box was fixed to
+            .me, so the one control on the front page could answer one question of seven. */}
+        <FindName tld="me" names="a person" choices={choices} />
+        <p className="quiet">Looking something up rather than buying? The box in the header takes a name, a label or an address.</p>
       </section>
       <Loading v={v}>{(t) => (
         <>

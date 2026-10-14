@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { MAP_CSS, SCENE_CSS } from '@ap-town/town-scene';
 import { useApi } from './api';
 import { Link, Router, useRoute } from './router';
@@ -32,11 +32,66 @@ function Page(): ReactNode {
   return <section><h1>Nothing here</h1><p className="lede">That page does not exist. Try the search box.</p></section>;
 }
 
-/** The connected person in the header: their name, or their address while nameless, leading to /me; else Connect. */
+/**
+ * THE CONNECTED PERSON IN THE HEADER — the name, and under it the way out.
+ *
+ * The name was a plain link to /me, so the only way to disconnect was to know that /me existed and to find two
+ * small links at the bottom of it (owner, 2026-10-14). Sign-out belongs where the identity is shown. The name is
+ * the control now and the menu is where leaving lives — the same shape the town portal uses, down to the shared
+ * classes, because a person who uses both should not have to learn two headers.
+ *
+ * The menu says WHICH Home this session came from: on a town with more than one estate, that is the difference
+ * between two people with the same name.
+ */
 function Who(): ReactNode {
-  const { session } = useSession();
+  const { session, leave } = useSession();
+  const { go } = useRoute();
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLSpanElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const key = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    // A menu that outlives a click somewhere else is a menu in the way.
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) setOpen(false); };
+    window.addEventListener('keydown', key);
+    window.addEventListener('mousedown', away);
+    return () => { window.removeEventListener('keydown', key); window.removeEventListener('mousedown', away); };
+  }, [open]);
   if (!session) return <Link href="/connect" className="button button-quiet">Connect</Link>;
-  return <Link href="/me" className="who"><span className="brand-mark" aria-hidden="true" />{session.name ?? session.label ?? <span className="mono">{short(session.address)}</span>}</Link>;
+  const name = session.name ?? session.label ?? short(session.address);
+  let host = session.estate.home;
+  try { host = new URL(session.estate.home).host; } catch { /* show it as given */ }
+  return (
+    <span className="account" ref={box}>
+      <button type="button" className="account-name" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
+        <span className="brand-mark" aria-hidden="true" />
+        <span className="who">{name}</span>
+        <span className="caret" aria-hidden="true">{open ? '\u25b4' : '\u25be'}</span>
+      </button>
+      {open && (
+        <div className="account-menu" role="menu">
+          <p className="account-who">
+            <b>{name}</b>
+            <small className="mono">{session.address}</small>
+            <small>signed in at {host}</small>
+          </p>
+          <div className="account-sep" />
+          <button type="button" className="account-item" role="menuitem" onClick={() => { setOpen(false); go('/me'); }}>Everything of yours</button>
+          <a className="account-item" role="menuitem" href={session.estate.home} target="_blank" rel="noreferrer">Open my Home</a>
+          <div className="account-sep" />
+          {/* TWO WAYS OUT, because they are different and the difference matters. Leaving this site alone keeps
+              the Home session alive, so the next Connect walks straight back in with no ceremony — which reads as
+              "disconnect did nothing" unless it is said. Signing out at the Home ends it for every app connected
+              to it, which is what most people mean. */}
+          <button type="button" className="account-item" role="menuitem" onClick={() => { setOpen(false); leave(true); }}>Sign out</button>
+          <p className="account-note">Ends the session at {host} too, and at the other apps connected to it.</p>
+          <div className="account-sep" />
+          <button type="button" className="account-item" role="menuitem" onClick={() => { setOpen(false); leave(); }}>Leave this site only</button>
+          <p className="account-note">Forgets you here; your Home still knows you, so connecting again takes one tap.</p>
+        </div>
+      )}
+    </span>
+  );
 }
 
 /**
