@@ -21,21 +21,32 @@ import { Chip, Glyph } from './ui';
 
 const clean = (s: string): string => s.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 63);
 
+/** One root's answer about a label, as `/api/search` gives it. */
+interface LabelRow { name: string; tld: string; names: string | null; kind: PlaceKind; status: 'registered' | 'available' | 'expired'; agent: string | null; by: string; coins: number | null }
+
+/** The endings a person may charter from here — the same seven the Home's ceremony knows (CHARTER_KINDS). */
+const CHARTERABLE = ['me', 'org', 'team', 'svc', 'church', 'circle', 'household'];
+
 export function FindName({ tld, names, choices }: { tld: string; names: string | null; choices?: ReadonlyArray<{ tld: string; label: string; names: string | null }> }): ReactNode {
   const { search, go } = useRoute();
   // Back from Connect with the label still in hand (`?find=`), and with the ending if one was chosen.
   const [q, setQ] = useState(() => new URLSearchParams(search).get('find') ?? '');
+  // ANY KIND IS THE DEFAULT. Fixed to `.me`, the box answered about one ending of seven before anybody had said
+  // which they wanted — you had to choose a kind in order to ask a question that was not about a kind (owner,
+  // 2026-10-14). Empty means every ending: the label is looked up under all of them at once, and picking one
+  // narrows BOTH what is checked and what is found.
   const [pick, setPick] = useState(() => {
     const back = new URLSearchParams(search).get('tld');
-    return choices && back && choices.some((c) => c.tld === back) ? back : tld;
+    return choices && back && choices.some((c) => c.tld === back) ? back : choices ? '' : tld;
   });
   const label = clean(q);
   // The ending in force: the chosen one when this box offers a choice, the page's own otherwise.
   const end = choices ? pick : tld;
+  const any = choices ? !pick : false;
   const endNames = choices ? (choices.find((c) => c.tld === end)?.names ?? null) : names;
   const [v, setV] = useState<{ state: 'idle' } | { state: 'checking' } | { state: 'ready'; data: NameView } | { state: 'error'; detail: string }>({ state: 'idle' });
   useEffect(() => {
-    if (label.length < 3) { setV({ state: 'idle' }); return; }
+    if (label.length < 3 || any) { setV({ state: 'idle' }); return; }
     let live = true;
     setV({ state: 'checking' });
     const t = window.setTimeout(async () => {
@@ -44,7 +55,21 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
       setV(r.ok ? { state: 'ready', data: r.data } : { state: 'error', detail: r.error.detail ?? r.error.error });
     }, 300);
     return () => { live = false; window.clearTimeout(t); };
-  }, [label, end]);
+  }, [label, end, any]);
+
+  // UNDER EVERY ENDING AT ONCE — the service's own label search, which answers this exact question: it returns the
+  // label under each root with its status and its price. Only asked in "any kind" mode; with an ending chosen, the
+  // single answer above is the answer.
+  const [rows, setRows] = useState<LabelRow[] | null>(null);
+  useEffect(() => {
+    if (!any || label.length < 3) { setRows(null); return; }
+    let live = true;
+    const t = window.setTimeout(async () => {
+      const r = await getJson<{ kind: string; rows?: LabelRow[] }>(`/api/search?q=${encodeURIComponent(label)}`);
+      if (live) setRows(r.ok && r.data.kind === 'label' ? r.data.rows ?? [] : []);
+    }, 300);
+    return () => { live = false; window.clearTimeout(t); };
+  }, [label, any]);
   const name = `${label}.${end}`;
   // NAMES THAT ALREADY EXIST — the other half of a search box, and the half this one did not have. Typing `nath`
   // asked only whether `nath.me` was free, so looking for `nathan.me` answered about a name nobody holds (owner,
@@ -56,34 +81,66 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
     if (label.length < 2) { setLike(null); return; }
     let live = true;
     const t = window.setTimeout(async () => {
-      const r = await getJson<{ hits: Array<{ name: string; tld: string; kind: PlaceKind }>; total: number }>(`/api/names-like?q=${encodeURIComponent(label)}${choices ? '' : `&tld=${encodeURIComponent(tld)}`}`);
+      const r = await getJson<{ hits: Array<{ name: string; tld: string; kind: PlaceKind }>; total: number }>(`/api/names-like?q=${encodeURIComponent(label)}${end ? `&tld=${encodeURIComponent(end)}` : ''}`);
       if (live) setLike(r.ok ? { hits: r.data.hits, total: r.data.total } : null);
     }, 300);
     return () => { live = false; window.clearTimeout(t); };
-  }, [label, tld, choices]);
+  }, [label, end]);
   // Register leads to the step page (430 N6: the ENS register screen), connected or not.
   const register = () => go(registerHref(name));
-  const onSubmit = (e: FormEvent) => { e.preventDefault(); if (v.state === 'ready' && v.data.status === 'available') register(); else if (label.length >= 3) go(nameHref(name)); };
+  const onSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    if (label.length < 3) return;
+    if (any) { go(`/search?q=${encodeURIComponent(label)}`); return; }
+    if (v.state === 'ready' && v.data.status === 'available') register(); else go(nameHref(name));
+  };
   const ready = v.state === 'ready' ? v.data : null;
   return (
     <div className="find">
       <form className="search search-big" onSubmit={onSubmit} role="search">
-        <label className="sr" htmlFor="find-q">A .{end} name to look for</label>
+        <label className="sr" htmlFor="find-q">{any ? 'A name to look for, under any ending' : `A .${end} name to look for`}</label>
         <input id="find-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder={`yourname`} autoComplete="off" autoCapitalize="none" spellCheck={false} />
         {choices ? (
           <>
             <label className="sr" htmlFor="find-tld">The ending, which is the kind of agent</label>
             <select id="find-tld" className="search-suffix search-tld mono" value={end} onChange={(e) => setPick(e.target.value)}>
+              <option value="">any kind</option>
               {choices.map((c) => <option key={c.tld} value={c.tld}>.{c.tld}</option>)}
             </select>
           </>
         ) : <span className="search-suffix mono">.{tld}</span>}
-        <button type="submit" className="button" disabled={label.length < 3}>{ready?.status === 'available' ? 'Register' : 'Look up'}</button>
+        <button type="submit" className="button" disabled={label.length < 3}>{!any && ready?.status === 'available' ? 'Register' : 'Look up'}</button>
       </form>
-      {choices && <p className="quiet">{endNames ? `A .${end} name names ${endNames}.` : `A .${end} name.`} <Link href={rootHref(end)}>Every .{end} →</Link></p>}
+      {choices && (any
+        ? <p className="quiet">Every ending is a kind of agent. Look under all of them, then register under the one you mean — or pick an ending to narrow both.</p>
+        : <p className="quiet">{endNames ? `A .${end} name names ${endNames}.` : `A .${end} name.`} <Link href={rootHref(end)}>Every .{end} →</Link></p>)}
       {label.length > 0 && label.length < 3 && <p className="quiet">Three characters or more.</p>}
       {v.state === 'checking' && <p className="loading" role="status">Checking {name}…</p>}
       {v.state === 'error' && <p className="search-problem" role="alert">{v.detail}</p>}
+      {/* THE LABEL UNDER EVERY ENDING. Register only where a PERSON may charter one: `.workspace`, `.treasury` and
+          `.registry` are named when the agent that holds them is created, so a button there would send somebody to
+          a ceremony that does not exist. They are still shown, with what they are, because "free but not yours to
+          claim" is a fact about the label worth knowing. */}
+      {any && rows && rows.length > 0 && (
+        <ul className="rows label-rows">
+          {/* The ones a person may actually charter first; the sort is stable, so inside each group the service's own
+              order is kept. */}
+          {[...rows].sort((a, b) => (CHARTERABLE.includes(a.tld) ? 0 : 1) - (CHARTERABLE.includes(b.tld) ? 0 : 1)).map((r) => {
+            const mine = CHARTERABLE.includes(r.tld) && r.status === 'available';
+            return (
+              <li key={r.name} className="row">
+                <Glyph kind={r.kind} lit={r.status === 'registered'} />
+                <span className="row-main">
+                  <Link href={nameHref(r.name)} className="row-name">{r.name}</Link>
+                  <span className="row-sub">{r.status === 'registered' ? `held${r.agent ? ` by ${r.agent.slice(0, 6)}…${r.agent.slice(-4)}` : ''}` : r.by}</span>
+                </span>
+                <Chip kind={r.status} />
+                {mine && <button type="button" className="button" onClick={() => go(registerHref(r.name))}>Register →</button>}
+              </li>
+            );
+          })}
+        </ul>
+      )}
       {ready && (
         <div className="find-row">
           <Glyph kind={KIND_OF_TLD[end] ?? 'service'} lit={ready.status === 'registered'} />
@@ -103,7 +160,7 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
           status, and listing it again as "a name like itself" reads as a second, weaker answer. */}
       {(() => { const rest = (like?.hits ?? []).filter((h) => h.name !== name); return like && rest.length > 0 && (
         <div className="like">
-          <p className="quiet">{rest.length === 1 ? 'One other name' : `${like.total - (like.hits.length - rest.length)} other names`} already {rest.length === 1 ? 'contains' : 'contain'} &ldquo;{label}&rdquo;{choices ? '' : `, ending in .${tld}`}:</p>
+          <p className="quiet">{rest.length === 1 ? 'One other name' : `${like.total - (like.hits.length - rest.length)} other names`} already {rest.length === 1 ? 'contains' : 'contain'} &ldquo;{label}&rdquo;{end ? `, ending in .${end}` : ''}:</p>
           <ul className="rows">
             {rest.slice(0, 8).map((h) => (
               <li key={h.name} className="row">
