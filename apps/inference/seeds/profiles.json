@@ -143,6 +143,37 @@
     "timeoutMs": 30000
   },
   {
+    "id": "answer-structured",
+    "servesCapability": [
+      "answer",
+      "structured"
+    ],
+    "description": "A long structured answer: an instruction skill applied under its own body, with the record it produces (skills W0). Sized for a document, not a choice \u2014 the selection profile's 1500 cut these mid-sentence (2026-10-15).",
+    "models": [
+      {
+        "provider": "openai-compat",
+        "model": "gemini-3.5-flash",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai"
+      },
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ],
+    "requiredCapabilities": [
+      "tools",
+      "json"
+    ],
+    "maxOutputTokens": 6000,
+    "privacy": "standard",
+    "fallbackOn": [
+      "rate-limited",
+      "unavailable",
+      "timeout"
+    ],
+    "timeoutMs": 120000
+  },
+  {
     "id": "private-analysis",
     "servesCapability": [
       "private-analysis"

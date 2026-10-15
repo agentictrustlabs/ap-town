@@ -10,6 +10,7 @@
         "composer-default",
         "answer-stream",
         "judge-thorough",
+        "answer-structured",
         "selection-structured"
       ],
       "keyHash": "03c8982ebc42688f745c880e8c96cec8ebe01461b3370e41ce9a1143949122ae",
@@ -25,6 +26,7 @@
         "composer-default",
         "answer-stream",
         "judge-thorough",
+        "answer-structured",
         "selection-structured"
       ],
       "keyHash": "b6e60e633a826030b353d857258417a2e74e8c5ce981d87668cb858e3a220a5b",

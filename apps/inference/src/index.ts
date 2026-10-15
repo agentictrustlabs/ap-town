@@ -133,7 +133,7 @@ export default {
       if (!who) return json({ error: { message: 'no principal could be established for this credential', type: 'authentication_error', code: 'unknown_caller' } }, 401);
       const store = kvPolicyStore(env);
       const [ent, catalog] = await Promise.all([store.entitlement(who.principal), store.catalog()]);
-      const all = await Promise.all((await Promise.all(['planner-fast', 'composer-default', 'answer-stream', 'judge-thorough', 'selection-structured', 'private-analysis', 'embeddings-default', 'author', 'evals'].map((id) => store.profile(id)))).filter((x): x is NonNullable<typeof x> => !!x).map(async (x) => ({ id: x.profile.id, servesCapability: x.profile.servesCapability, maxOutputTokens: x.profile.maxOutputTokens, privacy: x.profile.privacy, version: x.version })));
+      const all = await Promise.all((await Promise.all(['planner-fast', 'composer-default', 'answer-stream', 'answer-structured', 'judge-thorough', 'selection-structured', 'private-analysis', 'embeddings-default', 'author', 'evals'].map((id) => store.profile(id)))).filter((x): x is NonNullable<typeof x> => !!x).map(async (x) => ({ id: x.profile.id, servesCapability: x.profile.servesCapability, maxOutputTokens: x.profile.maxOutputTokens, privacy: x.profile.privacy, version: x.version })));
       const mine = all.filter((p) => ent?.profiles.includes('*') || ent?.profiles.includes(p.id));
       return json({ object: 'list', data: mine.map((p) => ({ id: p.id, object: 'model', owned_by: 'inference.svc', ap_profile: p })), profiles: mine, principal: who.principal, catalog: catalog.filter((c) => c.enabled).map((c) => ({ provider: c.provider, model: c.model, capabilities: c.capabilities, privacy: c.privacy })) });
     }
