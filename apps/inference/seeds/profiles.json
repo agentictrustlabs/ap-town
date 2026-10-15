@@ -148,7 +148,7 @@
       "answer",
       "structured"
     ],
-    "description": "A long structured answer: an instruction skill applied under its own body, with the record it produces (skills W0). Sized for a document, not a choice \u2014 the selection profile's 1500 cut these mid-sentence (2026-10-15).",
+    "description": "A long structured answer: an instruction skill applied under its own body, with the record it produces (skills W0). Sized for a document AND the thinking a Gemini model spends inside the same bound (the gateway carries no effort control yet) \u2014 the selection profile's 1500 cut these mid-sentence (2026-10-15).",
     "models": [
       {
         "provider": "openai-compat",
@@ -164,7 +164,7 @@
       "tools",
       "json"
     ],
-    "maxOutputTokens": 6000,
+    "maxOutputTokens": 12000,
     "privacy": "standard",
     "fallbackOn": [
       "rate-limited",
