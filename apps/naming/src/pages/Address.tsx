@@ -17,7 +17,7 @@ export function AddressPage({ address }: { address: string }): ReactNode {
             <p className="title-addr"><span className="mono break">{a.address}</span> <Copy value={a.address} label="address" /></p>
             <p className="lede">{a.presented
               ? `Show this agent as ${a.presented}. The name points back at this address, checked on chain.`
-              : a.isAccount ? 'Show this agent by its address. It presents no name that points back at it.' : 'There is no agent at this address.'}</p>
+              : a.isAccount ? 'Show this agent by its address. It presents no name that points back at it.' : a.elsewhere?.length ? `Not an account on this chain — on ${a.elsewhere.map((e) => `${e.town} it is ${e.name ?? 'listed'}`).join(', ')}.` : 'There is no agent at this address.'}</p>
             <p className="quiet">{a.declared.agentType ? `It declares itself ${a.declared.noun ?? a.declared.agentType}${a.declared.serviceRole ? ` (role: ${a.declared.serviceRole})` : ''}.` : a.isAccount ? 'It has declared no type.' : ''}</p>
           </div>
         </section>

@@ -468,6 +468,22 @@ export async function addressView(ctx: Ctx, address: Address): Promise<AddressVi
   const held = heldNodes.map((x, i) => ({ onChain: heldNames[i] ?? '' })).filter((x) => x.onChain && !seen.has(x.onChain) && !!seen.add(x.onChain))
     .map((x) => { const name = displayOf(x.onChain); const tld = x.onChain.split('.').pop() ?? ''; return { tld, name, presented: name === presented, kind: kindOfName(name) }; });
   const isAccount = !!code && code !== '0x';
+  // AN ACCOUNT ON ANOTHER CHAIN. "No account at this address on this chain" was read as "not an agent" — wrong for a person's
+  // canonical id, which lives on her home chain while this chain's name points at her satellite. So every OTHER town's
+  // registry is asked (its public `/agent?key=`, on its own zone) whether it lists the address, and the page says where it is.
+  // A listing elsewhere is a fact about that town's graph, nothing more; the name it reports is that town's.
+  const elsewhere = await Promise.all(Object.values(TOWNS).filter((t) => t.town !== ctx.town.town).map(async (t) => {
+    const host = t.services.find((s) => s.id === 'registry')?.hosts[0];
+    if (!host) return null;
+    try {
+      const r = await fetch(`https://${host}/agent?key=${a}`, { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(6000) });
+      if (!r.ok) return null;
+      const body = (await r.json()) as { ok?: boolean; triples?: Array<{ p: string; o: string }> };
+      if (!body.ok || !Array.isArray(body.triples) || !body.triples.length) return null;
+      const val = (p: string) => body.triples!.find((x) => x.p === p)?.o ?? null;
+      return { town: t.town, chainId: t.chain.id, name: val('https://agenticprimitives.dev/ns/naming#name'), displayName: val('https://agenticprimitives.dev/ns/profile#displayName'), registry: `https://${host}` };
+    } catch { return null; }
+  })).then((rows) => rows.filter((x): x is NonNullable<typeof x> => !!x));
   // WHO THIS ACCOUNT IS: read off the name it presents (nativeId, accounts, endpoint) and what it declares (atl:estate) —
   // the same block the name page leads with, so an address is never shown as if it were the agent's canonical id by itself.
   const [presentedRecords, declaredEstate] = await Promise.all([
@@ -477,13 +493,14 @@ export async function addressView(ctx: Ctx, address: Address): Promise<AddressVi
   const identity = isAccount ? identityOf({ chainId: ctx.town.chain.id, agent: a, records: presentedRecords, declaredEstate, name: presented ?? '' }) : null;
   const banners: Banner[] = [];
   if (identity?.here?.role === 'satellite') banners.push({ tone: 'info', title: 'Not the agent’s home account', body: `This is the agent’s account on this chain, which holds its name here. The agent IS ${identity.canonical}${identity.canonicalTown ? ` (the ${identity.canonicalTown} town)` : ''}: that is its canonical id, and its Home and custody live there.` });
-  if (!isAccount) banners.push({ tone: 'warn', title: 'Not a Smart Agent', body: 'There is no account at this address on this chain. It may be a key. Names point at agents, never at the keys that sign for them.' });
+  if (!isAccount && elsewhere.length) banners.push({ tone: 'info', title: `An account on another chain`, body: `There is no account at this address on this chain (eip155:${ctx.town.chain.id}). ${elsewhere.map((e) => `On ${e.town} (eip155:${e.chainId}) it is ${e.name ?? 'listed'}${e.displayName ? ` — ${e.displayName}` : ''}`).join('; ')}. A name on this chain that points at this person points at her account HERE; this address is her canonical id where she lives.` });
+  else if (!isAccount) banners.push({ tone: 'warn', title: 'Not a Smart Agent', body: 'There is no account at this address on this chain, and no other town in the federation lists it. It may be a key. Names point at agents, never at the keys that sign for them.' });
   if (!presented && primaryRaw) banners.push({ tone: 'warn', title: 'Its presented name does not point back', body: `This address set ${displayOf(primaryRaw)} as its presented name, but that name does not resolve to it. Nobody should show that name for this address.` });
   else if (!presented && held.length) banners.push({ tone: 'info', title: 'It presents no name', body: 'This agent holds a name but has not set one as its own. Apps that follow the display rule show its address.' });
   return {
     ...s, address: a, isAccount, presented,
     declared: { agentType: declared.agentType, noun: declared.agentType ? NOUN[declared.agentType] ?? null : null, serviceRole: declared.serviceRole, agentKind: declared.agentKind, agentSubtype: declared.agentSubtype },
-    kind: kindOfType(declared.agentType), names: declared.agentType ? NOUN[declared.agentType] ?? null : null, held, banners, identity, estates: estatesOf(ctx.town),
+    kind: kindOfType(declared.agentType), names: declared.agentType ? NOUN[declared.agentType] ?? null : null, held, banners, identity, elsewhere, estates: estatesOf(ctx.town),
   };
 }
 

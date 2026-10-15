@@ -160,6 +160,8 @@ export interface AddressView extends Stamp {
   banners: Banner[];
   /** Who this account is — the same block the name page leads with; null for a bare key. */
   identity: NameIdentity | null;
+  /** Other towns whose registry lists this address — an account that lives on another chain. */
+  elsewhere: Array<{ town: string; chainId: number; name: string | null; displayName: string | null; registry: string }>;
   estates: EstateRef[];
 }
 
