@@ -22,3 +22,18 @@ export async function registeredElsewhere(name: string, hereChainId: number): Pr
     return { town: hit.town, chainId: hit.chainId, agent: hit.row?.agent ?? null, display: hit.row?.display ?? `${name} · ${hit.town} (eip155:${hit.chainId})` };
   } catch { return null; }
 }
+
+/** Every ending of a LABEL registered on another chain: `{ 'rich-impact.me': { town, chainId, … } }`. One ask per label. */
+export async function registeredElsewhereByLabel(label: string, hereChainId: number): Promise<Record<string, Elsewhere>> {
+  try {
+    const r = await fetch(`${FEDERATION_RESOLVER}?q=${encodeURIComponent(label)}`, { headers: { accept: 'application/json' } });
+    if (!r.ok) return {};
+    const body = (await r.json()) as { rows?: Array<{ name: string; town: string; chainId: number; status?: string; agent?: string | null; display?: string }> };
+    const out: Record<string, Elsewhere> = {};
+    for (const row of body.rows ?? []) {
+      if (row.chainId === hereChainId || row.status !== 'registered' || out[row.name]) continue;
+      out[row.name] = { town: row.town, chainId: row.chainId, agent: row.agent ?? null, display: row.display ?? `${row.name} · ${row.town} (eip155:${row.chainId})` };
+    }
+    return out;
+  } catch { return {}; }
+}
