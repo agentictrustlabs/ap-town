@@ -616,8 +616,8 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "town.impact-agent.io",
           "hopechain-town.agentkg.io"
         ],
-        "probe": "https://town.impact-agent.io/api/health",
-        "card": "https://town.impact-agent.io/.well-known/agent-card.json",
+        "probe": "https://hopenet.town/api/health",
+        "card": "https://hopenet.town/.well-known/agent-card.json",
         "description": "The town's own agent — what this town offers and whether each service is up. Lists; never grants."
       },
       {

@@ -140,10 +140,11 @@ services:
     # own manifest, which is the one row a reader would assume is never absent. `hopenet.town` leads because
     # the town presents on the zone it owns; the other two stay while anything still asks for them.
     hosts: [hopenet.town, town.impact-agent.io, hopechain-town.agentkg.io]
-    # The probe names a host that ANSWERS. `hopenet.town`'s delegation has not published at the registry yet,
-    # and a probe against a name that does not resolve reports this town's own agent as down.
-    probe: https://town.impact-agent.io/api/health
-    card: https://town.impact-agent.io/.well-known/agent-card.json
+    # On the town's own zone since 2026-10-15, when the registry published the delegation. It named
+    # `town.impact-agent.io` until then: a probe against a name that does not resolve reports this town's own
+    # agent as down, which is an outage the manifest would have invented.
+    probe: https://hopenet.town/api/health
+    card: https://hopenet.town/.well-known/agent-card.json
     description: The town's own agent — what this town offers and whether each service is up. Lists; never grants.
   - id: chain-gateway
     kind: commons
