@@ -2,7 +2,7 @@
 // the app directory exists, one of its wrangler environments deploys exactly that Worker name, and the hosts the
 // manifest lists are the custom domains that environment claims. A manifest that disagrees with the deployables is a
 // manifest that lies to the portal (spec 429 D6).
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { loadTowns, ROOT } from './load-towns';
 import { wranglerFacts } from './wrangler-facts';
@@ -22,6 +22,18 @@ for (const town of towns) {
     for (const h of s.hosts) if (!routes.has(h)) errors.push(`${at}: host ${h} is not a route of Worker ${s.worker}`);
     for (const r of routes) if (!s.hosts.includes(r)) errors.push(`${at}: Worker ${s.worker} claims ${r}, which the manifest does not list`);
   }
+}
+// The declared contract generation is the deployment record's, never a number somebody remembered: a runtime declared
+// generation 1 on a chain whose enforcers were deployed at generation 3 saw `BadArgsLength` on every narrow wire. The
+// record is the pinned `@agenticprimitives/contracts` release's `deployments-<deployment>.json`; a pin that does not carry
+// the chain's record yet is said, not failed — the mismatch is the finding, the absence is a pin to bump.
+for (const town of towns) {
+  const rec = join(ROOT, 'node_modules', '@agenticprimitives', 'contracts', `deployments-${town.chain.deployment}.json`);
+  if (!existsSync(rec)) { console.warn(`check:town — ${town.town}: the pinned @agenticprimitives/contracts carries no deployments-${town.chain.deployment}.json; chain.generation "${town.chain.generation}" is unverified (bump the pin to a release that has it)`); continue; }
+  const d = JSON.parse(readFileSync(rec, 'utf8')) as { chainId?: number; contractsGeneration?: number };
+  const recorded = String(d.contractsGeneration ?? 1);
+  if (d.chainId !== undefined && Number(d.chainId) !== town.chain.id) errors.push(`${town.town}: chain.id ${town.chain.id} but deployments-${town.chain.deployment}.json is chain ${d.chainId}`);
+  if (recorded !== town.chain.generation) errors.push(`${town.town}: chain.generation "${town.chain.generation}" but deployments-${town.chain.deployment}.json records contractsGeneration ${recorded}`);
 }
 if (errors.length) { console.error(`check:town — ${errors.length} finding(s):\n  ${errors.join('\n  ')}`); process.exit(1); }
 console.log(`check:town — ${towns.length} town(s), ${checked} deployed service(s) agree with their apps`);
