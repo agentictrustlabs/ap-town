@@ -1,0 +1,130 @@
+# The hopechain town — the SECOND town, stood up 2026-10-14 so the federation twin runs across two CHAINS
+# rather than two estates on one. Every town app, check and generator reads THIS file (packages/town-model).
+# Nothing in it grants anything (429 D2): a row says a service is listed — whether anyone may use it is their
+# own delegation's question.
+#
+# IT SHARES THE FIRST TOWN'S INFRASTRUCTURE AND NOTHING ELSE. Same VM (its own Besu project, its own data
+# directory on the same disk), same Cloudflare Tunnel (one more ingress rule), same accounts, same GraphDB
+# instance — but its OWN repository there, because the public tier is per chain and mixing two chains' facts in
+# one store would make "anybody could reproduce this from the chain" untrue of either. The chain, the contracts,
+# the Workers and the graph are its own.
+town: hopechain
+status: demo
+chain:
+  id: 34349
+  generation: "1"
+  rpc: https://hopechain-rpc-gateway.agentkg.io
+  deployment: hopechain   # @agenticprimitives/contracts/deployments-hopechain.json
+  # No `coin`: the Sheqel and the priced roots are faithchain's (spec 440 §C — one universal namespace, rooted
+  # there). This chain's naming contracts are its own LOCAL table, for the .estate and service names the
+  # bootstrap needs. Nothing here sells a name.
+
+# The same accounts as the first town: this is one operator's second town, not a second operator.
+accounts:
+  cloudflare:
+    - { id: 5da2feaa56593839672948e16c6e809d, label: faithnet-town }
+  vercel: { teamId: team_5pDHXIoVgGTQ5zs7s0RQJ0Ta, label: rpedersen3s-projects }
+  azure: { subscriptionId: 5a656e13-849d-4b56-9101-53f987cf971b, resourceGroups: [rg-faithnet], label: faithchain-node }
+  graphdb: { url: https://graphdb.agentkg.io, label: ontotext }
+
+estates:
+  - id: imbnet
+    repo: agentictrustlabs/ap-home
+    home: https://www.impact-agent.me
+    edge: https://edge.impact-agent.io
+    a2a: https://a2a.impact-agent.io
+    # ITS OWN ZONES SINCE 2026-10-13 — the owner's `impact-agent.io` (service hosts) + `impact-agent.ai`
+    # (per-agent cards) on Cloudflare and `impact-agent.me` on Vercel, in faithnet's shape. The paragraph
+    # above this row described the estate BEFORE that and no longer holds.
+    agentZone: impact-agent.ai
+    # LANES ARE NOT ABOUT workers.dev. A Worker's subrequest to a SAME-ACCOUNT host returns a 404 page
+    # (CF-1042) whether that host is `workers.dev` or a custom domain — which is why faithnet, on a real
+    # zone of its own, still declares `edge.faithnet.io` here. So the new hosts get lanes too; the old ones
+    # stay while they still serve, because a lane for a host nothing asks for costs nothing and removing one
+    # too early is a 404 inside a Worker with no sign of why.
+    lanes:
+      edge.impact-agent.io: imb-edge
+      "*.impact-agent.ai": imb-runtime
+      a2a.impact-agent.io: imb-runtime
+      imb-edge.richardpedersen3.workers.dev: imb-edge
+      imb-runtime.richardpedersen3.workers.dev: imb-runtime
+    # The same chain and the same priced roots: an estate is a Home and the people under it, not a namespace.
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
+    estateName: imbnet.estate
+    # ON NEUTRAL GROUND SINCE 2026-10-13 (spec 439 F1) — the first estate to project its live set so an
+    # agent in another estate can check a grant without being able to read this estate's chain or vaults.
+    # The id is derived from the estate AGENT's address (never the naming gate: an estate id is permanent
+    # and keys rotate), and this row exists to be cross-checked, because `register` is first-come-wins.
+    # `declaredOnChain: false` is the gap said out loud: until the estate agent writes
+    # `atl:projectionSigner` itself (spec 439 F2.5), this file and ap-federation's `federation.yaml` are
+    # the only public declarations a verifier can hold the registry's answer against.
+    projection:
+      registry: "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b"
+      registryChainId: 34348
+      governance: "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015"   # imbnet.estate
+      estateId: "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84"
+      signer: "0xAdcd7257De9686061C0838154cA77790C79a9EfD"
+      # DECLARED 2026-10-14: imbnet.estate wrote `atl:projectionSigner` on this chain (tx 0x35045e1b…); the projector and
+      # the federation door read it and compare with neutral ground's `signerOf` — chain-verifiable both ways.
+      declaredOnChain: true
+    # NAMED SO A DASHBOARD IS READABLE. `demo-a2a-faithnet` and `demo-mcp-faithnet` are historical: "demo" says
+    # nothing and "a2a"/"mcp" name a protocol rather than a job. These say what each Worker IS and sort together
+    # under one prefix, which is what you want the moment a list holds two estates' worth of them.
+    #   imb-runtime   the agent runtime — the A2A door and the harness behind it   (faithnet: demo-a2a-faithnet)
+    #   imb-vault     the records: per-agent vaults behind a private MCP           (faithnet: demo-mcp-faithnet)
+    #   imb-edge      admission — the public gate in front of the runtime          (faithnet: demo-edge-faithnet)
+    #   imb-home-mcp  the Home's own MCP, the entrance an outside client uses      (faithnet: home-mcp-faithnet)
+    #   imb-approval  the door a parked act waits at for its signature             (faithnet: harness-approval-faithnet)
+    workers: [imb-runtime, imb-vault, imb-edge, imb-home-mcp, imb-approval]
+    vercelProjects: [imb-home]
+    # NO AKCS TENANT. imbnet's custody root, vault KEKs and service MAC are local-aes with the root an
+    # in-Worker secret — honest for a second demo estate, and a liability a real one would not carry (a
+    # master that cannot be rotated, backed up or recovered). A tenant needs a caller token minted by
+    # `akcs operator bind-caller` on the Azure CVM; naming one here that does not exist would have the
+    # Pulse report custody this estate does not have.
+    # ITS OWN TENANT. An AKCS tenant is a derivation root — "MAC keys are derived from the tenant root"
+    # — so a tenant is an ESTATE boundary. faithnet-b and skills-a2a share `faithnet` because they are a
+    # second deployment OF faithnet and a service WITHIN it; imbnet is a different estate, and its whole
+    # defining property is that its persons are different Smart Agents, which comes from a separate root.
+    # Not provisioned yet, so its vault KEK path is off and every person's storage stays unprovisioned —
+    # stated, not implied.
+    kms: { tenant: imb, backend: akcs }  # callers imb-vault-3 / imb-runtime-3, bound from the estate profiles, CVM levels only (2026-10-11)
+    # The same two servers as faithnet, on default platform names — imbnet has no zone of its own.
+    mcpServers:
+      - id: vault
+        worker: imb-vault
+        exposure: authenticated
+        url: https://imb-vault.richardpedersen3.workers.dev
+        probe: https://imb-vault.richardpedersen3.workers.dev/health
+        description: >-
+          Every imbnet agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every
+          call, against the principal agent.
+      - id: home
+        worker: imb-home-mcp
+        exposure: authenticated
+        url: https://imb-home-mcp.richardpedersen3.workers.dev
+        probe: https://imb-home-mcp.richardpedersen3.workers.dev/.well-known/oauth-authorization-server
+        description: >-
+          imbnet's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the
+          estate has no zone to give it a name under.
+    # MOVED HERE FROM faithchain 2026-10-14. Home, zones, lanes, name roots and workers are unchanged — an
+    # estate is a Home and the people under it, not a chain — while everything chain-scoped was rebuilt: its
+    # two service agents, its five demo people and every vault-key binding. Its KEYS did not move: an AKCS key
+    # is chain-agnostic, so it kept its tenant, its relay key and its interactions key, and its agents here are
+    # chartered under that same custodian.
+    # NO namingGate: priced naming is not deployed on this chain, so a gate here would name a thing that
+    # cannot be used. The one it had stays retired on faithchain with the names it signed.
+
+# ── The town's services ───────────────────────────────────────────────────────────────────────────────────
+# ONE SUBDOMAIN LEVEL for every host (`hopechain-<service>.agentkg.io`): Universal SSL covers `*.agentkg.io`
+# and not a second level, so `<service>.hopechain.agentkg.io` resolves and then fails the TLS handshake. The
+# estate's own hosts stay on the estate's zone — a town zone is not an estate zone.
+services:
+  - id: chain-gateway
+    kind: commons
+    repo: ap-town
+    app: apps/chain-gateway
+    worker: hopechain-rpc-gateway
+    hosts: [hopechain-rpc-gateway.agentkg.io]
+    probe: https://hopechain-rpc-gateway.agentkg.io/healthz
+    description: Fronts this chain's private RPC with per-app tokens, a method allow-list and rate limits. The only way in.

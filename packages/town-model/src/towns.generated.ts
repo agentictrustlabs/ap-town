@@ -256,74 +256,6 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
             "description": "The Home's own MCP and OAuth 2.1 server (spec 397) — the entrance an outside client such as Claude.ai uses to reach a person's agent. It carries her `ask-as-me` delegation, never the bearer, and an act still parks for her signature at her Home."
           }
         ]
-      },
-      {
-        "id": "imbnet",
-        "repo": "agentictrustlabs/ap-home",
-        "home": "https://www.impact-agent.me",
-        "edge": "https://edge.impact-agent.io",
-        "a2a": "https://a2a.impact-agent.io",
-        "agentZone": "impact-agent.ai",
-        "lanes": {
-          "edge.impact-agent.io": "imb-edge",
-          "*.impact-agent.ai": "imb-runtime",
-          "a2a.impact-agent.io": "imb-runtime",
-          "imb-edge.richardpedersen3.workers.dev": "imb-edge",
-          "imb-runtime.richardpedersen3.workers.dev": "imb-runtime"
-        },
-        "nameRoots": [
-          "me",
-          "org",
-          "team",
-          "svc",
-          "workspace",
-          "treasury",
-          "registry",
-          "church",
-          "circle"
-        ],
-        "estateName": "imbnet.estate",
-        "namingGate": "0xb59e824C77c5969312De54130935478b8f38aF85",
-        "projection": {
-          "registry": "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b",
-          "registryChainId": 34348,
-          "governance": "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015",
-          "estateId": "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84",
-          "signer": "0xAdcd7257De9686061C0838154cA77790C79a9EfD",
-          "declaredOnChain": true
-        },
-        "workers": [
-          "imb-runtime",
-          "imb-vault",
-          "imb-edge",
-          "imb-home-mcp",
-          "imb-approval"
-        ],
-        "vercelProjects": [
-          "imb-home"
-        ],
-        "kms": {
-          "tenant": "imb",
-          "backend": "akcs"
-        },
-        "mcpServers": [
-          {
-            "id": "vault",
-            "worker": "imb-vault",
-            "exposure": "authenticated",
-            "url": "https://imb-vault.richardpedersen3.workers.dev",
-            "probe": "https://imb-vault.richardpedersen3.workers.dev/health",
-            "description": "Every imbnet agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every call, against the principal agent."
-          },
-          {
-            "id": "home",
-            "worker": "imb-home-mcp",
-            "exposure": "authenticated",
-            "url": "https://imb-home-mcp.richardpedersen3.workers.dev",
-            "probe": "https://imb-home-mcp.richardpedersen3.workers.dev/.well-known/oauth-authorization-server",
-            "description": "imbnet's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the estate has no zone to give it a name under."
-          }
-        ]
       }
     ],
     "services": [
@@ -553,6 +485,122 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "pokernight-tables"
         ],
         "description": "Game Night — people and agents at the same tables, including Field Operations."
+      }
+    ]
+  },
+  "hopechain": {
+    "town": "hopechain",
+    "status": "demo",
+    "chain": {
+      "id": 34349,
+      "generation": "1",
+      "rpc": "https://hopechain-rpc-gateway.agentkg.io",
+      "deployment": "hopechain"
+    },
+    "accounts": {
+      "cloudflare": [
+        {
+          "id": "5da2feaa56593839672948e16c6e809d",
+          "label": "faithnet-town"
+        }
+      ],
+      "vercel": {
+        "teamId": "team_5pDHXIoVgGTQ5zs7s0RQJ0Ta",
+        "label": "rpedersen3s-projects"
+      },
+      "azure": {
+        "subscriptionId": "5a656e13-849d-4b56-9101-53f987cf971b",
+        "resourceGroups": [
+          "rg-faithnet"
+        ],
+        "label": "faithchain-node"
+      },
+      "graphdb": {
+        "url": "https://graphdb.agentkg.io",
+        "label": "ontotext"
+      }
+    },
+    "estates": [
+      {
+        "id": "imbnet",
+        "repo": "agentictrustlabs/ap-home",
+        "home": "https://www.impact-agent.me",
+        "edge": "https://edge.impact-agent.io",
+        "a2a": "https://a2a.impact-agent.io",
+        "agentZone": "impact-agent.ai",
+        "lanes": {
+          "edge.impact-agent.io": "imb-edge",
+          "*.impact-agent.ai": "imb-runtime",
+          "a2a.impact-agent.io": "imb-runtime",
+          "imb-edge.richardpedersen3.workers.dev": "imb-edge",
+          "imb-runtime.richardpedersen3.workers.dev": "imb-runtime"
+        },
+        "nameRoots": [
+          "me",
+          "org",
+          "team",
+          "svc",
+          "workspace",
+          "treasury",
+          "registry",
+          "church",
+          "circle"
+        ],
+        "estateName": "imbnet.estate",
+        "projection": {
+          "registry": "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b",
+          "registryChainId": 34348,
+          "governance": "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015",
+          "estateId": "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84",
+          "signer": "0xAdcd7257De9686061C0838154cA77790C79a9EfD",
+          "declaredOnChain": true
+        },
+        "workers": [
+          "imb-runtime",
+          "imb-vault",
+          "imb-edge",
+          "imb-home-mcp",
+          "imb-approval"
+        ],
+        "vercelProjects": [
+          "imb-home"
+        ],
+        "kms": {
+          "tenant": "imb",
+          "backend": "akcs"
+        },
+        "mcpServers": [
+          {
+            "id": "vault",
+            "worker": "imb-vault",
+            "exposure": "authenticated",
+            "url": "https://imb-vault.richardpedersen3.workers.dev",
+            "probe": "https://imb-vault.richardpedersen3.workers.dev/health",
+            "description": "Every imbnet agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every call, against the principal agent."
+          },
+          {
+            "id": "home",
+            "worker": "imb-home-mcp",
+            "exposure": "authenticated",
+            "url": "https://imb-home-mcp.richardpedersen3.workers.dev",
+            "probe": "https://imb-home-mcp.richardpedersen3.workers.dev/.well-known/oauth-authorization-server",
+            "description": "imbnet's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the estate has no zone to give it a name under."
+          }
+        ]
+      }
+    ],
+    "services": [
+      {
+        "id": "chain-gateway",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/chain-gateway",
+        "worker": "hopechain-rpc-gateway",
+        "hosts": [
+          "hopechain-rpc-gateway.agentkg.io"
+        ],
+        "probe": "https://hopechain-rpc-gateway.agentkg.io/healthz",
+        "description": "Fronts this chain's private RPC with per-app tokens, a method allow-list and rate limits. The only way in."
       }
     ]
   }
