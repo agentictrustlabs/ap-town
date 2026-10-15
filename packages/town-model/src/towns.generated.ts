@@ -374,7 +374,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "inference.faithnet.town",
           "inference.faithnet.io"
         ],
-        "probe": "https://inference.faithnet.io/healthz",
+        "probe": "https://inference.faithnet.town/healthz",
         "description": "The town's model gateway (spec 434) — provider keys live on this Worker and nowhere else; it routes a call to a provider by budget and records the route it chose. It answers; it decides no authority."
       },
       {
@@ -390,7 +390,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "rpc.faithnet.town",
           "rpc.faithnet.io"
         ],
-        "probe": "https://rpc.faithnet.io/healthz",
+        "probe": "https://rpc.faithnet.town/healthz",
         "azureResources": [
           "/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-FAITHNET/providers/Microsoft.Compute/virtualMachines/faithnet-vm"
         ],
@@ -407,7 +407,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "skills.faithnet.town",
           "skills.faithnet.io"
         ],
-        "probe": "https://skills.faithnet.io/",
+        "probe": "https://skills.faithnet.town/",
         "workers": [
           "skills-web-faithnet",
           "skills-web",
@@ -589,17 +589,17 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
             "id": "vault",
             "worker": "imb-vault",
             "exposure": "authenticated",
-            "url": "https://imb-vault.richardpedersen3.workers.dev",
-            "probe": "https://imb-vault.richardpedersen3.workers.dev/health",
+            "url": "https://mcp.impact-agent.io",
+            "probe": "https://mcp.impact-agent.io/health",
             "description": "Every impact-agent agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every call, against the principal agent."
           },
           {
             "id": "home",
             "worker": "imb-home-mcp",
             "exposure": "authenticated",
-            "url": "https://imb-home-mcp.richardpedersen3.workers.dev",
-            "probe": "https://imb-home-mcp.richardpedersen3.workers.dev/.well-known/oauth-authorization-server",
-            "description": "impact-agent's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the estate has no zone to give it a name under."
+            "url": "https://home-mcp.impact-agent.io",
+            "probe": "https://home-mcp.impact-agent.io/.well-known/oauth-authorization-server",
+            "description": "impact-agent's Home MCP — the connector URL an outside client pastes, on the estate's own zone, in the same shape faithnet uses."
           }
         ]
       }

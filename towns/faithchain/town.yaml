@@ -205,7 +205,7 @@ services:
     app: apps/inference
     worker: faithchain-inference
     hosts: [inference.faithnet.town, inference.faithnet.io]
-    probe: https://inference.faithnet.io/healthz
+    probe: https://inference.faithnet.town/healthz
     description: The town's model gateway (spec 434) — provider keys live on this Worker and nowhere else; it routes a call to a provider by budget and records the route it chose. It answers; it decides no authority.
   - id: chain-gateway
     kind: commons
@@ -214,7 +214,7 @@ services:
     worker: faithchain-rpc-gateway
     workers: [chain-rpc-gateway]
     hosts: [rpc.faithnet.town, rpc.faithnet.io]
-    probe: https://rpc.faithnet.io/healthz
+    probe: https://rpc.faithnet.town/healthz
     azureResources: [/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-FAITHNET/providers/Microsoft.Compute/virtualMachines/faithnet-vm]
     # The whole group is this service's: the node VM, its data and OS disks, its public IP — nothing else is
     # billed in it. Azure's cost rows name a GROUP, so without this line every faithchain-node dollar reads as
@@ -227,7 +227,7 @@ services:
     kind: commons
     repo: agentictrustlabs/skills
     hosts: [skills.faithnet.town, skills.faithnet.io]
-    probe: https://skills.faithnet.io/
+    probe: https://skills.faithnet.town/
     workers: [skills-web-faithnet, skills-web, skills-a2a, skills-corpus, skills-mcp, skills-ontology]
     # The registry's own interface is a website; its tools Worker is an MCP server behind a binding beside it.
     # It has NO public route on purpose: it takes its caller's word for `author` because skills-a2a has already

@@ -96,23 +96,28 @@ estates:
     # stated, not implied.
     kms: { tenant: imb, backend: akcs }  # callers imb-vault-3 / imb-runtime-3, bound from the estate profiles, CVM levels only (2026-10-11)
     # The same two servers as faithnet, on default platform names — impact-agent has no zone of its own.
+    # ON THE ESTATE'S OWN ZONE SINCE 2026-10-13, and this block did not follow until 2026-10-14. The Workers
+    # already carried `mcp.impact-agent.io` and `home-mcp.impact-agent.io` as custom domains; the manifest went
+    # on advertising the workers.dev hosts, and `imb-home-mcp.richardpedersen3.workers.dev` answers 404 on
+    # EVERY path — so the town published a connector URL that an outside client would paste and get nothing
+    # from, while the working one sat undeclared. A census is only worth having if what it lists is reachable.
     mcpServers:
       - id: vault
         worker: imb-vault
         exposure: authenticated
-        url: https://imb-vault.richardpedersen3.workers.dev
-        probe: https://imb-vault.richardpedersen3.workers.dev/health
+        url: https://mcp.impact-agent.io
+        probe: https://mcp.impact-agent.io/health
         description: >-
           Every impact-agent agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every
           call, against the principal agent.
       - id: home
         worker: imb-home-mcp
         exposure: authenticated
-        url: https://imb-home-mcp.richardpedersen3.workers.dev
-        probe: https://imb-home-mcp.richardpedersen3.workers.dev/.well-known/oauth-authorization-server
+        url: https://home-mcp.impact-agent.io
+        probe: https://home-mcp.impact-agent.io/.well-known/oauth-authorization-server
         description: >-
-          impact-agent's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the
-          estate has no zone to give it a name under.
+          impact-agent's Home MCP — the connector URL an outside client pastes, on the estate's own zone, in the
+          same shape faithnet uses.
     # MOVED HERE FROM faithchain 2026-10-14. Home, zones, lanes, name roots and workers are unchanged — an
     # estate is a Home and the people under it, not a chain — while everything chain-scoped was rebuilt: its
     # two service agents, its five demo people and every vault-key binding. Its KEYS did not move: an AKCS key
