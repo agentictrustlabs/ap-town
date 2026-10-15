@@ -135,8 +135,8 @@ services:
     worker: demo-discovery-a2a-faithnet
     agentName: discovery.registry
     hosts: [discovery-a2a.faithnet.town, discovery-a2a.faithnet.io]
-    probe: https://discovery-a2a.faithnet.io/health
-    card: https://discovery-a2a.faithnet.io/.well-known/agent-card.json
+    probe: https://discovery-a2a.faithnet.town/health
+    card: https://discovery-a2a.faithnet.town/.well-known/agent-card.json
     description: The town's registry — the discovery.registry agent, its ARD document, ACP registry and search.
   - id: discovery-mcp
     kind: commons
@@ -159,7 +159,7 @@ services:
     app: apps/discovery-connector
     worker: demo-discovery-connector-faithnet
     hosts: [discovery-connector.faithnet.town, discovery-connector.faithnet.io]
-    probe: https://discovery-connector.faithnet.io/health
+    probe: https://discovery-connector.faithnet.town/health
     # The one MCP server in this town with a door an anonymous client may knock on. It is read-only and it
     # reads the public graph, which anybody could read from the chain anyway (ADR-0040) — so there is nothing
     # behind this door that being admitted would disclose.
@@ -171,7 +171,7 @@ services:
     app: apps/discovery-web
     worker: demo-discovery-web-faithnet
     hosts: [discovery.faithnet.town, discovery.faithnet.io]
-    probe: https://discovery.faithnet.io/
+    probe: https://discovery.faithnet.town/
     description: The explorer's old host — the registry's documents at their well-known paths, and a redirect to the portal's Find.
   - id: town-agent
     kind: commons
@@ -179,8 +179,8 @@ services:
     app: apps/town-agent
     worker: faithchain-town-agent
     hosts: [faithnet.town, town.faithnet.io]
-    probe: https://town.faithnet.io/api/health
-    card: https://town.faithnet.io/.well-known/agent-card.json
+    probe: https://faithnet.town/api/health
+    card: https://faithnet.town/.well-known/agent-card.json
     description: The town's own agent — what this town offers and whether each service is up. Lists; never grants.
   - id: town-mcp
     kind: commons
@@ -197,7 +197,7 @@ services:
     app: apps/naming
     worker: faithchain-naming
     hosts: [names.faithnet.town, names.faithnet.io]
-    probe: https://names.faithnet.io/api/health
+    probe: https://names.faithnet.town/api/health
     description: The town's naming service — every name on the chain, what it points at, and who can change it. It reads; an owner's Home writes.
   - id: inference
     kind: commons

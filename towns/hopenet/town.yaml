@@ -126,6 +126,20 @@ estates:
 # and not a second level, so `<service>.hopechain.agentkg.io` resolves and then fails the TLS handshake. The
 # estate's own hosts stay on the estate's zone — a town zone is not an estate zone.
 services:
+  - id: town-agent
+    kind: commons
+    repo: ap-town
+    app: apps/town-agent
+    worker: hopechain-town-agent
+    # DEPLOYED SINCE 2026-10-14 AND UNDECLARED UNTIL NOW — the town's own portal was missing from the town's
+    # own manifest, which is the one row a reader would assume is never absent. `hopenet.town` leads because
+    # the town presents on the zone it owns; the other two stay while anything still asks for them.
+    hosts: [hopenet.town, town.impact-agent.io, hopechain-town.agentkg.io]
+    # The probe names a host that ANSWERS. `hopenet.town`'s delegation has not published at the registry yet,
+    # and a probe against a name that does not resolve reports this town's own agent as down.
+    probe: https://town.impact-agent.io/api/health
+    card: https://town.impact-agent.io/.well-known/agent-card.json
+    description: The town's own agent — what this town offers and whether each service is up. Lists; never grants.
   - id: chain-gateway
     kind: commons
     repo: ap-town

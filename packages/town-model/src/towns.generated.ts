@@ -270,8 +270,8 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "discovery-a2a.faithnet.town",
           "discovery-a2a.faithnet.io"
         ],
-        "probe": "https://discovery-a2a.faithnet.io/health",
-        "card": "https://discovery-a2a.faithnet.io/.well-known/agent-card.json",
+        "probe": "https://discovery-a2a.faithnet.town/health",
+        "card": "https://discovery-a2a.faithnet.town/.well-known/agent-card.json",
         "description": "The town's registry — the discovery.registry agent, its ARD document, ACP registry and search."
       },
       {
@@ -305,7 +305,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "discovery-connector.faithnet.town",
           "discovery-connector.faithnet.io"
         ],
-        "probe": "https://discovery-connector.faithnet.io/health",
+        "probe": "https://discovery-connector.faithnet.town/health",
         "mcp": {
           "exposure": "open"
         },
@@ -321,7 +321,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "discovery.faithnet.town",
           "discovery.faithnet.io"
         ],
-        "probe": "https://discovery.faithnet.io/",
+        "probe": "https://discovery.faithnet.town/",
         "description": "The explorer's old host — the registry's documents at their well-known paths, and a redirect to the portal's Find."
       },
       {
@@ -334,8 +334,8 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "faithnet.town",
           "town.faithnet.io"
         ],
-        "probe": "https://town.faithnet.io/api/health",
-        "card": "https://town.faithnet.io/.well-known/agent-card.json",
+        "probe": "https://faithnet.town/api/health",
+        "card": "https://faithnet.town/.well-known/agent-card.json",
         "description": "The town's own agent — what this town offers and whether each service is up. Lists; never grants."
       },
       {
@@ -361,7 +361,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "names.faithnet.town",
           "names.faithnet.io"
         ],
-        "probe": "https://names.faithnet.io/api/health",
+        "probe": "https://names.faithnet.town/api/health",
         "description": "The town's naming service — every name on the chain, what it points at, and who can change it. It reads; an owner's Home writes."
       },
       {
@@ -605,6 +605,21 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
       }
     ],
     "services": [
+      {
+        "id": "town-agent",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/town-agent",
+        "worker": "hopechain-town-agent",
+        "hosts": [
+          "hopenet.town",
+          "town.impact-agent.io",
+          "hopechain-town.agentkg.io"
+        ],
+        "probe": "https://town.impact-agent.io/api/health",
+        "card": "https://town.impact-agent.io/.well-known/agent-card.json",
+        "description": "The town's own agent — what this town offers and whether each service is up. Lists; never grants."
+      },
       {
         "id": "chain-gateway",
         "kind": "commons",
