@@ -170,7 +170,11 @@ function Details({ v }: { v: NameView }): ReactNode {
 function EditAtHome({ v, mine, own }: { v: NameView; mine: boolean; own: boolean }): ReactNode {
   const { session, agents } = useSession();
   const { run, cancel, busy, error } = useHomeCeremony();
-  if (!session || !mine || !v.agent) return <AtYourHome estates={v.estates} verb="Changing a record, the presented name or the owner" name={v.name} />;
+  // THE AGENT'S OWN HOME, not this town's. A name on the root chain can belong to an agent whose Home is in another town
+  // (maya-fernandes.me → www.impact-agent.me in hopenet), and "Open your Home" sent to this town's estate opened the wrong
+  // one. The identity block already knows the agent's estate and Home; when it does, that is the only door offered.
+  const doors = v.identity?.estate?.home ? [{ id: v.identity.estate.id ?? 'the agent’s estate', home: v.identity.estate.home, naming: `${v.identity.estate.home.replace(/\/$/, '')}/naming` }] : v.estates;
+  if (!session || !mine || !v.agent) return <AtYourHome estates={doors} verb="Changing a record, the presented name or the owner" name={v.name} />;
   const who = own ? 'own' : (agents ?? []).find((a) => a.agent === v.agent!.toLowerCase())?.kind ?? 'org';
   return (
     <div className="home-cta">
