@@ -23,3 +23,18 @@ PORTAL_FIND = "https://town.faithnet.io/find"
 [[env.faithnet.services]]
 binding = "REGISTRY"
 service = "demo-discovery-a2a-faithnet"
+
+# hopenet (34349): the registry's documents at their well-known paths; everything else goes to the portal's Find.
+[env.hopenet]
+name = "hopechain-discovery-web"
+
+[[env.hopenet.routes]]
+pattern = "discovery.hopenet.town"
+custom_domain = true
+
+[env.hopenet.vars]
+PORTAL_FIND = "https://hopenet.town/find"
+
+[[env.hopenet.services]]
+binding = "REGISTRY"
+service = "hopechain-registry"

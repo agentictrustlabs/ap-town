@@ -122,3 +122,71 @@ service = "demo-edge-faithnet"   # estate faithnet
 binding = "LANE_FAITHNET_2"
 service = "demo-a2a-faithnet"   # estate faithnet
 # <<< town:lanes faithnet
+
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+# hopenet (hopechain, 34349) — THE SECOND TOWN's indexer, the only writer of `smart-agents-hopechain`.
+# Addresses come from packages/contracts/deployments-hopechain.json BY KEY, never by copying faithnet's: several
+# addresses are identical across the two chains (same deployer, same nonces) and several are NOT — faithnet's
+# NAME_REGISTRY address is hopechain's paymaster, and its RESOLVER is hopechain's ontology term registry. An
+# address alone no longer says which chain you are on.
+#
+# Secrets (wrangler secret put <NAME> --env hopenet): GRAPHDB_USER, GRAPHDB_PASSWORD (the `hopechain-discovery`
+#   user), RPC_URL and LOGS_RPC_URL (the town's chain gateway with THIS Worker's own `indexer` app token —
+#   `https://rpc.hopenet.town/?k=<token>`; the gateway allows eth_getLogs, so both are the same door).
+# REGISTRY = "" — no AgentRegistryBase on 34349 yet (deployments-hopechain.json `_incompleteNote`); the empty
+#   string projects the facet as ABSENT, never another chain's address.
+# ─────────────────────────────────────────────────────────────────────────────────────────────────
+[env.hopenet]
+name = "hopechain-discovery-indexer"
+
+[env.hopenet.vars]
+GRAPHDB_URL = "https://graphdb.agentkg.io/repositories/smart-agents-hopechain/statements"
+CHAIN_ID = "34349"
+NAME_REGISTRY = "0x60c7a6b34217da304b75cf72C73269625900318c"
+RESOLVER = "0xe3Bf0C39B082C4DE81a919eAaA45A7f3FB19447e"
+NAME_RESOLVER = "0x0E22171844ba88B4e572B33E60E82e0B762301CF"
+PROFILE_RESOLVER = "0x89Ab6eB35e0C7c7B91eAaCbe1A0f42e00B5d2C9d"
+RELATIONSHIP = "0xeBe1247403fB8e82f0cBb70D158AE38f627174A2"
+ATTESTATION_REGISTRY = "0x2D5EFeeB87f60244530e0a1ed420755090295cC4"
+REGISTRY = ""
+TLDS = "me,org,team,svc,workspace,treasury,registry,church,circle"  # town:roots
+DISCOVERY_REGISTRY_ID = "urn:ap:registry:hopenet-agents"
+WATCH_MAX_BLOCKS = "20000"
+DELEGATION_MANAGER = "0x710cb1bF08C234Df397e0910331e0A29710EF4F7"
+UNIVERSAL_SIGNATURE_VALIDATOR = "0xa5855906C0De3813E74BEe201973071e0c844115"
+TIMESTAMP_ENFORCER = "0x2156311097A936de1916a878bF53Bfd43c7b5715"
+LANE_ROUTES = "edge.impact-agent.io=LANE_IMPACT_AGENT_1,*.impact-agent.ai=LANE_IMPACT_AGENT_2,a2a.impact-agent.io=LANE_IMPACT_AGENT_2,imb-edge.richardpedersen3.workers.dev=LANE_IMPACT_AGENT_1,imb-runtime.richardpedersen3.workers.dev=LANE_IMPACT_AGENT_2"  # town:lanes
+
+[env.hopenet.triggers]
+crons = ["* * * * *"]
+
+# Its own cursor — a different chain, never faithnet's namespace.
+[[env.hopenet.kv_namespaces]]
+binding = "INDEXER_STATE"
+id = "93fa1937687d4e2c8225ab52fac9d7ff"
+
+# Spec 413 — the public tier's passages for this chain. Same rule: no vault binding here, ever.
+[env.hopenet.ai]
+binding = "AI"
+
+[[env.hopenet.vectorize]]
+binding = "KB_VECTORS"
+index_name = "ap-public-kb-hopechain"
+
+# Shelf hints from the estate's runtime (`imb-runtime` produces to `shelf-index-imb`, created 2026-10-11 with
+# no consumer until now). The queue is named for the ESTATE because the producer is the estate's Worker;
+# the consumer is the town's indexer, because the public tier is the town's.
+[[env.hopenet.queues.consumers]]
+queue = "shelf-index-imb"
+max_batch_size = 10
+max_batch_timeout = 5
+max_retries = 3
+
+# >>> town:lanes hopenet — GENERATED from towns/hopenet/town.yaml by `pnpm gen:town`; edit the manifest, never this block.
+[[env.hopenet.services]]
+binding = "LANE_IMPACT_AGENT_1"
+service = "imb-edge"   # estate impact-agent
+[[env.hopenet.services]]
+binding = "LANE_IMPACT_AGENT_2"
+service = "imb-runtime"   # estate impact-agent
+# <<< town:lanes hopenet

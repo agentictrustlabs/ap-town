@@ -144,7 +144,29 @@ either. A fresh repository reports a few dozen triples — those are the ruleset
 
 ---
 
+### 7.3 The discovery tier (landed 2026-10-15)
+
+Six Workers, each its own `[env.<town>]` beside faithnet's: the discovery MCP and the indexer over the town's own
+GraphDB repository and its own Vectorize index (`ap-public-kb-<chain>`, 768/cosine, metadata index `kind`), the
+registry, the public connector, the explorer host, and the town's private MCP. The town agent then binds `REGISTRY`
+and `INFRA`; `NAMING` stays unbound when the town roots its names elsewhere. What each one needed that a deploy
+cannot do: a GraphDB user scoped to the one repository (`POST /rest/security/users/<name>` with the admin header
+that already lives in `.env.ops.local` as the monitor token), an `indexer` app token on the town's chain gateway
+(`t:<sha256>` in its TOKENS KV; the Worker's `RPC_URL`/`LOGS_RPC_URL` are `https://rpc.<town>/?k=<token>`), a KV
+namespace for the indexer's cursor (created AFTER the env exists — `kv namespace create --env` refuses before), and
+the shelf-hint queue, which is the ESTATE's (`shelf-index-imb`, produced by the estate's runtime since 2026-10-11
+and consumed by nothing until the town's indexer existed). Record the two credentials that cannot be read back in
+`.env.ops.local` the moment they are minted.
+
+**Expect the first projection to find nothing.** The batch indexer enumerates NAMED agents on this chain, and a
+second town whose names are rooted at the first has nobody named locally: the estate's people and its two service
+agents reverse-resolve to `""` on 34349. The graph is empty because the chain is, which is the only honest state of
+a public tier (ADR-0040) — it fills when something on this chain is named.
+
 ## 8. What is not done here
 
 The twin itself (the door taking chain per estate, the gates parameterised per estate) and federated naming
-across chains. Both are the next wave, and the door is the one place "no verifier code" was optimistic.
+across chains. Both are the next wave, and the door is the one place "no verifier code" was optimistic. Also
+open: the registry's agent is not a chartered `.registry` SA on this chain (its card says "hopenet registry" and
+claims no name), there is no gateway agent for the connector's `invoke_agent`, and the Pulse's day is not recorded
+(no context agents here).

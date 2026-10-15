@@ -632,6 +632,80 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         ],
         "probe": "https://hopechain-rpc-gateway.agentkg.io/healthz",
         "description": "Fronts this chain's private RPC with per-app tokens, a method allow-list and rate limits. The only way in."
+      },
+      {
+        "id": "registry",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/registry",
+        "worker": "hopechain-registry",
+        "hosts": [
+          "discovery-a2a.hopenet.town"
+        ],
+        "probe": "https://discovery-a2a.hopenet.town/health",
+        "card": "https://discovery-a2a.hopenet.town/.well-known/agent-card.json",
+        "description": "The town's registry — its ARD document, ACP registry and search over this chain's public graph."
+      },
+      {
+        "id": "discovery-mcp",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/discovery-mcp",
+        "worker": "hopechain-discovery-mcp",
+        "hosts": [],
+        "mcp": {
+          "exposure": "binding"
+        },
+        "description": "Reads this chain's public graph and retrieval index for the registry. Reachable only by service binding."
+      },
+      {
+        "id": "discovery-indexer",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/discovery-indexer",
+        "worker": "hopechain-discovery-indexer",
+        "hosts": [],
+        "description": "The only writer of this chain's public graph and retrieval index; crawls the estate's name roots and consumes its shelf hints."
+      },
+      {
+        "id": "discovery-connector",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/discovery-connector",
+        "worker": "hopechain-discovery-connector",
+        "hosts": [
+          "discovery-connector.hopenet.town"
+        ],
+        "probe": "https://discovery-connector.hopenet.town/health",
+        "mcp": {
+          "exposure": "open"
+        },
+        "description": "Public read-only MCP for external assistants, over this town's registry search."
+      },
+      {
+        "id": "discovery-web",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/discovery-web",
+        "worker": "hopechain-discovery-web",
+        "hosts": [
+          "discovery.hopenet.town"
+        ],
+        "probe": "https://discovery.hopenet.town/",
+        "description": "The registry's documents at their well-known paths, and a redirect to the portal's Find."
+      },
+      {
+        "id": "town-mcp",
+        "kind": "commons",
+        "repo": "ap-town",
+        "app": "apps/town-mcp",
+        "worker": "hopechain-town-mcp",
+        "hosts": [],
+        "workers": [],
+        "mcp": {
+          "exposure": "binding"
+        },
+        "description": "The town's private MCP (spec 437 §4) — the only place a platform read credential lives. No hostname; reachable only by service binding from the town agent. It reads; it acts for nobody."
       }
     ]
   }

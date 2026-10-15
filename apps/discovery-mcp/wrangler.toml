@@ -31,3 +31,23 @@ binding = "AI"
 [[env.faithnet.vectorize]]
 binding = "KB_VECTORS"
 index_name = "ap-public-kb-faithnet"
+
+# ── hopenet (34349) — THE SECOND TOWN's reader, over its OWN GraphDB repository ──────────────────────────────────────
+# The public tier is per chain: `smart-agents-hopechain` holds only what chain 34349 can prove, and mixing two chains'
+# facts in one store would make "anybody could reproduce this from the chain" untrue of either (ADR-0040). The Worker
+# name carries the CHAIN's name like the town's other Workers (`hopechain-rpc-gateway`, `hopechain-town-agent`): a
+# Worker's name is what its bindings and storage are bound to, and the town got renamed while the chain did not.
+# Secrets (`--env hopenet`): GRAPHDB_USER, GRAPHDB_PASSWORD — the `hopechain-discovery` user, read/write on this one
+# repository and nothing else. Vectorize: `ap-public-kb-hopechain` (768, cosine, metadata index `kind`), created 2026-10-15.
+[env.hopenet]
+name = "hopechain-discovery-mcp"
+
+[env.hopenet.vars]
+GRAPHDB_QUERY_URL = "https://graphdb.agentkg.io/repositories/smart-agents-hopechain"
+
+[env.hopenet.ai]
+binding = "AI"
+
+[[env.hopenet.vectorize]]
+binding = "KB_VECTORS"
+index_name = "ap-public-kb-hopechain"

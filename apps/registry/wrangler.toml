@@ -46,3 +46,25 @@ A2A_PUBLIC_ORIGIN = "https://discovery-a2a.faithnet.io"
 [[env.faithnet.services]]
 binding = "MCP"
 service = "demo-discovery-mcp-faithnet"
+
+# ── hopenet (34349) — THE SECOND TOWN's registry, over its own discovery MCP ────────────────────────────────────────
+# AGENT_NAME is NOT `discovery.registry` here and is deliberately unmarked for `gen:town`: on faithchain that name is
+# claimed by a chartered service SA that declared `atl:agentType = registry`; on 34349 no such agent has been
+# chartered (a charter spends authority and signs as a custodian — operator work, not deploy work). The card
+# says what this is without claiming a name the chain does not back.
+[env.hopenet]
+name = "hopechain-registry"
+
+[[env.hopenet.routes]]
+pattern = "discovery-a2a.hopenet.town"
+custom_domain = true
+
+[env.hopenet.vars]
+CATALOG_URN = "urn:air:hopenet.town:catalog:root"
+CATALOG_CARDS = "https://hopenet.town/.well-known/agent-card.json"
+AGENT_NAME = "hopenet registry"
+A2A_PUBLIC_ORIGIN = "https://discovery-a2a.hopenet.town"
+
+[[env.hopenet.services]]
+binding = "MCP"
+service = "hopechain-discovery-mcp"

@@ -65,3 +65,26 @@ name = "LIMITER"
 namespace_id = "1001"
 simple = { limit = 60, period = 60 }
 
+# ── hopenet (34349) — the public read-only MCP over the second town's registry ──────────────────────────────────────
+# No GATEWAY_AGENT and no gateway secrets: `gateway.svc` (spec 387) is chartered on faithchain under globalchurch.org,
+# and this town has no gateway agent yet. The connector says so per tool — `invoke_agent` refuses with "this gateway
+# has no agent", `find_services` answers with no targets — rather than borrowing another chain's agent.
+[env.hopenet]
+name = "hopechain-discovery-connector"
+account_id = "5da2feaa56593839672948e16c6e809d"
+
+[[env.hopenet.routes]]
+pattern = "discovery-connector.hopenet.town"
+custom_domain = true
+
+[env.hopenet.vars]
+REGISTRY_ORIGIN = "https://discovery-a2a.hopenet.town"
+
+[[env.hopenet.services]]
+binding = "DISCOVERY"
+service = "hopechain-registry"
+
+[[env.hopenet.ratelimits]]
+name = "LIMITER"
+namespace_id = "2885"
+simple = { limit = 60, period = 60 }

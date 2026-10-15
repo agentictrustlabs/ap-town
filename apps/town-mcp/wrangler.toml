@@ -45,3 +45,20 @@ class_name = "InfraDO"
 
 [env.faithnet.triggers]
 crons = ["*/5 * * * *", "7 * * * *", "30 6 * * *"]
+
+# ── hopenet (34349) — the second town's private MCP ─────────────────────────────────────────────────────────────────
+# The same platform accounts as faithchain (one operator's second town), so the same read credentials — set with
+# `scripts/set-pulse-secrets.sh hopenet` or per name. It samples what `towns/hopenet/town.yaml` declares and nothing
+# else; the VM and resource group it reports are shared with faithchain, and the manifest says so.
+[env.hopenet]
+name = "hopechain-town-mcp"
+
+[env.hopenet.vars]
+TOWN = "hopenet"
+
+[[env.hopenet.durable_objects.bindings]]
+name = "INFRA"
+class_name = "InfraDO"
+
+[env.hopenet.triggers]
+crons = ["*/5 * * * *", "7 * * * *", "30 6 * * *"]
