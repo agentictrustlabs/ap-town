@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { PLACE_SHAPES } from '@ap-town/town-scene';
 import { useApi } from '../api';
+import { registeredElsewhere, type Elsewhere } from '../federation';
 import type { NameView } from '../api-types';
 import { Link, nameHref, registerHref, rootHref, useRoute } from '../router';
 import { Waiting, useHomeCeremony } from '../register';
@@ -24,16 +25,29 @@ function Invalid({ v }: { v: NameView }): ReactNode {
 }
 
 function Free({ v }: { v: NameView }): ReactNode {
+  // One name across the federation: the chain says nobody holds it HERE; the resolver says whether another chain's Home
+  // claimed it. Until U3 carries such a claim to the root, this is the only way the root's page can tell the truth.
+  const [elsewhere, setElsewhere] = useState<Elsewhere | null>(null);
+  useEffect(() => {
+    let live = true; setElsewhere(null);
+    if (v.status === 'available' && v.form === 'canonical') void registeredElsewhere(v.name, v.chainId).then((e) => { if (live) setElsewhere(e); });
+    return () => { live = false; };
+  }, [v.name, v.status, v.form, v.chainId]);
   return (
     <>
       <section className="title">
         <Glyph kind={v.kind} lit={false} size={72} />
         <div>
           <h1>{v.name} <Chip kind={v.status} /></h1>
-          <p className="lede">{v.status === 'available' ? `Nobody holds this name.${v.names ? ` It would name ${v.names}.` : ''}` : v.status === 'expired' ? 'This name has expired and no longer resolves.' : 'This name cannot be claimed here.'}</p>
+          <p className="lede">{elsewhere ? `Nobody holds this name on this chain — but it is registered on ${elsewhere.town} (eip155:${elsewhere.chainId}).` : v.status === 'available' ? `Nobody holds this name.${v.names ? ` It would name ${v.names}.` : ''}` : v.status === 'expired' ? 'This name has expired and no longer resolves.' : 'This name cannot be claimed here.'}</p>
         </div>
       </section>
       <Banners banners={v.banners} />
+      {elsewhere && (
+        <section>
+          <p className="banner banner-warn"><strong>{elsewhere.display}.</strong> A name is one across the federation, and this one was claimed by a Home on {elsewhere.town}{elsewhere.agent ? ` for agent ${elsewhere.agent}` : ''}. The root chain's record for it is not written yet (ap-federation spec 440 U3), so this chain reads it as free — it is not. Nobody else can register it here.</p>
+        </section>
+      )}
       {v.price && (
         <section className="price">
           <div className="price-tag"><span className="price-n">{v.price.coins}</span> <span className="price-coin">{v.price.coin}</span></div>
@@ -50,7 +64,7 @@ function Free({ v }: { v: NameView }): ReactNode {
         <section>
           <h2>Who could {v.price ? 'buy' : 'claim'} it</h2>
           <p><strong>{v.availability.by.charAt(0).toUpperCase() + v.availability.by.slice(1)}.</strong> {v.availability.rule}</p>
-          {v.status === 'available' && v.form === 'canonical' && v.tld && (
+          {v.status === 'available' && v.form === 'canonical' && v.tld && !elsewhere && (
             <div className="home-cta register">
               <p><strong>Register {v.name}{v.price ? ` for ${v.price.coins} ${v.price.coin}` : ''}.</strong> Four short steps, then your Home signs in a window and this page shows the name as yours.</p>
               <div className="home-cta-row"><Link href={registerHref(v.name)} className="button">Register {v.name} →</Link></div>
