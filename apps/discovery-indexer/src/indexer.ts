@@ -201,7 +201,12 @@ export class DiscoveryIndexer {
     const agentKind = (await this.client.readContract({ address: this.cfg.nameResolver, abi: NAME_ATTR_RESOLVER_ABI, functionName: 'getBytes32', args: [node, AGENT_KIND_PRED] }).catch(() => null)) as Hex | null;
     // spec 346 §8.5 — the SA-keyed DERIVED class (ap:TeamAgent / ap:RegistryAgent / …) next to the root kind.
     const agentType = (await this.client.readContract({ address: this.cfg.profileResolver, abi: PROFILE_RESOLVER_ABI, functionName: 'getBytes32Property', args: [sa, AGENT_TYPE_PRED] }).catch(() => null)) as Hex | null;
-    return { chainId: this.cfg.chainId, smartAgent: sa, name, node, kindClass: agentKindClass(agentKind), derivedClass: agentTypeClass(agentType), facets, provenance: { source: 'agent-naming:childLabelhashes', block, indexedAt: new Date().toISOString() } };
+    // ONE case for the address literal. The subject IRI is lowercased (`agentIri`) but this literal was written in
+    // whichever case the path had — checksummed from `resolveName` on the batch run, lowercase from event logs on
+    // the watcher — so one agent carried two `ap:smartAgent` values and the registry's roster listed it twice
+    // (hopenet, 2026-10-15; faithnet's graph holds both cases too). Lowercase, as the IRI and every reader's
+    // `LCASE(STR(?sa))` comparison already are.
+    return { chainId: this.cfg.chainId, smartAgent: sa.toLowerCase() as Address, name, node, kindClass: agentKindClass(agentKind), derivedClass: agentTypeClass(agentType), facets, provenance: { source: 'agent-naming:childLabelhashes', block, indexedAt: new Date().toISOString() } };
   }
 
   private async collect(parentNode: Hex, depth: number, block: number, attestations: Map<string, AttestationHit[]>, acc: Map<string, AgentNode>): Promise<void> {
