@@ -158,10 +158,18 @@ the shelf-hint queue, which is the ESTATE's (`shelf-index-imb`, produced by the 
 and consumed by nothing until the town's indexer existed). Record the two credentials that cannot be read back in
 `.env.ops.local` the moment they are minted.
 
-**Expect the first projection to find nothing.** The batch indexer enumerates NAMED agents on this chain, and a
-second town whose names are rooted at the first has nobody named locally: the estate's people and its two service
-agents reverse-resolve to `""` on 34349. The graph is empty because the chain is, which is the only honest state of
-a public tier (ADR-0040) — it fills when something on this chain is named.
+**Expect the first projection to find nothing.** The batch indexer enumerates NAMED agents on this chain, and the
+persona seed (`seed-personas-on-chain.mts`) deploys accounts and names nothing: the estate's people and its two
+service agents reverse-resolve to `""` on 34349. The graph is empty because the chain is, which is the only honest
+state of a public tier (ADR-0040). Name them with ap-home `scripts/name-personas-on-chain.mts` (each persona claims
+`<handle>.me` on the chain's permissionless root BY ITS OWN ACCOUNT — one claim per `msg.sender` — in one batch:
+declare type, claim, records, primary). Two traps it met on 2026-10-15: a typed claim batch needs ~1.6M gas against
+the account client's 800k default (estimate from the EntryPoint), and **a free-gas chain still charges prefund** —
+three claims drained the paymaster's EntryPoint deposit from 1e15 to 4e14 wei and the fourth's `handleOps`
+reverted; `depositTo(paymaster)` from the deployer fixed it. Then re-run the projection.
+
+These are LOCAL names (`{maya.me, eip155:34349}`): the federation's name stays the root-chain one (spec 440 §C),
+and the two are joined by `atl:accounts` on the root-chain record — wave U3, not yet built.
 
 ## 8. What is not done here
 
