@@ -39,16 +39,16 @@
     "vitest": "^4.1.8",
     "tsx": "^4.22.4",
     "@types/node": "^22.7.0",
-    "@agenticprimitives/audit": "1.0.0-alpha.32",
-    "@agenticprimitives/connect-auth": "1.0.0-alpha.32",
-    "@agenticprimitives/key-custody": "1.0.0-alpha.32",
-    "@agenticprimitives/ontology": "1.0.0-alpha.32",
-    "@agenticprimitives/agent-account": "1.0.0-alpha.32",
-    "@agenticprimitives/agent-naming": "1.0.0-alpha.32",
-    "@agenticprimitives/contracts": "1.0.0-alpha.32",
-    "@agenticprimitives/delegation": "1.0.0-alpha.32",
+    "@agenticprimitives/audit": "1.0.0-alpha.35",
+    "@agenticprimitives/connect-auth": "1.0.0-alpha.35",
+    "@agenticprimitives/key-custody": "1.0.0-alpha.35",
+    "@agenticprimitives/ontology": "1.0.0-alpha.35",
+    "@agenticprimitives/agent-account": "1.0.0-alpha.35",
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.35",
+    "@agenticprimitives/contracts": "1.0.0-alpha.35",
+    "@agenticprimitives/delegation": "1.0.0-alpha.35",
     "viem": "2.52.2",
-    "@agenticprimitives/types": "1.0.0-alpha.32"
+    "@agenticprimitives/types": "1.0.0-alpha.35"
   },
   "pnpm": {
     "overrides": {

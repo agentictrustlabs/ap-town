@@ -20,7 +20,7 @@
     "react-dom": "19.2.7",
     "viem": "2.52.2",
     "@ap-town/town-ui": "workspace:*",
-    "@agenticprimitives/connect-client": "1.0.0-alpha.22"
+    "@agenticprimitives/connect-client": "1.0.0-alpha.25"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260605.1",
