@@ -404,6 +404,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "kind": "commons",
         "repo": "agentictrustlabs/skills",
         "hosts": [
+          "skills.faithnet.town",
           "skills.faithnet.io"
         ],
         "probe": "https://skills.faithnet.io/",

@@ -226,7 +226,7 @@ services:
   - id: skills
     kind: commons
     repo: agentictrustlabs/skills
-    hosts: [skills.faithnet.io]
+    hosts: [skills.faithnet.town, skills.faithnet.io]
     probe: https://skills.faithnet.io/
     workers: [skills-web-faithnet, skills-web, skills-a2a, skills-corpus, skills-mcp, skills-ontology]
     # The registry's own interface is a website; its tools Worker is an MCP server behind a binding beside it.
