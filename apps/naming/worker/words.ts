@@ -40,4 +40,6 @@ export const RECORD_LABEL: Readonly<Record<string, string>> = {
   cardUri: 'Agent card', cardDigest: 'Card digest', metadataUri: 'Metadata', metadataHash: 'Metadata digest',
   nativeId: 'Native id', appContext: 'App context', orgRole: 'Role', custodyPolicy: 'Custody policy',
   connectionKind: 'Sign-in method', connectionAddress: 'Sign-in hint', passkeyCredentialDigest: 'Passkey digest',
+  // spec 440 §C3 / 346 §3.8 — the person's account on each chain, CAIP-10, one per chain; read from agent-naming alpha.35.
+  accounts: 'Accounts by chain',
 };

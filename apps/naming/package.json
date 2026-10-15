@@ -12,8 +12,8 @@
     "deploy:faithnet": "pnpm build && wrangler deploy --env faithnet"
   },
   "dependencies": {
-    "@agenticprimitives/agent-naming": "1.0.0-alpha.32",
-    "@agenticprimitives/contracts": "1.0.0-alpha.32",
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.35",
+    "@agenticprimitives/contracts": "1.0.0-alpha.35",
     "@ap-town/town-model": "workspace:*",
     "@ap-town/town-scene": "workspace:*",
     "react": "19.2.7",
