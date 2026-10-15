@@ -1,7 +1,7 @@
 import { parse } from 'yaml';
 import type { ServiceKind, TownManifest } from './types';
 
-const KINDS: readonly ServiceKind[] = ['commons', 'domain-pack', 'agent-service', 'application'];
+const KINDS: readonly ServiceKind[] = ['commons', 'domain-pack', 'agent-service', 'application', 'federation'];
 const ID = /^[a-z][a-z0-9-]*$/;
 const HOST = /^(\*\.)?[a-z0-9-]+(\.[a-z0-9-]+)+$/;
 const isUrl = (s: unknown): s is string => typeof s === 'string' && /^https:\/\/[^\s]+$/.test(s);

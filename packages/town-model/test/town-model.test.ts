@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
+import { placeAgent } from '../src/estate-placement';
 import { allMcpServers, attributeEndpoint, crawlRoots, estateMcpServers, EXPOSURE_WORDS, laneBindings, laneRoutesVar, parseTown, sourceUrlOf, townMcpServers, validateTown, AUTHORIZATION_IS_NOT_A_TOWN_SIGNAL } from '../src/index';
 
 const faithchain = readFileSync(new URL('../../../towns/faithchain/town.yaml', import.meta.url), 'utf8');
@@ -266,5 +267,19 @@ describe('what serves this endpoint — declared, never derived from the hostnam
     expect(a.repo).toBe('agentictrustlabs/skills');
     expect(sourceUrlOf(a)).toBe('https://github.com/agentictrustlabs/skills');
     expect(sourceUrlOf({ ...a, repo: undefined } as typeof a)).toBeNull();
+  });
+});
+
+describe('placing an agent in an estate — the manifest\'s hosts against the agent\'s own endpoint (spec 435 §4)', () => {
+  const town = { ...base(), estates: [{ id: 'a', repo: 'r', home: 'https://h.example', edge: 'https://edge.a.example', a2a: 'https://a2a.a.example', agentZone: 'a.ai', nameRoots: ['me'], lanes: { 'edge.a.example': 'w', '*.a.ai': 'w', 'old.workers.dev': 'w' } }] } as unknown as Parameters<typeof placeAgent>[1];
+  const row = (a2aEndpoint: string | null) => ({ name: 'x.me', smartAgent: '0x1', a2aEndpoint });
+  it('the agent zone, the A2A host, the gate and a declared lane each place; a stranger\'s host and no endpoint do not', () => {
+    expect(placeAgent(row('https://x.a.ai/api/a2a'), town).how).toBe('agent-zone');
+    expect(placeAgent(row('https://a2a.a.example/x'), town).how).toBe('estate-a2a');
+    expect(placeAgent(row('https://edge.a.example/api/a2a/x.me'), town).how).toBe('estate-edge');
+    expect(placeAgent(row('https://old.workers.dev/api/a2a/x.me'), town).how).toBe('estate-lane');
+    expect(placeAgent(row('https://x.a.ai/api/a2a'), town).estate).toBe('a');
+    expect(placeAgent(row('https://elsewhere.example/a2a'), town)).toMatchObject({ estate: null, how: 'unplaced' });
+    expect(placeAgent(row(null), town)).toMatchObject({ estate: null, how: 'unplaced' });
   });
 });

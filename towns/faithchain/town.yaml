@@ -192,7 +192,11 @@ services:
     mcp: { exposure: binding }
     description: The town's private MCP (spec 437 §4) — the only place a platform read credential lives, and the only thing that reads Cloudflare, Vercel, Azure and GraphDB. No hostname; reachable only by service binding from the town agent. It reads; it acts for nobody.
   - id: naming
-    kind: commons
+    # THE FEDERATION'S, HOSTED HERE (owner, 2026-10-15). Spec 440 §C roots the universal namespace on this chain, so this
+    # service answers for every town's names (hopenet's `namesRootedAt: faithchain`) — it stands on ap-federation's ground,
+    # not among this town's commons. Declared here because it IS deployed from this repository on this chain: the host
+    # census, the probe and the town agent's NAMING binding stay true; only where it is drawn and counted changes.
+    kind: federation
     repo: ap-town
     app: apps/naming
     worker: faithchain-naming
@@ -240,7 +244,9 @@ services:
         description: The skills corpus's tools and store — publish and read SKILL.md contracts. No public route by design.
     description: The skills registry — SKILL.md contracts and playbooks, pinned by digest.
   - id: kms
-    kind: commons
+    # THE FEDERATION'S SHARED OPERATOR (spec 440 §A), hosted on this chain's estate zone — `kind: federation` for the same
+    # reason as naming: it serves every town and every estate, so ap-federation draws it and this town only lists it.
+    kind: federation
     repo: agentictrustlabs/faithkms
     # STAYS ON faithnet.io WHEN EVERY OTHER TOWN SERVICE MOVED TO faithnet.town (owner, 2026-10-14). The rule
     # is that the town presents on the town's zone — and this service is not the town's. It is the

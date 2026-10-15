@@ -567,10 +567,16 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     // WHO ANSWERS FOR EACH CONTEXT (spec 436 §5.5): the town's agent and each estate's, by name and by card.
     // The portal shows the door it would send a question to, which is the only honest way to show the Ask.
     const agents = contextAgentViews(town, contextAgents(env as PulseRecordEnv), env.CONTEXT_AGENT_ZONE);
+    // WHO LIVES IN EACH ESTATE — the registry's roster, placed by each agent's own on-chain endpoint against the
+    // hosts the manifest declares (town-model `placeAgent`). The scene's houses come from HERE, never from a sample
+    // of names on a root: in a town whose names are rooted elsewhere there is no naming service to sample, and in a
+    // town with two estates a root places an agent in both. `null` when the registry could not be asked — unknown, not none.
+    const read = await rosterOf(env)();
+    const residents = read ? Object.fromEntries(town.estates.map((e) => [e.id, { ...estateRoster(read.rows, town, e.id), read: read.rows.length, truncated: read.truncated }])) : null;
     // The demo door's PERSONA is public (the front page offers it); nothing secret is involved — the Home
     // issues the token and the town verifies it like any other.
     const demo = (env.DEMO_CONNECT ?? '').trim();
-    return json({ ...townSummary(town), services, names, agents, card: `${origin}/.well-known/agent-card.json`, ...(demo ? { demoConnect: demo } : {}) }, 200, { 'cache-control': 'public, max-age=30' });
+    return json({ ...townSummary(town), services, names, agents, residents, card: `${origin}/.well-known/agent-card.json`, ...(demo ? { demoConnect: demo } : {}) }, 200, { 'cache-control': 'public, max-age=30' });
   }
   if (path === '/services') return json(await serviceViews(town, fetchProbe, selfHost));
   const m = path.match(/^\/services\/([a-z0-9-]+)$/);

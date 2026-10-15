@@ -26,6 +26,8 @@ const repoUrl = (repo: string): string => (repo === 'ap-town' ? 'https://github.
 const HOW_WORDS: Record<PlacedAgentRow['how'], string> = {
   'agent-zone': 'its endpoint is under this estate’s agent zone',
   'estate-a2a': 'its endpoint is this estate’s own A2A host',
+  'estate-edge': 'its endpoint is this estate’s own gate',
+  'estate-lane': 'its endpoint is a host this town routes to this estate',
   unplaced: 'not placed',
 };
 

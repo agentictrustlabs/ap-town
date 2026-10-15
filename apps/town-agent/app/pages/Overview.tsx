@@ -7,7 +7,8 @@ import { isPlaceKind } from '@ap-town/town-scene';
 
 export function Overview({ t }: { t: TownData }): ReactNode {
   const commons = t.services.filter((s) => s.kind === 'commons');
-  const apps = t.services.filter((s) => s.kind !== 'commons');
+  const federation = t.services.filter((s) => s.kind === 'federation');
+  const apps = t.services.filter((s) => s.kind !== 'commons' && s.kind !== 'federation');
   const naming = t.services.find((s) => s.id === 'naming');
   const up = t.services.filter((s) => s.signals.healthy === 'up' || s.signals.healthy === 'self').length;
   const probed = t.services.filter((s) => s.signals.healthy !== 'unobserved').length;
@@ -96,6 +97,16 @@ export function Overview({ t }: { t: TownData }): ReactNode {
         </SectionHead>
         <div className="cards">{commons.map((s) => <ServiceCard key={s.id} s={s} />)}</div>
       </section>
+
+      {federation.length > 0 && (
+        <section>
+          <SectionHead eyebrow="Hosted here, run by the federation" title="Federation services" action={<Link href="https://ap-federation.faithnet.io">The federation →</Link>}>
+            The universal naming root and the shared key-custody operator live on this chain and answer from these hosts, but they
+            serve every town and every estate. They stand on the federation's ground, not among this town's commons.
+          </SectionHead>
+          <div className="cards">{federation.map((s) => <ServiceCard key={s.id} s={s} />)}</div>
+        </section>
+      )}
 
       {apps.length > 0 && (
         <section>

@@ -12,6 +12,8 @@ export interface EstateSummary {
 }
 /** Who answers for a context and at which door (spec 436 §5.5) — `null` when the Ask is not chartered for it. */
 export interface ContextAgentView { context: 'town' | 'estate'; estate?: string; name: string; card: string | null; cardHost: string | null }
+export interface ResidentRow { name: string | null; smartAgent: string; displayName?: string | null; agentType?: string | null; kind?: string | null; tld?: string | null; a2aEndpoint?: string | null; mcpEndpoint?: string | null; estate: string | null; how: string }
+export interface EstateResidents { estate: string; agents: ResidentRow[]; byKind: Record<'person' | 'org' | 'service' | 'undeclared', number>; withMcp: number; read: number; truncated: boolean }
 export interface NameRow { name: string; label: string; owner: string; kind: string }
 export interface NamesSummary { total: number; block: number; roots: Array<{ tld: string; names: string | null; kind: string; legacy: boolean; count: number; sample: NameRow[] }> }
 export interface TownData {
@@ -22,6 +24,8 @@ export interface TownData {
   names: NamesSummary | null;
   /** The context agents the Ask sends questions to: the town's, and one per estate that has one. */
   agents?: { town: ContextAgentView | null; estates: Record<string, ContextAgentView> };
+  /** Who lives in each estate: the registry's roster placed by endpoint (town-model `estateRoster`); `null` = the registry could not be asked. */
+  residents?: Record<string, EstateResidents> | null;
   /** A demo persona this deployment offers as a one-click sign-in (`DEMO_CONNECT`); absent ⇒ no demo door. */
   demoConnect?: string;
   /** Spec 437 I4 — what the town runs on that nothing meters, as the manifest declares it. Never amounts. */
@@ -50,7 +54,7 @@ export interface Facets { ok: boolean; agentTypes: Array<{ value: string; count:
 export interface AgentDetail {
   key: string;
   /** Which estate this agent is placed in (spec 435 §4) — an INFERENCE from its own endpoint, carrying the rule. */
-  placement?: { estate: string | null; how: 'agent-zone' | 'estate-a2a' | 'unplaced' };
+  placement?: { estate: string | null; how: 'agent-zone' | 'estate-a2a' | 'estate-edge' | 'estate-lane' | 'unplaced' };
   /** Spec 438 §13 — its record AS IT REPORTS IT at its own door: counts, and the judgments others signed. */
   record?: AgentPublicRecord | { unavailable: string };
   agent: { ok: boolean; agent?: string; triples?: Array<{ p: string; o: string }>; error?: string };
@@ -86,7 +90,7 @@ export interface PlacedAgentRow {
   a2aEndpoint?: string | null;
   mcpEndpoint?: string | null;
   estate: string | null;
-  how: 'agent-zone' | 'estate-a2a' | 'unplaced';
+  how: 'agent-zone' | 'estate-a2a' | 'estate-edge' | 'estate-lane' | 'unplaced';
 }
 
 /** `/api/estate/:id` — the manifest's own account of one estate, its MCP servers, and the agents placed in it. */

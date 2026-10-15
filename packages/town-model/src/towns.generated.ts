@@ -353,7 +353,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
       },
       {
         "id": "naming",
-        "kind": "commons",
+        "kind": "federation",
         "repo": "ap-town",
         "app": "apps/naming",
         "worker": "faithchain-naming",
@@ -428,7 +428,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
       },
       {
         "id": "kms",
-        "kind": "commons",
+        "kind": "federation",
         "repo": "agentictrustlabs/faithkms",
         "hosts": [
           "akcs-pilot.faithnet.io"

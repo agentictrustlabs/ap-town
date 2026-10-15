@@ -4,7 +4,10 @@
 // Nothing here is authority (D2). A manifest row says a service is LISTED; it never says anybody may use it.
 
 /** The three extension types a service can be (spec 429 §8), plus the town's own commons. */
-export type ServiceKind = 'commons' | 'domain-pack' | 'agent-service' | 'application';
+/** `federation`: a service the FEDERATION runs and this town hosts — the universal naming root (spec 440 §C) and the
+ *  shared KMS operator (§A) — declared here so the host census and the probes stay true, drawn on ap-federation's
+ *  ground rather than among this town's commons. Hosting it does not make it the town's. */
+export type ServiceKind = 'commons' | 'domain-pack' | 'agent-service' | 'application' | 'federation';
 
 export interface TownChain {
   id: number;
