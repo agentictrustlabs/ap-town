@@ -501,7 +501,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
     "status": "demo",
     "chain": {
       "id": 34349,
-      "generation": "1",
+      "generation": "3",
       "rpc": "https://hopechain-rpc-gateway.agentkg.io",
       "deployment": "hopechain"
     },

@@ -100,7 +100,7 @@ custom_domain = true
 [env.hopenet.vars]
 ORIGIN = "https://hopechain-rpc.agentkg.io"
 ESTIMATE_GAS_CAP = "0x2dc6c0"
-CHAIN_GENERATION = "1"
+CHAIN_GENERATION = "3"   # deployments-hopechain.json contractsGeneration (W4, 2026-10-15)
 # TOWN_OPS_TOKEN is a secret, as for faithnet.
 
 [[env.hopenet.kv_namespaces]]

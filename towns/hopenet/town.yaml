@@ -12,7 +12,7 @@ town: hopenet
 status: demo
 chain:
   id: 34349
-  generation: "1"
+  generation: "3"   # deployments-hopechain.json contractsGeneration — the chain was deployed from the current scripts (spec 410 generation 3), unlike faithchain (1)
   rpc: https://hopechain-rpc-gateway.agentkg.io
   deployment: hopechain   # @agenticprimitives/contracts/deployments-hopechain.json
   # No `coin`: the Sheqel and the priced roots are faithchain's (spec 440 §C — one universal namespace, rooted
