@@ -203,6 +203,17 @@ services:
     hosts: [discovery.hopenet.town]
     probe: https://discovery.hopenet.town/
     description: The registry's documents at their well-known paths, and a redirect to the portal's Find.
+  - id: naming
+    # THE CHAIN'S LOCAL NAME TABLE, READ. Names are rooted on faithchain (spec 440 §C; `namesRootedAt`), and this chain sells
+    # none — but an estate's Home on this chain claims into the chain's own registry (a Home writes where its agent lives),
+    # and until U3 carries such a claim to the root, this is the only service that can show it. Read-only, keyless, no coin.
+    kind: federation
+    repo: ap-town
+    app: apps/naming
+    worker: hopechain-naming
+    hosts: [names.hopenet.town]
+    probe: https://names.hopenet.town/api/health
+    description: The chain's local names — what a Home on this chain has claimed, and what it points at. It reads; it sells nothing; the root of every name is faithchain's.
   - id: town-mcp
     kind: commons
     repo: ap-town

@@ -48,3 +48,31 @@ service = "demo-discovery-a2a-faithnet"
 name = "LIMITER"
 namespace_id = "2885"
 simple = { limit = 240, period = 60 }
+
+# HOPENET — names.hopenet.town. The chain's naming contracts are a LOCAL table (spec 440 C10: names are rooted on faithchain,
+# and hopenet issues none for sale), but an estate's Home on this chain still claims there — rich-impact.me was born on
+# hopechain on 2026-10-15 and no service could show it. This instance reads that table so the federation resolver sees the
+# chain's names, and it sells nothing (no coin, no priced roots). RPC_URL is a SECRET: the hopechain gateway with this
+# Worker's own read-only app token (`naming-hopenet`, `?k=` form).
+[env.hopenet]
+name = "hopechain-naming"
+
+[[env.hopenet.routes]]
+pattern = "names.hopenet.town"
+custom_domain = true
+
+[env.hopenet.vars]
+TOWN = "hopenet"
+
+[[env.hopenet.services]]
+binding = "CHAIN"
+service = "hopechain-rpc-gateway"
+
+[[env.hopenet.services]]
+binding = "REGISTRY"
+service = "hopechain-registry"
+
+[[env.hopenet.ratelimits]]
+name = "LIMITER"
+namespace_id = "2886"
+simple = { limit = 240, period = 60 }

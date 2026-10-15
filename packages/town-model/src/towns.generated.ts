@@ -695,6 +695,18 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "description": "The registry's documents at their well-known paths, and a redirect to the portal's Find."
       },
       {
+        "id": "naming",
+        "kind": "federation",
+        "repo": "ap-town",
+        "app": "apps/naming",
+        "worker": "hopechain-naming",
+        "hosts": [
+          "names.hopenet.town"
+        ],
+        "probe": "https://names.hopenet.town/api/health",
+        "description": "The chain's local names — what a Home on this chain has claimed, and what it points at. It reads; it sells nothing; the root of every name is faithchain's."
+      },
+      {
         "id": "town-mcp",
         "kind": "commons",
         "repo": "ap-town",
