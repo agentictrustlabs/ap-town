@@ -64,18 +64,62 @@ function Free({ v }: { v: NameView }): ReactNode {
   );
 }
 
+/** THE AGENT BEHIND THE NAME, FIRST. A name is a projection of an agent's identity: one agent, one canonical id (its home
+ *  account), one account per chain, one name. The root chain is where the NAME lives; where the AGENT lives is the home
+ *  account, and the two are different addresses whenever the agent's Home is on another chain. This block makes that
+ *  unmissable, because the root chain's address is the one everybody will want to call canonical. */
+function Identity({ v }: { v: NameView }): ReactNode {
+  const id = v.identity;
+  if (!id || !id.here) return null;
+  const chainWord = (a: { chainId: number; town: string | null }) => `eip155:${a.chainId}${a.town ? ` · the ${a.town} town` : ''}`;
+  const roleWord = (r: string) => (r === 'home' ? 'home — the canonical id' : r === 'satellite' ? 'satellite — holds the name on this chain' : 'role not declared');
+  return (
+    <section className="identity" aria-labelledby="identity-h">
+      <h2 id="identity-h">The agent behind this name</h2>
+      <dl className="facts facts-wide">
+        <dt>Agent (canonical id)</dt>
+        <dd>
+          {id.canonical
+            ? <><span className="mono break">{id.canonical}</span> <Copy value={id.canonical} label="canonical id" /><br /><span className="quiet">The account this name is a name of. Its Home and custody live on {chainWord({ chainId: id.canonicalChainId!, town: id.canonicalTown })}.</span></>
+            : <><strong>Not declared.</strong> <span className="quiet">The name lists no home account (<span className="mono">atl:nativeId</span>). The address below is the agent's account on this chain, and nothing on chain says it is the agent's home.</span></>}
+        </dd>
+        <dt>On this chain</dt>
+        <dd>
+          <span className="mono break">{id.here.account}</span> <Copy value={id.here.account} label="account on this chain" /><br />
+          <span className="quiet">{id.here.role === 'home' ? 'This is the agent’s home account: the canonical id, on this chain.' : id.here.role === 'satellite' ? `The agent’s account here. It holds the name on this chain (${chainWord(id.here)}) — a satellite, not the canonical id.` : `The agent’s account on ${chainWord(id.here)}; whether it is the home account is not written.`}</span>
+        </dd>
+        {id.estate && <>
+          <dt>Estate and Home</dt>
+          <dd>{id.estate.home ? <a href={id.estate.home} rel="noreferrer">{id.estate.home.replace(/^https?:\/\//, '')}</a> : '—'}{id.estate.id ? <> · the <strong>{id.estate.id}</strong> estate</> : null}{id.estate.town ? <> · the {id.estate.town} town</> : null}{id.estate.name ? <span className="quiet"> · {id.estate.name}</span> : null}<br /><span className="quiet">{id.estate.how === 'declared' ? 'Declared by the agent itself (atl:estate).' : 'Placed by the agent’s own endpoint against the towns’ manifests — an inference, and said so.'}</span></dd>
+        </>}
+        {id.accounts.length > 1 && <>
+          <dt>Accounts by chain</dt>
+          <dd>
+            <ul className="plain">
+              {id.accounts.map((a) => <li key={a.account}><span className="mono break">{a.account}</span> <span className="quiet">· {chainWord(a)} · {roleWord(a.role)}{a.here ? ' · this chain' : ''}</span></li>)}
+            </ul>
+            <span className="quiet">One account per chain, listed on the name (atl:accounts). A grant lives on one chain, so an act is always signed by the account on the chain it runs on; the canonical id says who, the chain’s account says who signed here.</span>
+          </dd>
+        </>}
+      </dl>
+      <p className="public-note">A name is a projection of the agent’s identity, not the identity. The root chain is where the name lives; the home account is where the agent lives.</p>
+    </section>
+  );
+}
+
 function Profile({ v }: { v: NameView }): ReactNode {
   const endpoint = v.records.find((r) => r.key === 'a2aEndpoint' || r.key === 'serviceUrl');
   const card = v.records.find((r) => r.key === 'cardUri');
   const about = v.records.find((r) => r.key === 'description');
   return (
     <div className="profile">
+      <Identity v={v} />
       <Scene scene={lotScene(v)} selected={v.name} legend={`${v.name} is drawn as ${PLACE_SHAPES[v.kind].noun}. Lit windows: it resolves and nothing about it is flagged.`} />
       <dl className="facts">
         {v.displayName && <><dt>Display name</dt><dd>{v.displayName}</dd></>}
         <dt>What it is</dt><dd>{v.declared?.agentType ? `The agent declares itself ${v.declared.noun ?? v.declared.agentType}${v.declared.serviceRole ? ` (role: ${v.declared.serviceRole})` : ''}.` : 'The agent has declared no type.'}</dd>
         {about && <><dt>About</dt><dd>{about.value}</dd></>}
-        <dt>Points at</dt><dd>{v.agent ? <Addr address={v.agent} full /> : 'No agent.'}</dd>
+        <dt>Points at, on this chain</dt><dd>{v.agent ? <><Addr address={v.agent} full />{v.identity?.here?.role === 'satellite' ? <span className="quiet"> · the agent’s account here, not its canonical id</span> : null}</> : 'No agent.'}</dd>
         {v.purchase && <><dt>Bought</dt><dd>for {v.purchase.coins} {v.purchase.coin} on {new Date(v.purchase.at * 1000).toISOString().slice(0, 10)}, from its treasury.</dd></>}
         <dt>Presented by the agent</dt><dd>{v.presentsThis ? 'Yes. This is the name the agent shows as its own.' : v.presented ? <>No. It presents <Link href={nameHref(v.presented)}>{v.presented}</Link>.</> : 'No. The agent presents no name.'}</dd>
         {endpoint && <><dt>Reach it at</dt><dd><a href={endpoint.value} rel="noreferrer" className="mono break">{endpoint.value}</a></dd></>}
@@ -219,7 +263,8 @@ export function Name({ name }: { name: string }): ReactNode {
             <div>
               <h1>{n.name} <Chip kind={mismatch ? 'mismatch' : 'registered'} />{n.legacy && <Chip kind="legacy" />}</h1>
               <p className="lede">{n.displayName ? `${n.displayName}. ` : ''}{n.names ? `A name ending in .${n.tld} names ${n.names}.` : n.form === 'type-node' ? 'A type node: it holds an organization’s scoped names.' : 'An untyped name.'}</p>
-              {n.agent && <p className="title-addr"><span className="quiet">points at</span> <Addr address={n.agent} full /></p>}
+              {n.identity?.canonical && <p className="title-addr"><span className="quiet">agent</span> <span className="mono">{n.identity.canonical}</span> <Copy value={n.identity.canonical} label="canonical id" /><span className="quiet"> · its canonical id{n.identity.canonicalTown ? `, home in the ${n.identity.canonicalTown} town` : ''}</span></p>}
+              {n.agent && <p className="title-addr"><span className="quiet">points at, on this chain</span> <Addr address={n.agent} full />{n.identity?.here?.role === 'satellite' ? <span className="quiet"> · the agent’s account here, not its canonical id</span> : null}</p>}
             </div>
           </section>
           {shown && <div className="banner banner-ok" role="status"><strong>{changed ? 'Updated.' : 'Yours.'}</strong> {changed ? 'Changed just now at your Home; this page read it back from the chain.' : 'Registered just now, signed at your Home; this service only read it back from the chain.'}</div>}

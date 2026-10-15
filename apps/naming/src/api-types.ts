@@ -23,6 +23,16 @@ export interface EstateRef { id: string; home: string; naming: string }
  *  it, present only when the manifest knows an estate by that name. Absent (`null` on the view) = the agent
  *  declares no estate — which is an answer, never a licence to guess one. */
 export interface EstateOfAgent { name: string; id: string | null; home: string | null; agent: Address | null }
+/** Who this name is a name OF (spec 440 §C3): the agent's canonical id is its HOME account; the account the name points at on
+ *  this chain is the agent's account here — on the root chain a satellite, never the canonical id by default. */
+export type AccountRole = 'home' | 'satellite' | 'undeclared';
+export interface IdentityAccount { account: string; chainId: number; town: string | null; role: AccountRole; here: boolean }
+export interface NameIdentity {
+  canonical: string | null; canonicalChainId: number | null; canonicalTown: string | null;
+  here: IdentityAccount | null;
+  accounts: IdentityAccount[];
+  estate: { id: string | null; name: string | null; home: string | null; town: string | null; how: 'declared' | 'placed' } | null;
+}
 
 /** What a free name costs here (spec 431): whole coins, and the domain that protects the label, if any. */
 export interface NamePrice { coins: number; coin: string; protectedBy: string | null; dnsUnknown: boolean }
@@ -131,6 +141,8 @@ export interface NameView extends Stamp {
   purchase: Purchase | null;
   /** The estate this name's agent declares (`atl:estate` → that estate agent's `atl:homepage`). */
   estate: EstateOfAgent | null;
+  /** The agent behind the name — canonical id, this chain's account and its role, every account by chain, the estate and Home. */
+  identity: NameIdentity | null;
   estates: EstateRef[];
 }
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { namehash } from '@agenticprimitives/agent-naming';
 import { TOWNS } from '@ap-town/town-model';
-import { displayOf, labelRefusal, nameView, searchView, type Ctx } from '../worker/views';
+import { displayOf, identityOf, labelRefusal, nameView, searchView, type Ctx } from '../worker/views';
 import type { Chain } from '../worker/chain';
 
 const ZERO = '0x0000000000000000000000000000000000000000';
@@ -93,5 +93,29 @@ describe('a name that is not registered', () => {
     const v = await nameView(fakeCtx(), 'a.me');
     expect(v.status).toBe('invalid');
     expect(v.invalid?.detail).toMatch(/three characters/);
+  });
+});
+
+describe('who a name is a name of (spec 440 §C3) — the root chain\'s address is never promoted to canonical', () => {
+  const agent = '0x013fb41c28fe7919f9abfa03884110ef629006e5' as const;
+  const home = 'eip155:34349:0x3f96a0b26c59260b4fe74b40726b000b12ef33d3';
+  it('with a declared home on another chain, this chain\'s account is a satellite and the canonical id is the home', () => {
+    const id = identityOf({ chainId: 34348, agent, name: 'maya-fernandes.me', declaredEstate: null, records: { nativeId: home, accounts: [`eip155:34348:${agent}`, home], a2aEndpoint: 'https://maya-fernandes.impact-agent.ai/api/a2a' } });
+    expect(id.canonical).toBe(home);
+    expect(id.canonicalTown).toBe('hopenet');
+    expect(id.here).toMatchObject({ account: `eip155:34348:${agent}`, role: 'satellite', here: true, town: 'faithchain' });
+    expect(id.accounts.map((a) => [a.chainId, a.role])).toEqual([[34348, 'satellite'], [34349, 'home']]);
+    expect(id.estate).toMatchObject({ id: 'impact-agent', town: 'hopenet', how: 'placed' });
+  });
+  it('with no declared home, nothing is canonical and the page says so', () => {
+    const id = identityOf({ chainId: 34348, agent, name: 'x.me', declaredEstate: null, records: {} });
+    expect(id.canonical).toBeNull();
+    expect(id.here?.role).toBe('undeclared');
+    expect(id.accounts).toHaveLength(1);
+    expect(id.estate).toBeNull();
+  });
+  it('a declared estate wins over placement', () => {
+    const id = identityOf({ chainId: 34348, agent, name: 'x.me', declaredEstate: { name: 'faithnet.estate', id: 'faithnet', home: 'https://www.faithnet.me', agent: null }, records: { a2aEndpoint: 'https://x.impact-agent.ai/api/a2a' } });
+    expect(id.estate).toMatchObject({ id: 'faithnet', how: 'declared', town: 'faithchain' });
   });
 });

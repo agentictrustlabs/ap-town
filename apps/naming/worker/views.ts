@@ -4,7 +4,7 @@ import {
   AGENT_TLDS, LEGACY_TLDS, RESERVED_LABELS, namehash, parseAgentName, priceOf, pricedSubregistryAbi,
   typedNameForLabel, validateTypedClaim, type ParsedAgentName,
 } from '@agenticprimitives/agent-naming';
-import type { TownManifest } from '@ap-town/town-model';
+import { TOWNS, placeAgent, type TownManifest } from '@ap-town/town-model';
 import { concat, isAddress, keccak256 } from 'viem';
 import type {
   Address, AddressView, Banner, CanRow, DisplayView, EstateOfAgent, EstateRef, Hex, NameRow, NameView, RecordRow,
@@ -77,7 +77,10 @@ export async function estateOfAgent(ctx: Ctx, agent: Address | null): Promise<Es
 async function readEstateOfAgent(ctx: Ctx, agent: Address): Promise<EstateOfAgent | null> {
   const name = (await ctx.chain.profile<string>('getStringProperty', [agent, ATL_ESTATE]).catch(() => '')).trim();
   if (!name) return null;
-  const known = ctx.town.estates.find((e) => e.estateName?.toLowerCase() === name.toLowerCase());
+  // The estate the agent names may live in ANOTHER town (impact-agent moved to hopenet and its agent on this chain still
+  // says `imbnet.estate`), so every town's manifest is asked, not only this one's; the manifest supplies the id and the
+  // town, the chain supplies the name and the Home.
+  const known = Object.values(TOWNS).flatMap((t) => t.estates).find((e) => e.estateName?.toLowerCase() === name.toLowerCase()) ?? ctx.town.estates.find((e) => e.estateName?.toLowerCase() === name.toLowerCase());
   // NAMEHASHED HERE, not by the naming package: its `namehash` validates the suffix against the TLDs it
   // knows and throws `unknown_tld` for a root added after that package was published — which is every
   // new root, including `.estate`. A node is keccak over the labels and nothing else; what the agent
@@ -261,7 +264,7 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
   const blank = (over: Partial<NameView>): NameView => ({
     ...s, input: raw, status: 'invalid', name: raw.toLowerCase(), onChainName: raw.toLowerCase(), form: 'canonical', tld: null, kind: 'legacy', names: null,
     legacy: false, node: ZERO_NODE, agent: null, displayName: null, owner: null, ownerName: null, presented: null, presentsThis: false, declared: null,
-    typeCheck: null, records: [], signals: null, banners: [], can: [], children: [], childCount: 0, details: null, availability: null, price: null, purchase: null, estate: null, estates, ...over,
+    typeCheck: null, records: [], signals: null, banners: [], can: [], children: [], childCount: 0, details: null, availability: null, price: null, purchase: null, identity: null, estate: null, estates, ...over,
   });
 
   let p: ParsedAgentName;
@@ -352,6 +355,9 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
       : { tone: 'info', title: 'The agent presents no name', body: 'This name resolves to the agent, but the agent has not set a presented name. Apps that follow the display rule show its address.' });
   }
   if (agent && !records.addr) banners.push({ tone: 'info', title: 'No address record', body: 'The name has no address record, so it resolves to its owner.' });
+  const identity = identityOf({ chainId: town.chain.id, agent, records, declaredEstate: estate, name: p.normalized });
+  if (identity.here?.role === 'satellite') banners.push({ tone: 'info', title: 'Not the agent’s home account', body: `On this chain the name points at the agent’s account here, which holds the name on the root chain. The agent IS ${identity.canonical}${identity.canonicalTown ? ` (the ${identity.canonicalTown} town)` : ''}: that is its canonical id, and its Home and custody live there.` });
+  else if (identity.here && identity.here.role === 'undeclared') banners.push({ tone: 'info', title: 'Which account is the agent’s home is not declared', body: 'The name points at an account on this chain and lists no home account (atl:nativeId). Nothing here should be read as the agent’s canonical id until the agent declares it.' });
   if (Number(expiry)) banners.push({ tone: 'info', title: 'This name has an expiry', body: `It expires on ${new Date(Number(expiry) * 1000).toISOString().slice(0, 10)}. Its owner can renew it.` });
 
   const endpoint = (records.a2aEndpoint ?? records.serviceUrl ?? records.mcpEndpoint) as string | undefined;
@@ -382,11 +388,56 @@ export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
     declared: declared ? { agentType: declared.agentType, noun: declared.agentType ? NOUN[declared.agentType] ?? null : null, serviceRole: declared.serviceRole, agentKind: declared.agentKind, agentSubtype: declared.agentSubtype } : null,
     typeCheck, records: recordRows(records), signals, banners,
     can: capabilities({ name: p.normalized, tld, owner, ownerName, agent, presented, subregistry: sub, open, priced: !!sub && chain.pricedSet.has(sub), legacy: !!p.legacy }),
-    children: kids.rows, childCount: Number(childCount), details: details(records), purchase, estate,
+    children: kids.rows, childCount: Number(childCount), details: details(records), purchase, estate, identity,
   });
 }
 
 function safeHost(url: string): string { try { return new URL(url).host; } catch { return url; } }
+
+// ── WHO THIS NAME IS A NAME OF (owner, 2026-10-15) ───────────────────────────────────────────────────────────────────
+// A name is a PROJECTION of an agent's identity, never the identity. The identity is the agent's canonical id — its HOME
+// account as CAIP-10, the one its Home and custody live on, declared on the name as `atl:nativeId` (spec 440 §C3, Ring 0
+// spec 346 §3.8). The account this name points at ON THIS CHAIN is the agent's account HERE: on the root chain that is a
+// SATELLITE holding the root name, and it is not the canonical id however much the root chain invites the thought.
+// `atl:accounts` lists the agent's account on every chain; this block says which of them is home. When nothing says,
+// it says that — it never promotes this chain's account to canonical by default.
+export type AccountRole = 'home' | 'satellite' | 'undeclared';
+export interface IdentityAccount { account: string; chainId: number; town: string | null; role: AccountRole; here: boolean }
+export interface NameIdentity {
+  /** The agent's canonical id (CAIP-10 of its home account), or null when the name does not declare one. */
+  canonical: string | null;
+  canonicalChainId: number | null;
+  canonicalTown: string | null;
+  /** The account this name points at on THIS chain, and what it is to the agent. */
+  here: IdentityAccount | null;
+  /** The agent's account on every chain the name lists, this chain's included. */
+  accounts: IdentityAccount[];
+  /** The estate (and its Home) the AGENT belongs to: declared on the agent (`atl:estate`), else placed by its own endpoint against the towns' manifests. */
+  estate: { id: string | null; name: string | null; home: string | null; town: string | null; how: 'declared' | 'placed' } | null;
+}
+const townOfChain = (chainId: number): string | null => Object.values(TOWNS).find((t) => t.chain.id === chainId)?.town ?? null;
+const caip10 = (chainId: number, address: string): string => `eip155:${chainId}:${address.toLowerCase()}`;
+export function identityOf(args: { chainId: number; agent: Address | null; records: Record<string, unknown>; declaredEstate: EstateOfAgent | null; name: string }): NameIdentity {
+  const { chainId, agent, records } = args;
+  const nativeId = typeof records.nativeId === 'string' && /^eip155:\d+:0x[0-9a-fA-F]{40}$/.test(records.nativeId) ? records.nativeId.toLowerCase() : null;
+  const canonicalChainId = nativeId ? Number(nativeId.split(':')[1]) : null;
+  const roleOf = (account: string): AccountRole => (nativeId ? (account.toLowerCase() === nativeId ? 'home' : 'satellite') : 'undeclared');
+  const row = (account: string): IdentityAccount => { const cid = Number(account.split(':')[1]); return { account: account.toLowerCase(), chainId: cid, town: townOfChain(cid), role: roleOf(account), here: cid === chainId }; };
+  const listed = (Array.isArray(records.accounts) ? (records.accounts as unknown[]).filter((a): a is string => typeof a === 'string' && /^eip155:\d+:0x[0-9a-fA-F]{40}$/.test(a)) : []).map(row);
+  const here = agent ? row(caip10(chainId, agent)) : null;
+  const accounts = here && !listed.some((a) => a.here) ? [here, ...listed] : listed;
+  // The estate: what the agent declares wins; else the towns' manifests place its endpoint (an inference, and said so).
+  let estate: NameIdentity['estate'] = null;
+  if (args.declaredEstate?.id || args.declaredEstate?.home) estate = { id: args.declaredEstate.id, name: args.declaredEstate.name, home: args.declaredEstate.home, town: null, how: 'declared' };
+  else if (agent && typeof records.a2aEndpoint === 'string') {
+    for (const t of Object.values(TOWNS)) {
+      const placed = placeAgent({ name: args.name, smartAgent: agent, a2aEndpoint: records.a2aEndpoint }, t);
+      if (placed.estate) { const e = t.estates.find((x) => x.id === placed.estate); estate = { id: placed.estate, name: e?.estateName ?? null, home: e?.home ?? null, town: t.town, how: 'placed' }; break; }
+    }
+  }
+  if (estate && !estate.town && estate.id) estate.town = Object.values(TOWNS).find((t) => t.estates.some((e) => e.id === estate!.id))?.town ?? null;
+  return { canonical: nativeId, canonicalChainId, canonicalTown: canonicalChainId ? townOfChain(canonicalChainId) : null, here, accounts, estate };
+}
 
 // ── an address ───────────────────────────────────────────────────────────────────────────────────────────────────
 
