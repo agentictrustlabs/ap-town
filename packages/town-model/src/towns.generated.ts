@@ -520,6 +520,13 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "label": "ontotext"
       }
     },
+    "operators": [
+      {
+        "sa": "0x3F96A0B26C59260b4FE74B40726B000B12EF33d3",
+        "label": "Maya Fernandes",
+        "note": "imbnet resident; the demo door on this town opens as her"
+      }
+    ],
     "estates": [
       {
         "id": "imbnet",

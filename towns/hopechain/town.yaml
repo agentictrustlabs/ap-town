@@ -27,6 +27,12 @@ accounts:
   azure: { subscriptionId: 5a656e13-849d-4b56-9101-53f987cf971b, resourceGroups: [rg-faithnet], label: faithchain-node }
   graphdb: { url: https://graphdb.agentkg.io, label: ontotext }
 
+# WHO MAY READ THE OPERATOR VIEW. Listing somebody here GRANTS THEM NOTHING (429 D2): it unlocks a read of
+# aggregate numbers this deployment already holds — no Home, no person's record, no act. Absent or empty means
+# nobody, which is the safe reading. Verified from the `id_token` their own Home issues when they Connect.
+operators:
+  - { sa: '0x3F96A0B26C59260b4FE74B40726B000B12EF33d3', label: Maya Fernandes, note: 'imbnet resident; the demo door on this town opens as her' }
+
 estates:
   - id: imbnet
     repo: agentictrustlabs/ap-home
