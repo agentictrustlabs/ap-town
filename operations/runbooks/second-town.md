@@ -168,8 +168,13 @@ the account client's 800k default (estimate from the EntryPoint), and **a free-g
 three claims drained the paymaster's EntryPoint deposit from 1e15 to 4e14 wei and the fourth's `handleOps`
 reverted; `depositTo(paymaster)` from the deployer fixed it. Then re-run the projection.
 
-These are LOCAL names (`{maya.me, eip155:34349}`): the federation's name stays the root-chain one (spec 440 §C),
-and the two are joined by `atl:accounts` on the root-chain record — wave U3, not yet built.
+**Use the person's ROOT-CHAIN label, not the handle.** The first pass here named them `maya.me` while faithchain
+already had `maya-fernandes.me`, and the owner's rule is one name per person across the federation. Undoing it took
+`rename-personas-on-chain.mts` (the root owner registers the long label straight to the account, the account presents
+it, the old node is emptied, handed back and EXPIRED with `renew(node, 1)` — the registry's only release primitive, and
+the parent's act). Then `link-persona-accounts.mts` writes `atl:accounts` on each person's name on BOTH chains (the
+predicate must be active on the new chain first: Ring 0 `AddAccountsPredicate.s.sol`). The result reads the same from
+either side: `maya-fernandes.me` on 34348 and on 34349, each naming her account on both.
 
 ## 8. What is not done here
 
