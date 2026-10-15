@@ -51,7 +51,7 @@ PUBLIC_ORIGIN = "https://town.faithnet.io"
 #   faith-estate.workspace 0x137Bd996eE74c4288DC8EF2ecEAD5Ee5b448a49C
 #   imb-estate.workspace   0xc0D82CdD178Ce2362346e1985127E4ade851Df0A
 # secrets CONTEXT_AGENT_CREDENTIALS ({name:{grant,leaf}}) + TOWN_SIGNER_KEY once the stewards issue them (T2).
-CONTEXT_AGENTS = "{\"town\":\"faith-town.workspace\",\"estates\":{\"faithnet\":\"faith-estate.workspace\",\"imbnet\":\"imb-estate.workspace\"}}"
+CONTEXT_AGENTS = "{\"town\":\"faith-town.workspace\",\"estates\":{\"faithnet\":\"faith-estate.workspace\",\"impact-agent\":\"imb-estate.workspace\"}}"
 CONTEXT_AGENT_ZONE = "faithnet.ai"
 VAULT_URL = "https://mcp.faithnet.io"
 VAULT_AUDIENCE = "urn:mcp:server:person"
@@ -90,32 +90,32 @@ binding = "LANE_FAITHNET_2"
 service = "demo-a2a-faithnet"   # estate faithnet
 # <<< town:lanes faithnet
 
-# ── hopechain (34349) — the second town's agent ────────────────────────────────────────────────────────────
+# ── hopenet (34349) — the second town's agent ────────────────────────────────────────────────────────────
 # Deliberately SMALLER than faithnet's. REGISTRY, NAMING and INFRA are optional bindings and the worker guards
 # each one ("the town MCP is not bound on this deployment"), so a town can have a front door before it has a
 # registry, a naming service or a private MCP — and say so, rather than pretend. They are added as each lands.
 #
 # INFERENCE is faithchain's, SHARED: a model gateway is not chain-bound, and a second town does not need a
 # second one. The chain gateway is this town's own, because that one is.
-[env.hopechain]
+[env.hopenet]
 name = "hopechain-town-agent"
 
 # THE TOWN PRESENTS ON A ZONE IT OWNS, and agentkg.io is plumbing. faithchain's public face is
 # town/names/discovery/rpc/skills.faithnet.io while `faithchain-rpc.agentkg.io` and `graphdb.agentkg.io` are
 # the hosts behind them — so the pattern is not "towns live on agentkg.io", it is "a town presents on a zone
-# it has and keeps its origins elsewhere". hopechain's one estate owns impact-agent.io, so the town presents
+# it has and keeps its origins elsewhere". hopenet's one estate owns impact-agent.io, so the town presents
 # there. `town.` is one level, which is what Universal SSL covers; the old agentkg.io host stays until nothing
 # points at it. (Spec 436 §8 would have a town zone differ from an estate zone; faithchain has never done
 # that, and matching what exists beats matching what is written.)
-[[env.hopechain.routes]]
+[[env.hopenet.routes]]
 pattern = "town.impact-agent.io"
 custom_domain = true
-[[env.hopechain.routes]]
+[[env.hopenet.routes]]
 pattern = "hopechain-town.agentkg.io"
 custom_domain = true
 
-[env.hopechain.vars]
-TOWN = "hopechain"
+[env.hopenet.vars]
+TOWN = "hopenet"
 PUBLIC_ORIGIN = "https://town.impact-agent.io"
 CHAIN_ID = "34349"
 # The one estate on this chain, so its vault is the town's read of a person's own records.
@@ -128,16 +128,16 @@ VAULT_AUDIENCE = "urn:mcp:server:person"
 DEMO_CONNECT = "maya"
 # No CONTEXT_AGENTS: the Town Ask's workspaces are chartered on faithchain and do not exist here yet.
 
-[[env.hopechain.services]]
+[[env.hopenet.services]]
 binding = "CHAIN"
 service = "hopechain-rpc-gateway"
-[[env.hopechain.services]]
+[[env.hopenet.services]]
 binding = "INFERENCE"
 service = "faithchain-inference"
 
-[env.hopechain.triggers]
+[env.hopenet.triggers]
 crons = ["*/5 * * * *"]
 
-[[env.hopechain.durable_objects.bindings]]
+[[env.hopenet.durable_objects.bindings]]
 name = "HEARTBEAT"
 class_name = "HeartbeatDO"

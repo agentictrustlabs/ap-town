@@ -1,4 +1,4 @@
-# The hopechain town — the SECOND town, stood up 2026-10-14 so the federation twin runs across two CHAINS
+# The hopenet town — the SECOND town, stood up 2026-10-14 so the federation twin runs across two CHAINS
 # rather than two estates on one. Every town app, check and generator reads THIS file (packages/town-model).
 # Nothing in it grants anything (429 D2): a row says a service is listed — whether anyone may use it is their
 # own delegation's question.
@@ -8,7 +8,7 @@
 # instance — but its OWN repository there, because the public tier is per chain and mixing two chains' facts in
 # one store would make "anybody could reproduce this from the chain" untrue of either. The chain, the contracts,
 # the Workers and the graph are its own.
-town: hopechain
+town: hopenet
 status: demo
 chain:
   id: 34349
@@ -31,10 +31,10 @@ accounts:
 # aggregate numbers this deployment already holds — no Home, no person's record, no act. Absent or empty means
 # nobody, which is the safe reading. Verified from the `id_token` their own Home issues when they Connect.
 operators:
-  - { sa: '0x3F96A0B26C59260b4FE74B40726B000B12EF33d3', label: Maya Fernandes, note: 'imbnet resident; the demo door on this town opens as her' }
+  - { sa: '0x3F96A0B26C59260b4FE74B40726B000B12EF33d3', label: Maya Fernandes, note: 'impact-agent resident; the demo door on this town opens as her' }
 
 estates:
-  - id: imbnet
+  - id: impact-agent
     repo: agentictrustlabs/ap-home
     home: https://www.impact-agent.me
     edge: https://edge.impact-agent.io
@@ -83,19 +83,19 @@ estates:
     #   imb-approval  the door a parked act waits at for its signature             (faithnet: harness-approval-faithnet)
     workers: [imb-runtime, imb-vault, imb-edge, imb-home-mcp, imb-approval]
     vercelProjects: [imb-home]
-    # NO AKCS TENANT. imbnet's custody root, vault KEKs and service MAC are local-aes with the root an
+    # NO AKCS TENANT. impact-agent's custody root, vault KEKs and service MAC are local-aes with the root an
     # in-Worker secret — honest for a second demo estate, and a liability a real one would not carry (a
     # master that cannot be rotated, backed up or recovered). A tenant needs a caller token minted by
     # `akcs operator bind-caller` on the Azure CVM; naming one here that does not exist would have the
     # Pulse report custody this estate does not have.
     # ITS OWN TENANT. An AKCS tenant is a derivation root — "MAC keys are derived from the tenant root"
     # — so a tenant is an ESTATE boundary. faithnet-b and skills-a2a share `faithnet` because they are a
-    # second deployment OF faithnet and a service WITHIN it; imbnet is a different estate, and its whole
+    # second deployment OF faithnet and a service WITHIN it; impact-agent is a different estate, and its whole
     # defining property is that its persons are different Smart Agents, which comes from a separate root.
     # Not provisioned yet, so its vault KEK path is off and every person's storage stays unprovisioned —
     # stated, not implied.
     kms: { tenant: imb, backend: akcs }  # callers imb-vault-3 / imb-runtime-3, bound from the estate profiles, CVM levels only (2026-10-11)
-    # The same two servers as faithnet, on default platform names — imbnet has no zone of its own.
+    # The same two servers as faithnet, on default platform names — impact-agent has no zone of its own.
     mcpServers:
       - id: vault
         worker: imb-vault
@@ -103,7 +103,7 @@ estates:
         url: https://imb-vault.richardpedersen3.workers.dev
         probe: https://imb-vault.richardpedersen3.workers.dev/health
         description: >-
-          Every imbnet agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every
+          Every impact-agent agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every
           call, against the principal agent.
       - id: home
         worker: imb-home-mcp
@@ -111,7 +111,7 @@ estates:
         url: https://imb-home-mcp.richardpedersen3.workers.dev
         probe: https://imb-home-mcp.richardpedersen3.workers.dev/.well-known/oauth-authorization-server
         description: >-
-          imbnet's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the
+          impact-agent's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the
           estate has no zone to give it a name under.
     # MOVED HERE FROM faithchain 2026-10-14. Home, zones, lanes, name roots and workers are unchanged — an
     # estate is a Home and the people under it, not a chain — while everything chain-scoped was rebuilt: its

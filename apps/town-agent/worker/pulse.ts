@@ -105,7 +105,7 @@ export async function samplePulse(town: TownManifest, env: PulseEnv, probe: Prob
     if (!token) { out.push({ kind: 'estate', id: e.id, at, ok: false, payload: null, error: 'no heartbeat token for this estate' }); return; }
     try {
       // An estate with no zone of its own answers on a workers.dev host, which a same-account Worker cannot
-      // fetch (the request returns 404 — indistinguishable from "that endpoint is gone", which is how imbnet
+      // fetch (the request returns 404 — indistinguishable from "that endpoint is gone", which is how impact-agent
       // first read as down while it was serving). The manifest declares such a host as a public LANE and
       // `pnpm gen:town` binds it; reach goes through the binding, authority still through the estate's door.
       const url = `${e.a2a.replace(/\/$/, '')}/ops/heartbeat`;

@@ -28,7 +28,7 @@ describe('the Pulse record (spec 436 §5.5)', () => {
     const wire = (delegate: string) => ({ delegator: '0x' + '1'.repeat(40), delegate, authority: '0x00', caveats: [], salt: '1', signature: '0xsig' });
     const env = {
       VAULT_URL: 'https://v', TOWN_SIGNER_KEY: '0x' + '1'.repeat(64),
-      CONTEXT_AGENTS: '{"town":"faith-town.workspace","estates":{"faithnet":"faith-estate.workspace","imbnet":"imb-estate.workspace"}}',
+      CONTEXT_AGENTS: '{"town":"faith-town.workspace","estates":{"faithnet":"faith-estate.workspace","impact-agent":"imb-estate.workspace"}}',
       CONTEXT_AGENT_CREDENTIALS: JSON.stringify({
         'faith-town.workspace': { grant: wire('0x' + '2'.repeat(40)), leaf: wire('0x' + '2'.repeat(40)) },
         'faith-estate.workspace': { grant: wire('0x' + '3'.repeat(40)), leaf: wire('0x' + '3'.repeat(40)) },

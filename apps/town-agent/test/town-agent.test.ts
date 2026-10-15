@@ -4,6 +4,10 @@ import { answer, api, cardFor, claimedByTown, intentOf, type RosterRead } from '
 import type { MessageV1 } from '@agenticprimitives/a2a/standard';
 
 const town = TOWNS.faithchain!;
+// THE SECOND TOWN, because the second ESTATE lives there now. `impact-agent` left faithchain on
+// 2026-10-14, so every case that needs a town with a different estate in it asks hopenet — asking
+// faithchain for an estate it no longer has tests the error path while claiming to test the happy one.
+const town2 = TOWNS.hopenet!;
 const msg = (parts: MessageV1['parts']): MessageV1 => ({ messageId: 'm', role: 'ROLE_USER', parts });
 const up = async () => ({ status: 200 });
 
@@ -44,8 +48,8 @@ d('town agent', () => {
 // Both routes are read by pages that would look correct while saying the wrong thing, so what is tested here
 // is the distinction they exist to keep: a registry that cannot be asked must not render as an empty town.
 const OPS = 'ops-token-for-tests';
-const envWith = (registry: { fetch(req: Request): Promise<Response> } | undefined) =>
-  ({ TOWN: 'faithchain', PUBLIC_ORIGIN: 'https://town.example', TOWN_OPS_TOKEN: OPS, ASSETS: { fetch: async () => new Response('') }, ...(registry ? { REGISTRY: registry } : {}) }) as unknown as Parameters<typeof api>[2];
+const envWith = (registry: { fetch(req: Request): Promise<Response> } | undefined, townId = 'faithchain') =>
+  ({ TOWN: townId, PUBLIC_ORIGIN: 'https://town.example', TOWN_OPS_TOKEN: OPS, ASSETS: { fetch: async () => new Response('') }, ...(registry ? { REGISTRY: registry } : {}) }) as unknown as Parameters<typeof api>[2];
 
 const rosterOf = (rows: unknown[]) => ({
   async fetch(req: Request) {
@@ -62,10 +66,10 @@ const refusing = { async fetch() { return new Response('nope', { status: 502 });
 // SIGNED IN BY DEFAULT. The town's reads are behind a sign-in (2026-10-13), so a caller with no credential is
 // a 401 everywhere but the three public routes — which is a fact about the gate, tested below, and noise in
 // every other assertion. These calls present the ops token unless a case is specifically about who is asking.
-const call = async (pathWithQuery: string, registry?: { fetch(req: Request): Promise<Response> }, authorization: string | null = `Bearer ${OPS}`) => {
+const call = async (pathWithQuery: string, registry?: { fetch(req: Request): Promise<Response> }, authorization: string | null = `Bearer ${OPS}`, t = town) => {
   const url = new URL(`https://town.example/api${pathWithQuery}`);
   const path = pathWithQuery.split('?')[0]!;
-  const res = await api(path, url, envWith(registry), town, 'town.example', 'https://town.example', authorization, 'GET', up);
+  const res = await api(path, url, envWith(registry, t.town), t, 'town.example', 'https://town.example', authorization, 'GET', up);
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 };
 
@@ -99,11 +103,11 @@ d('the estate page', () => {
   });
 
   it('carries the estate’s MCP servers and its own declared facts', async () => {
-    const r = await call('/estate/imbnet', rosterOf([]));
+    const r = await call('/estate/impact-agent', rosterOf([]), undefined, town2);
     const e = r.body.estate as { id: string; estateName: string; namingGate: string; agentZone?: string };
-    expect(e.id).toBe('imbnet');
+    expect(e.id).toBe('impact-agent');
     expect(e.estateName).toBe('imbnet.estate');
-    // ITS OWN ZONE SINCE 2026-10-13 (`impact-agent.ai`). This asserted `undefined` while imbnet was on
+    // ITS OWN ZONE SINCE 2026-10-13 (`impact-agent.ai`). This asserted `undefined` while impact-agent was on
     // workers.dev; the estate page's job is to say what the manifest says, so it now names the zone.
     expect(e.agentZone).toBe('impact-agent.ai');
     expect((r.body.mcpServers as Array<{ id: string; estate: string }>).map((m) => m.id)).toEqual(['vault', 'home']);
@@ -152,7 +156,7 @@ const ROWS = [
 ];
 const withRoster: { roster: RosterRead } = { roster: async () => ({ rows: ROWS, truncated: false }) };
 const dataMsg = (data: Record<string, unknown>) => msg([{ data }]);
-const partsOf = async (m: Parameters<typeof answer>[1], deps: { roster: RosterRead } = withRoster) => answer(town, m, up, null, deps);
+const partsOf = async (m: Parameters<typeof answer>[1], deps: { roster: RosterRead } = withRoster, t = town) => answer(t, m, up, null, deps);
 const textOf = (ps: Awaited<ReturnType<typeof answer>>) => String(ps[0]!.text ?? '');
 const dataOf = (ps: Awaited<ReturnType<typeof answer>>) => ps[1]!.data as Record<string, unknown>;
 
@@ -176,10 +180,10 @@ d('intentOf — the collisions decide the order', () => {
     expect(intentOf(msg([{ text: 'what mcp does faithnet run?' }]), town)).toEqual({ skill: 'town.mcp', estate: 'faithnet' });
   });
   it('an estate id on its own reaches the estate answer', () => {
-    expect(intentOf(msg([{ text: 'tell me about imbnet' }]), town)).toEqual({ skill: 'town.estate', id: 'imbnet' });
+    expect(intentOf(msg([{ text: 'tell me about impact-agent' }]), town2)).toEqual({ skill: 'town.estate', id: 'impact-agent' });
   });
   it('a data part wins, and names an estate this town does not have as unknown rather than guessing', () => {
-    expect(intentOf(dataMsg({ skill: 'town.estate', id: 'imbnet' }), town)).toEqual({ skill: 'town.estate', id: 'imbnet' });
+    expect(intentOf(dataMsg({ skill: 'town.estate', id: 'impact-agent' }), town2)).toEqual({ skill: 'town.estate', id: 'impact-agent' });
     expect(intentOf(dataMsg({ skill: 'town.estate', id: 'nowhere' }), town)).toEqual({ skill: 'unknown-estate', id: 'nowhere' });
     expect(intentOf(dataMsg({ skill: 'town.mcp', id: 'faithnet' }), town)).toEqual({ skill: 'town.mcp', estate: 'faithnet' });
   });
@@ -204,17 +208,17 @@ d('town.estate answers from the manifest and the chain, and never promotes an in
   });
 
   it('an estate with no zone of its own says so rather than omitting it', async () => {
-    // imbnet WAS this test's subject until it got `impact-agent.ai` (2026-10-13), and no estate of this town
+    // impact-agent WAS this test's subject until it got `impact-agent.ai` (2026-10-13), and no estate of this town
     // is zoneless now. The behaviour under test is the WORDING — an absent zone is stated, not omitted — so
     // the subject is injected rather than the coverage dropped: deleting the case would have retired a
     // sentence nothing else asserts, on the day the only estate that produced it stopped producing it.
-    const zoneless = { ...town, estates: town.estates.map((e) => (e.id === 'imbnet' ? { ...e, agentZone: undefined } : e)) };
-    const ps = await answer(zoneless, dataMsg({ skill: 'town.estate', id: 'imbnet' }), up, null, withRoster);
+    const zoneless = { ...town2, estates: town2.estates.map((e) => (e.id === 'impact-agent' ? { ...e, agentZone: undefined } : e)) };
+    const ps = await answer(zoneless, dataMsg({ skill: 'town.estate', id: 'impact-agent' }), up, null, withRoster);
     expect(textOf(ps)).toMatch(/serves no agent zone of its own/);
   });
 
   it('an estate WITH a zone of its own names it', async () => {
-    expect(textOf(await partsOf(dataMsg({ skill: 'town.estate', id: 'imbnet' })))).toMatch(/impact-agent\.ai/);
+    expect(textOf(await partsOf(dataMsg({ skill: 'town.estate', id: 'impact-agent' }), withRoster, town2))).toMatch(/impact-agent\.ai/);
   });
 
   it('an unreachable registry leaves the agents unknown, never none', async () => {
@@ -225,7 +229,7 @@ d('town.estate answers from the manifest and the chain, and never promotes an in
   });
 
   it('refuses an estate this town does not have, and names the ones it does', async () => {
-    expect(textOf(await partsOf(dataMsg({ skill: 'town.estate', id: 'nowhere' })))).toMatch(/not an estate of the .* town.*faithnet, imbnet/);
+    expect(textOf(await partsOf(dataMsg({ skill: 'town.estate', id: 'nowhere' })))).toMatch(/not an estate of the .* town.*faithnet/);
   });
 });
 
@@ -239,8 +243,8 @@ d('town.mcp says what is here, what is deliberately not, and that a door is not 
   });
 
   it('scopes to one estate when one was named', async () => {
-    const v = dataOf(await partsOf(dataMsg({ skill: 'town.mcp', id: 'imbnet' }))) as { estate: string; servers: Array<{ id: string }>; agentDoors: { rows: unknown[] } };
-    expect(v.estate).toBe('imbnet');
+    const v = dataOf(await partsOf(dataMsg({ skill: 'town.mcp', id: 'impact-agent' }), withRoster, town2)) as { estate: string; servers: Array<{ id: string }>; agentDoors: { rows: unknown[] } };
+    expect(v.estate).toBe('impact-agent');
     expect(v.servers.map((m) => m.id)).toEqual(['vault', 'home']);
     expect(v.agentDoors.rows).toEqual([]);
   });
@@ -267,15 +271,32 @@ d('the portal routes a question to whichever agent knows the answer', () => {
   it('DOES NOT claim a pulse question that happens to name an estate', () => {
     // The twin this router exists to get right: the estate names live in both agents' worlds, and these are
     // the context agent's questions. Claiming them would answer a shape question nobody asked.
-    for (const q of ['how is faithnet doing this week', 'what did imbnet spend', 'is anything broken in faithnet', 'how many runs failed in faithnet']) {
+    for (const q of ['how is faithnet doing this week', 'is anything broken in faithnet', 'how many runs failed in faithnet']) {
       expect(claimedByTown(q, town), q).toBeNull();
+    }
+    for (const q of ['what did impact-agent spend', 'how is impact-agent doing this week']) {
+      expect(claimedByTown(q, town2), q).toBeNull();
     }
   });
 
   it('claims an estate question that asks about its shape', () => {
-    for (const q of ['which agents are in faithnet', 'who is in imbnet', 'what name roots does faithnet have', 'who holds faithnet’s keys', 'where does imbnet live']) {
+    for (const q of ['which agents are in faithnet', 'what name roots does faithnet have', 'who holds faithnet’s keys']) {
       expect(claimedByTown(q, town)?.skill, q).toBe('town.estate');
     }
+    for (const q of ['who is in impact-agent', 'where does impact-agent live']) {
+      expect(claimedByTown(q, town2)?.skill, q).toBe('town.estate');
+    }
+  });
+
+  it('reads the keywords AROUND the estate name, never through it', () => {
+    // `impact-agent` carries the word `agent`, which is one of the shape keywords. Before the fix, naming
+    // the estate was enough to claim ANY question about it — the narrow claim became unconditional for one
+    // estate because of how its operator spelled its id. Both halves are asserted: a pulse question that
+    // names it is still not the town's, and a shape question that names it still is.
+    expect(claimedByTown('what did impact-agent spend', town2)).toBeNull();
+    expect(claimedByTown('how is impact-agent doing', town2)).toBeNull();
+    expect(claimedByTown('which agents are in impact-agent', town2)?.skill).toBe('town.estate');
+    expect(claimedByTown('what mcp does impact-agent run', town2)).toEqual({ skill: 'town.mcp', estate: 'impact-agent' });
   });
 
   it('claims nothing it was not asked', () => {

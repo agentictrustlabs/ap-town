@@ -138,7 +138,7 @@ export function cardFor(town: TownManifest, origin: string): AgentCardV1 {
       // different things about one estate. `town.standing` is deliberately absent: it would report a
       // `TownStanding` attestation, and none exists yet (435 W1) — a skill that can only answer "none" is worse
       // than no skill, because a caller cannot tell it apart from a town where nobody has standing.
-      { id: 'town.estate', name: 'One estate', description: 'One estate of this town by id — where it lives, the name roots it may give and the gate that authorizes them, whose keys hold it, the MCP servers it declares, and which agents answer at its hosts. Membership is INFERRED from each agent\'s own on-chain endpoint and every row says so; no attestation of membership exists yet. Args: a data part { "skill": "town.estate", "id": "<estate id>" }, or name the estate in the text.', tags: ['town', 'estate', 'directory'], examples: ['tell me about the faithnet estate', 'which agents are in imbnet?'] },
+      { id: 'town.estate', name: 'One estate', description: 'One estate of this town by id — where it lives, the name roots it may give and the gate that authorizes them, whose keys hold it, the MCP servers it declares, and which agents answer at its hosts. Membership is INFERRED from each agent\'s own on-chain endpoint and every row says so; no attestation of membership exists yet. Args: a data part { "skill": "town.estate", "id": "<estate id>" }, or name the estate in the text.', tags: ['town', 'estate', 'directory'], examples: ['tell me about the faithnet estate', 'which agents are in impact-agent?'] },
       { id: 'town.mcp', name: 'The MCP servers', description: 'Which MCP servers this town runs, which each estate runs, and which agents serve a door of their own. The first two are DECLARED in the town manifest; the third is read from the chain. What an agent has ATTACHED is absent by construction: those are records in its owner\'s vault under her own grant. No tool lists — those belong to each server\'s own signed manifest. An endpoint says where a server listens, never that you may use it.', tags: ['town', 'mcp', 'directory'], examples: ['which mcp servers are here?', 'what mcp does faithnet run?'] },
     ],
   };
@@ -309,9 +309,17 @@ const ESTATE_SHAPE = /\bagents?\b|\bwho(?:'s| is)? in\b|\bmembers?\b|\bname root
 
 export function claimedByTown(text: string, town: TownManifest): TownIntent | null {
   const t = text.toLowerCase();
-  const estate = town.estates.find((e) => new RegExp(`\\b${e.id.replace(/-/g, '[- ]')}\\b`).test(t));
-  if (/\bmcps?\b|\bmcp servers?\b/.test(t)) return { skill: 'town.mcp', ...(estate ? { estate: estate.id } : {}) };
-  if (estate && ESTATE_SHAPE.test(t)) return { skill: 'town.estate', id: estate.id };
+  const nameOf = (id: string) => new RegExp(`\\b${id.replace(/-/g, '[- ]')}\\b`, 'g');
+  const estate = town.estates.find((e) => nameOf(e.id).test(t));
+  // THE KEYWORDS ARE READ AROUND THE NAME, NEVER THROUGH IT. An estate id is a label chosen by its
+  // operator, and a label can contain one of these words: `impact-agent` carries `agent`, so "what did
+  // impact-agent spend" — a pulse question — matched the shape test on the estate's own name and the town
+  // claimed it. One rename turned a deliberately narrow claim into an unconditional one for that estate.
+  // So the name is removed before the question is classified: what decides is what was ASKED about the
+  // estate, not what the estate happens to be called.
+  const asked = estate ? t.replace(nameOf(estate.id), ' ') : t;
+  if (/\bmcps?\b|\bmcp servers?\b/.test(asked)) return { skill: 'town.mcp', ...(estate ? { estate: estate.id } : {}) };
+  if (estate && ESTATE_SHAPE.test(asked)) return { skill: 'town.estate', id: estate.id };
   return null;
 }
 

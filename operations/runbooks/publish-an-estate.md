@@ -10,7 +10,7 @@ the two interleave, and this one says which of its steps come first.
 
 **The rule the whole runbook keeps (429 D2):** nothing here grants. The town holds an estate's PUBLIC facts and reaches
 its public hosts. If a step needs a key, a vault, a delegation or a session from the estate, the step is wrong.
-Written from imbnet, the second estate on faithchain (2026-10-11).
+Written from impact-agent, the second estate on faithchain (2026-10-11).
 
 ## 1. The row (`towns/<chain>/town.yaml` → `estates:`)
 
@@ -72,7 +72,7 @@ can revoke one Home's gate without touching another's. Names are chain-wide: the
 
 The town agent pulls each estate's heartbeat from its runtime (`/estate/heartbeat`, through the lane) with a
 per-estate token in `ESTATE_HEARTBEAT_TOKENS` (`scripts/set-pulse-secrets.sh`). The estate must send its own id
-(`ESTATE_ID` on its Workers) — **the heartbeat once defaulted to the first estate's id and imbnet answered as
+(`ESTATE_ID` on its Workers) — **the heartbeat once defaulted to the first estate's id and impact-agent answered as
 faithnet** — and its census must come from a registry that is its own (`ESTATE_CENSUS_REGISTRY_ORIGIN`), or it
 reports the shared registry's 74 persons for an estate with none. Attribution in the Pulse comes from the `workers`
 and `vercelProjects` lists in §1; a Worker listed nowhere lands in Unattributed.

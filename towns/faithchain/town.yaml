@@ -115,7 +115,7 @@ estates:
   # faithnet DNS. SUPERSEDED 2026-10-13: it now has its own zones (see the row below). The rule it illustrated
   # still holds and is the reason the switch is safe — a name resolves to an endpoint FROM THE CHAIN, and a
   # subdomain is never the authority, so giving an estate real hosts is a routing change and never a trust one.
-  # imbnet LEFT THIS TOWN on 2026-10-14 for hopechain (towns/hopechain/town.yaml), so the federation twin runs
+  # impact-agent LEFT THIS TOWN on 2026-10-14 for hopenet (towns/hopenet/town.yaml), so the federation twin runs
   # across two chains rather than two estates on one. Recorded rather than silently deleted: a reader in a year
   # should find out where the estate went. Its row moved whole — same Home, zones, lanes, name roots, Workers —
   # because an estate is a Home and the people under it, not a chain.

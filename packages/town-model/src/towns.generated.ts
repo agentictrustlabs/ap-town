@@ -488,8 +488,8 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
       }
     ]
   },
-  "hopechain": {
-    "town": "hopechain",
+  "hopenet": {
+    "town": "hopenet",
     "status": "demo",
     "chain": {
       "id": 34349,
@@ -524,12 +524,12 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
       {
         "sa": "0x3F96A0B26C59260b4FE74B40726B000B12EF33d3",
         "label": "Maya Fernandes",
-        "note": "imbnet resident; the demo door on this town opens as her"
+        "note": "impact-agent resident; the demo door on this town opens as her"
       }
     ],
     "estates": [
       {
-        "id": "imbnet",
+        "id": "impact-agent",
         "repo": "agentictrustlabs/ap-home",
         "home": "https://www.impact-agent.me",
         "edge": "https://edge.impact-agent.io",
@@ -583,7 +583,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
             "exposure": "authenticated",
             "url": "https://imb-vault.richardpedersen3.workers.dev",
             "probe": "https://imb-vault.richardpedersen3.workers.dev/health",
-            "description": "Every imbnet agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every call, against the principal agent."
+            "description": "Every impact-agent agent's vault, behind a private MCP. Same rule as faithnet's: the chain decides, every call, against the principal agent."
           },
           {
             "id": "home",
@@ -591,7 +591,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
             "exposure": "authenticated",
             "url": "https://imb-home-mcp.richardpedersen3.workers.dev",
             "probe": "https://imb-home-mcp.richardpedersen3.workers.dev/.well-known/oauth-authorization-server",
-            "description": "imbnet's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the estate has no zone to give it a name under."
+            "description": "impact-agent's Home MCP — the connector URL an outside client pastes is this Worker's own host, because the estate has no zone to give it a name under."
           }
         ]
       }

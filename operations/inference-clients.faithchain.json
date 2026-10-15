@@ -17,9 +17,9 @@
     },
     {
       "principal": "0x193b496d366113b765c70bf9230687d685cc7a92",
-      "estate": "imbnet",
+      "estate": "impact-agent",
       "kind": "estate-app",
-      "label": "imbnet-runtime",
+      "label": "impact-agent-runtime",
       "profiles": [
         "planner-fast",
         "composer-default",

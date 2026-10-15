@@ -3,7 +3,7 @@
 **Companion to** [spec 429 §5](../specs/429-ap-town-the-towns-repository.md) ("Cutting the wires from town to
 estate") and [spec 436](../specs/436-home-estate-town-federation-the-four-contexts.md) (the four contexts).
 **Method:** every claim below was read from the DEPLOYED service or the committed config on 2026-10-11, not from
-a spec; each row says which. Occasioned by the first real test of §5 — imbnet, the second estate on faithchain,
+a spec; each row says which. Occasioned by the first real test of §5 — impact-agent, the second estate on faithchain,
 nine days old.
 
 ## 0. The verdict
@@ -21,7 +21,7 @@ service in all but name, and the second estate met it as a second-class resident
 
 ## 1. What a person on the second estate saw
 
-An Impact (imbnet) person opened Settings → Behaviour → Playbook and was offered **one** archetype, Bookkeeper,
+An Impact (impact-agent) person opened Settings → Behaviour → Playbook and was offered **one** archetype, Bookkeeper,
 with "No archetype assigned — the agent runs the bare harness", and "Your roles could not be read just now".
 Three links, none of them an error anybody could see:
 
@@ -51,16 +51,16 @@ person meets.
 | `skills-a2a` `SESSION_ISS_DOMAIN` | `faithnet.me` — one domain, not a set | every session-gated route refuses another Home's id_token. Role packs and library writes, not just reads |
 | `skills-a2a` `SESSION_AUDS` | `skills-app,skills-corpus,faithchain,faithsms` | an estate's own client ids are not audiences here |
 | `skills-a2a` `HOME_URL` · `HOME_CHANNELS_URL` · `HOME_MANAGE_URL` | `https://www.faithnet.me…` | a write meant for the person's Home is aimed at faithnet's; `storage-off-reason.ts` defaults to it in code |
-| `skills-a2a` `A2A_BASE_DOMAIN` | `faithnet.ai` | imbnet has no `agentZone` at all (town.yaml), so any per-agent host derived from a zone is wrong, not merely different |
-| `skills-a2a` `AKCS_TENANT_ID` | `faithnet` | a tenant is an estate boundary (ADR; imbnet's is `imb`) |
-| `skills-a2a` `LANE_ROUTES` | `demo-edge-faithnet…=LANE_FAITHNET_1` | copied from the manifest by hand and stale: imbnet's two declared lanes are absent, so a zoneless estate's agents are unreachable from here |
+| `skills-a2a` `A2A_BASE_DOMAIN` | `faithnet.ai` | impact-agent has no `agentZone` at all (town.yaml), so any per-agent host derived from a zone is wrong, not merely different |
+| `skills-a2a` `AKCS_TENANT_ID` | `faithnet` | a tenant is an estate boundary (ADR; impact-agent's is `imb`) |
+| `skills-a2a` `LANE_ROUTES` | `demo-edge-faithnet…=LANE_FAITHNET_1` | copied from the manifest by hand and stale: impact-agent's two declared lanes are absent, so a zoneless estate's agents are unreachable from here |
 | `skills-a2a` top-level `[vars].RPC_URL` | `https://a2a.faithnet.io/rpc` | the wire §5 asked to cut. Production overrides it with a SECRET and no var, so it is correct live — but one promoted line from reverting R1b |
 | `skills-corpus` `SESSION_ISS_DOMAIN` | `faithnet.me` | same as above |
 | `skills-corpus` `src/index.ts:85` | `ORIGIN='https://www.faithnet.me'`, with `CLIENT_ID` and `DELEGATE` beside it | an estate's Home origin and delegate in **code**, not config |
 | `skill-web` `src/runner/links.ts:12`, `proposals.ts:7,10`, `api.ts:731`, `SkillAssessmentCard.tsx:17` | `HOME`, `EDGE_A2A`, `APP_ORIGIN`, `HOME_MESSAGES`, `CONNECT_ORIGIN`, `LAB` | every link out of the app goes to faithnet |
 | `skill-web` Landing / IdentityChip / PackageComposer / RouteFrame | "Sign in with faithnet.me", "Manage on faithnet.me", `<label>.faithnet.me` | the estate is in the COPY; a second estate's person is told to sign in somewhere else |
 
-**A secret shadowing a stale var is the sharp edge here.** It is how imbnet's KMS backend reverted the same day
+**A secret shadowing a stale var is the sharp edge here.** It is how impact-agent's KMS backend reverted the same day
 (`A2A_KMS_BACKEND` declared `local-aes` in the committed toml, adopted as `agentic-kms` live; the next deploy
 re-asserted the file and every interactions call threw). `skills-a2a`'s `RPC_URL` is one line away from the same
 failure. Whatever a service runs on must be *declared* where the deploy reads it.
