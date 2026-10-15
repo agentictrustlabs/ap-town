@@ -19,6 +19,9 @@ TOWN = "faithchain"
 name = "faithchain-naming"
 
 [[env.faithnet.routes]]
+pattern = "names.faithnet.town"
+custom_domain = true
+[[env.faithnet.routes]]
 pattern = "names.faithnet.io"
 custom_domain = true
 

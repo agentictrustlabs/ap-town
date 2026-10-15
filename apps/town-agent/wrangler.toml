@@ -31,6 +31,9 @@ new_sqlite_classes = ["HeartbeatDO"]
 name = "faithchain-town-agent"
 
 [[env.faithnet.routes]]
+pattern = "faithnet.town"
+custom_domain = true
+[[env.faithnet.routes]]
 pattern = "town.faithnet.io"
 custom_domain = true
 
@@ -107,6 +110,9 @@ name = "hopechain-town-agent"
 # there. `town.` is one level, which is what Universal SSL covers; the old agentkg.io host stays until nothing
 # points at it. (Spec 436 §8 would have a town zone differ from an estate zone; faithchain has never done
 # that, and matching what exists beats matching what is written.)
+[[env.hopenet.routes]]
+pattern = "hopenet.town"
+custom_domain = true
 [[env.hopenet.routes]]
 pattern = "town.impact-agent.io"
 custom_domain = true

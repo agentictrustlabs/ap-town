@@ -134,7 +134,7 @@ services:
     app: apps/registry
     worker: demo-discovery-a2a-faithnet
     agentName: discovery.registry
-    hosts: [discovery-a2a.faithnet.io]
+    hosts: [discovery-a2a.faithnet.town, discovery-a2a.faithnet.io]
     probe: https://discovery-a2a.faithnet.io/health
     card: https://discovery-a2a.faithnet.io/.well-known/agent-card.json
     description: The town's registry — the discovery.registry agent, its ARD document, ACP registry and search.
@@ -158,7 +158,7 @@ services:
     repo: ap-town
     app: apps/discovery-connector
     worker: demo-discovery-connector-faithnet
-    hosts: [discovery-connector.faithnet.io]
+    hosts: [discovery-connector.faithnet.town, discovery-connector.faithnet.io]
     probe: https://discovery-connector.faithnet.io/health
     # The one MCP server in this town with a door an anonymous client may knock on. It is read-only and it
     # reads the public graph, which anybody could read from the chain anyway (ADR-0040) — so there is nothing
@@ -170,7 +170,7 @@ services:
     repo: ap-town
     app: apps/discovery-web
     worker: demo-discovery-web-faithnet
-    hosts: [discovery.faithnet.io]
+    hosts: [discovery.faithnet.town, discovery.faithnet.io]
     probe: https://discovery.faithnet.io/
     description: The explorer's old host — the registry's documents at their well-known paths, and a redirect to the portal's Find.
   - id: town-agent
@@ -178,7 +178,7 @@ services:
     repo: ap-town
     app: apps/town-agent
     worker: faithchain-town-agent
-    hosts: [town.faithnet.io]
+    hosts: [faithnet.town, town.faithnet.io]
     probe: https://town.faithnet.io/api/health
     card: https://town.faithnet.io/.well-known/agent-card.json
     description: The town's own agent — what this town offers and whether each service is up. Lists; never grants.
@@ -196,7 +196,7 @@ services:
     repo: ap-town
     app: apps/naming
     worker: faithchain-naming
-    hosts: [names.faithnet.io]
+    hosts: [names.faithnet.town, names.faithnet.io]
     probe: https://names.faithnet.io/api/health
     description: The town's naming service — every name on the chain, what it points at, and who can change it. It reads; an owner's Home writes.
   - id: inference
@@ -204,7 +204,7 @@ services:
     repo: ap-town
     app: apps/inference
     worker: faithchain-inference
-    hosts: [inference.faithnet.io]
+    hosts: [inference.faithnet.town, inference.faithnet.io]
     probe: https://inference.faithnet.io/healthz
     description: The town's model gateway (spec 434) — provider keys live on this Worker and nowhere else; it routes a call to a provider by budget and records the route it chose. It answers; it decides no authority.
   - id: chain-gateway
@@ -213,7 +213,7 @@ services:
     app: apps/chain-gateway
     worker: faithchain-rpc-gateway
     workers: [chain-rpc-gateway]
-    hosts: [rpc.faithnet.io]
+    hosts: [rpc.faithnet.town, rpc.faithnet.io]
     probe: https://rpc.faithnet.io/healthz
     azureResources: [/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-FAITHNET/providers/Microsoft.Compute/virtualMachines/faithnet-vm]
     # The whole group is this service's: the node VM, its data and OS disks, its public IP — nothing else is

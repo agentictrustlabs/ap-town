@@ -25,6 +25,9 @@ new_sqlite_classes = ["BudgetDO"]
 [env.faithnet]
 name = "faithchain-inference"
 [[env.faithnet.routes]]
+pattern = "inference.faithnet.town"
+custom_domain = true
+[[env.faithnet.routes]]
 pattern = "inference.faithnet.io"
 custom_domain = true
 [env.faithnet.vars]

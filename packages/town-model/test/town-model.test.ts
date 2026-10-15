@@ -147,7 +147,10 @@ describe('the MCP census — declared, never inferred (spec 435 §5)', () => {
     const { town } = parseTown(faithchain);
     const rows = townMcpServers(town!);
     expect(rows.find((r) => r.id === 'town-mcp')?.url).toBeUndefined();
-    expect(rows.find((r) => r.id === 'discovery-connector')?.url).toBe('https://discovery-connector.faithnet.io');
+    // THE FIRST HOST IS THE CANONICAL ONE. A service keeps its old host while anything still asks for it,
+    // so this list has two — and what the census publishes is the one the town wants used, which since
+    // 2026-10-14 is the town's OWN zone (the estate keeps faithnet.io/.me/.ai; the town is faithnet.town).
+    expect(rows.find((r) => r.id === 'discovery-connector')?.url).toBe('https://discovery-connector.faithnet.town');
   });
 
   it('reads each estate’s own servers, tagged with the estate', () => {

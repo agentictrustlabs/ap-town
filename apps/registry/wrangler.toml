@@ -24,6 +24,9 @@ service = "demo-discovery-mcp"
 name = "demo-discovery-a2a-faithnet"
 
 [[env.faithnet.routes]]
+pattern = "discovery-a2a.faithnet.town"
+custom_domain = true
+[[env.faithnet.routes]]
 pattern = "discovery-a2a.faithnet.io"
 custom_domain = true
 

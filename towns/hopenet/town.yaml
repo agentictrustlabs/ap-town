@@ -131,6 +131,6 @@ services:
     repo: ap-town
     app: apps/chain-gateway
     worker: hopechain-rpc-gateway
-    hosts: [hopechain-rpc-gateway.agentkg.io]
+    hosts: [rpc.hopenet.town, hopechain-rpc-gateway.agentkg.io]
     probe: https://hopechain-rpc-gateway.agentkg.io/healthz
     description: Fronts this chain's private RPC with per-app tokens, a method allow-list and rate limits. The only way in.

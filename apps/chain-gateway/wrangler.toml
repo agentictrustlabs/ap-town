@@ -47,6 +47,9 @@ name = "faithchain-rpc-gateway"
 workers_dev = true
 
 [[env.faithnet.routes]]
+pattern = "rpc.faithnet.town"
+custom_domain = true
+[[env.faithnet.routes]]
 pattern = "rpc.faithnet.io"
 custom_domain = true
 
@@ -87,6 +90,9 @@ workers_dev = true
 # So town B's hosts are `hopechain-<service>.agentkg.io`, matching the convention already live on this zone
 # (`faithchain-rpc.agentkg.io`) and costing nothing. The estate's own hosts are a separate matter and stay on
 # the estate's zone (impact-agent on impact-agent.io), per the host→context rule: a town zone is not an estate zone.
+[[env.hopenet.routes]]
+pattern = "rpc.hopenet.town"
+custom_domain = true
 [[env.hopenet.routes]]
 pattern = "hopechain-rpc-gateway.agentkg.io"
 custom_domain = true

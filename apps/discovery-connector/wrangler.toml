@@ -20,6 +20,9 @@ name = "demo-discovery-connector-faithnet"
 account_id = "5da2feaa56593839672948e16c6e809d"
 
 [[env.faithnet.routes]]
+pattern = "discovery-connector.faithnet.town"
+custom_domain = true
+[[env.faithnet.routes]]
 pattern = "discovery-connector.faithnet.io"
 custom_domain = true
 

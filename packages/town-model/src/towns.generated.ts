@@ -267,6 +267,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "worker": "demo-discovery-a2a-faithnet",
         "agentName": "discovery.registry",
         "hosts": [
+          "discovery-a2a.faithnet.town",
           "discovery-a2a.faithnet.io"
         ],
         "probe": "https://discovery-a2a.faithnet.io/health",
@@ -301,6 +302,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "app": "apps/discovery-connector",
         "worker": "demo-discovery-connector-faithnet",
         "hosts": [
+          "discovery-connector.faithnet.town",
           "discovery-connector.faithnet.io"
         ],
         "probe": "https://discovery-connector.faithnet.io/health",
@@ -316,6 +318,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "app": "apps/discovery-web",
         "worker": "demo-discovery-web-faithnet",
         "hosts": [
+          "discovery.faithnet.town",
           "discovery.faithnet.io"
         ],
         "probe": "https://discovery.faithnet.io/",
@@ -328,6 +331,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "app": "apps/town-agent",
         "worker": "faithchain-town-agent",
         "hosts": [
+          "faithnet.town",
           "town.faithnet.io"
         ],
         "probe": "https://town.faithnet.io/api/health",
@@ -354,6 +358,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "app": "apps/naming",
         "worker": "faithchain-naming",
         "hosts": [
+          "names.faithnet.town",
           "names.faithnet.io"
         ],
         "probe": "https://names.faithnet.io/api/health",
@@ -366,6 +371,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "app": "apps/inference",
         "worker": "faithchain-inference",
         "hosts": [
+          "inference.faithnet.town",
           "inference.faithnet.io"
         ],
         "probe": "https://inference.faithnet.io/healthz",
@@ -381,6 +387,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "chain-rpc-gateway"
         ],
         "hosts": [
+          "rpc.faithnet.town",
           "rpc.faithnet.io"
         ],
         "probe": "https://rpc.faithnet.io/healthz",
@@ -604,6 +611,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "app": "apps/chain-gateway",
         "worker": "hopechain-rpc-gateway",
         "hosts": [
+          "rpc.hopenet.town",
           "hopechain-rpc-gateway.agentkg.io"
         ],
         "probe": "https://hopechain-rpc-gateway.agentkg.io/healthz",

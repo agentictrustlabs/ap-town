@@ -11,6 +11,9 @@ PORTAL_FIND = "http://localhost:8792/find"
 name = "demo-discovery-web-faithnet"
 
 [[env.faithnet.routes]]
+pattern = "discovery.faithnet.town"
+custom_domain = true
+[[env.faithnet.routes]]
 pattern = "discovery.faithnet.io"
 custom_domain = true
 
