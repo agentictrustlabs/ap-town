@@ -8,7 +8,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getJson, useApi } from '../api';
 import type { NameView } from '../api-types';
 import { KIND_OF_TLD, Waiting, connectHref, useHomeCeremony } from '../register';
-import { Link, nameHref, rootHref, useRoute } from '../router';
+import { Link, nameHref, registerHref, rootHref, useRoute } from '../router';
 import { CHARTER_KINDS, handoffHref } from '../session';
 import { Chip, Glyph, Loading, Stamped } from '../ui';
 import { useSession } from '../use-session';
@@ -33,6 +33,24 @@ export function RegisterPage({ name }: { name: string }): ReactNode {
     return () => { live = false; };
   }, [treasury]);
 
+  // A register URL with no ending (`/register/maya`, typed by hand or linked from elsewhere) names no kind of agent yet:
+  // the ending IS the kind (431 §5.1), so offer each one rather than the API's "that ending is not one…".
+  if (!name.includes('.')) {
+    const label = name.toLowerCase();
+    return (
+      <section className="title">
+        <Glyph kind="person" lit={false} size={72} />
+        <div>
+          <h1>Register {label}.<span className="quiet">?</span></h1>
+          <p className="lede">A name is a label and an ending, and the ending says what kind of agent it names. Pick the one you mean:</p>
+          <div className="home-cta-row">
+            {CHARTER_KINDS.map((k) => <Link key={k.tld} href={registerHref(`${label}.${k.tld}`)} className="button"><Glyph kind={KIND_OF_TLD[k.tld] ?? 'service'} size={22} /> {label}.{k.tld} · {k.label.toLowerCase()}</Link>)}
+          </div>
+          <p className="quiet">Or <Link href={`/search?q=${encodeURIComponent(label)}`}>look under every ending first →</Link></p>
+        </div>
+      </section>
+    );
+  }
   return (
     <Loading v={v}>{(n) => {
       const tld = n.tld ?? '';

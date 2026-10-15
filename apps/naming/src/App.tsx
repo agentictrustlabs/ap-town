@@ -131,7 +131,7 @@ function Shell(): ReactNode {
       <header className="top">
         <Link href="/" className="brand"><span className="brand-mark" aria-hidden="true" />Names{town && <span className="brand-town">the {town} town</span>}</Link>
         <SearchBox />
-        <nav aria-label="Sections"><Link href="/">Places</Link><Link href="/integrate">Integrate</Link><a href="https://town.faithnet.io/town" rel="noreferrer">The town</a><Who /></nav>
+        <nav aria-label="Sections"><Link href="/">Places</Link><Link href="/integrate">Integrate</Link><a href="https://faithnet.town/town" rel="noreferrer">The town</a><Who /></nav>
       </header>
       <Yours />
       <main id="main"><Page /></main>
