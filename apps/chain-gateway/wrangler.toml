@@ -66,3 +66,44 @@ class_name = "RateLimiter"
 [[env.faithnet.durable_objects.bindings]]
 name = "OPS"
 class_name = "ChainOpsDO"
+
+# ── hopechain (34349) — THE SECOND TOWN ───────────────────────────────────────────────────────────
+# A second private chain is another [env.<name>], not another repo (the header says so, and this is the
+# first time anything has taken it up). Everything here is hopechain's own: its own Worker name, its own
+# TOKENS KV, its own RateLimiter storage. Nothing is shared with faithnet except the code.
+#
+# ESTIMATE_GAS_CAP is faithnet's value because the origin is the same software — Besu returns an empty
+# 200 on a heavy eth_estimateGas with no cap, and errors when the cap equals the block gas limit.
+[env.hopechain]
+name = "hopechain-rpc-gateway"
+workers_dev = true
+
+# ONE SUBDOMAIN LEVEL — THE RULE FOR EVERY TOWN-B HOST, not a quirk of this one.
+#
+# Cloudflare's Universal SSL covers `*.agentkg.io` and NOT a second level, so `rpc.hopechain.agentkg.io`
+# resolves and then fails the TLS handshake — DNS says yes and the connection dies, which reads like a Worker
+# fault and is not. Advanced Certificate Manager fixes it for about $10 a month, to serve a hostname.
+#
+# So town B's hosts are `hopechain-<service>.agentkg.io`, matching the convention already live on this zone
+# (`faithchain-rpc.agentkg.io`) and costing nothing. The estate's own hosts are a separate matter and stay on
+# the estate's zone (imbnet on impact-agent.io), per the host→context rule: a town zone is not an estate zone.
+[[env.hopechain.routes]]
+pattern = "hopechain-rpc-gateway.agentkg.io"
+custom_domain = true
+
+[env.hopechain.vars]
+ORIGIN = "https://hopechain-rpc.agentkg.io"
+ESTIMATE_GAS_CAP = "0x2dc6c0"
+CHAIN_GENERATION = "1"
+# TOWN_OPS_TOKEN is a secret, as for faithnet.
+
+[[env.hopechain.kv_namespaces]]
+binding = "TOKENS"
+id = "7ec3b6473010405c83cb4c9e3fa63fe5"
+
+[[env.hopechain.durable_objects.bindings]]
+name = "RATE"
+class_name = "RateLimiter"
+[[env.hopechain.durable_objects.bindings]]
+name = "OPS"
+class_name = "ChainOpsDO"
