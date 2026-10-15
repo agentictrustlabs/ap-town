@@ -242,6 +242,12 @@ services:
   - id: kms
     kind: commons
     repo: agentictrustlabs/faithkms
+    # STAYS ON faithnet.io WHEN EVERY OTHER TOWN SERVICE MOVED TO faithnet.town (owner, 2026-10-14). The rule
+    # is that the town presents on the town's zone — and this service is not the town's. It is the
+    # FEDERATION's shared operator, serving every town and every estate, so naming it after one town would
+    # demote it to a town service exactly as the federation path for it is being built. It also answers on
+    # the dashboard-managed AKCS tunnel rather than a Worker, so its hostnames are not ours to create.
+    # Its eventual home is a federation name, not a town one.
     hosts: [akcs-pilot.faithnet.io]
     probe: https://akcs-pilot.faithnet.io/healthz
     azureResources: [/subscriptions/5a656e13-849d-4b56-9101-53f987cf971b/resourceGroups/RG-AKCS-PILOT-WESTUS/providers/Microsoft.Compute/virtualMachines/vm-akcs-pilot-0,
@@ -292,6 +298,9 @@ services:
   - id: gamenight
     kind: application
     repo: agentictrustlabs/pokernight
+    # ALSO STAYS (owner, 2026-10-14). `kind: application` is the reason: faithnet.town is where the town's
+    # OWN infrastructure presents, and a game that runs in this town is a resident of it, not a part of it.
+    # Left as it is on purpose, so the next reader does not take the inconsistency for an oversight.
     hosts: [gamenight.faithnet.io, games.faithnet.io, agents.faithnet.io]
     probe: https://gamenight.faithnet.io/
     estates: [faithnet]
