@@ -2,7 +2,7 @@
   "name": "ap-town",
   "version": "0.0.0",
   "private": true,
-  "description": "ap-town \u2014 the services every estate on one chain shares: naming, the registry, the public graph and discovery, chain access, the Town portal (spec 429). A product repository on published @agenticprimitives/* packages (ADR-0063).",
+  "description": "ap-town — the services every estate on one chain shares: naming, the registry, the public graph and discovery, chain access, the Town portal (spec 429). A product repository on published @agenticprimitives/* packages (ADR-0063).",
   "type": "module",
   "engines": {
     "node": ">=22.18",
@@ -39,16 +39,16 @@
     "vitest": "^4.1.8",
     "tsx": "^4.22.4",
     "@types/node": "^22.7.0",
-    "@agenticprimitives/audit": "1.0.0-alpha.35",
-    "@agenticprimitives/connect-auth": "1.0.0-alpha.35",
-    "@agenticprimitives/key-custody": "1.0.0-alpha.35",
-    "@agenticprimitives/ontology": "1.0.0-alpha.35",
-    "@agenticprimitives/agent-account": "1.0.0-alpha.35",
-    "@agenticprimitives/agent-naming": "1.0.0-alpha.35",
-    "@agenticprimitives/contracts": "1.0.0-alpha.35",
-    "@agenticprimitives/delegation": "1.0.0-alpha.35",
+    "@agenticprimitives/audit": "1.0.0-alpha.36",
+    "@agenticprimitives/connect-auth": "1.0.0-alpha.36",
+    "@agenticprimitives/key-custody": "1.0.0-alpha.36",
+    "@agenticprimitives/ontology": "1.0.0-alpha.36",
+    "@agenticprimitives/agent-account": "1.0.0-alpha.36",
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.36",
+    "@agenticprimitives/contracts": "1.0.0-alpha.36",
+    "@agenticprimitives/delegation": "1.0.0-alpha.36",
     "viem": "2.52.2",
-    "@agenticprimitives/types": "1.0.0-alpha.35"
+    "@agenticprimitives/types": "1.0.0-alpha.36"
   },
   "pnpm": {
     "overrides": {

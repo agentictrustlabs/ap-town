@@ -13,7 +13,7 @@
   },
   "dependencies": {
     "@agenticprimitives/registry-kit": "0.0.0-alpha.20",
-    "@agenticprimitives/types": "1.0.0-alpha.35",
+    "@agenticprimitives/types": "1.0.0-alpha.36",
     "@noble/hashes": "2.2.0",
     "hono": "4.13.0",
     "viem": "2.52.2",
