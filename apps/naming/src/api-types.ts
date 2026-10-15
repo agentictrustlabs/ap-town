@@ -158,6 +158,8 @@ export interface AddressView extends Stamp {
   /** Every name this agent claimed through a root's open subregistry — one per root. */
   held: Array<{ tld: string; name: string; presented: boolean; kind: PlaceKind }>;
   banners: Banner[];
+  /** Who this account is — the same block the name page leads with; null for a bare key. */
+  identity: NameIdentity | null;
   estates: EstateRef[];
 }
 

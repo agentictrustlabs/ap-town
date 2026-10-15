@@ -3,7 +3,7 @@
 import { useState, type FormEvent, type ReactNode } from 'react';
 import { IsoScene, TownMap, type PlaceKind, type TownSceneV1 } from '@ap-town/town-scene';
 import { getJson, type Loaded } from './api';
-import type { Banner, EstateRef, SearchView, Signal, Stamp } from './api-types';
+import type { NameIdentity, Banner, EstateRef, SearchView, Signal, Stamp } from './api-types';
 import { Link, addressHref, nameHref, rootHref, useRoute } from './router';
 import { glyphScene } from './scenes';
 
@@ -164,5 +164,47 @@ export function Tabs({ tabs, active, onPick }: { tabs: Array<{ id: string; label
         </button>
       ))}
     </div>
+  );
+}
+
+/** THE AGENT BEHIND THE NAME, FIRST. A name is a projection of an agent's identity: one agent, one canonical id (its home
+ *  account), one account per chain, one name. The root chain is where the NAME lives; where the AGENT lives is the home
+ *  account, and the two are different addresses whenever the agent's Home is on another chain. This block makes that
+ *  unmissable, because the root chain's address is the one everybody will want to call canonical. */
+export function IdentityBlock({ identity: id }: { identity: NameIdentity | null | undefined }): ReactNode {
+  if (!id || !id.here) return null;
+  const chainWord = (a: { chainId: number; town: string | null }) => `eip155:${a.chainId}${a.town ? ` · the ${a.town} town` : ''}`;
+  const roleWord = (r: string) => (r === 'home' ? 'home — the canonical id' : r === 'satellite' ? 'satellite — holds the name on this chain' : 'role not declared');
+  return (
+    <section className="identity" aria-labelledby="identity-h">
+      <h2 id="identity-h">The agent behind this name</h2>
+      <dl className="facts facts-wide">
+        <dt>Agent (canonical id)</dt>
+        <dd>
+          {id.canonical
+            ? <><span className="mono break">{id.canonical}</span> <Copy value={id.canonical} label="canonical id" /><br /><span className="quiet">The account this name is a name of. Its Home and custody live on {chainWord({ chainId: id.canonicalChainId!, town: id.canonicalTown })}.</span></>
+            : <><strong>Not declared.</strong> <span className="quiet">The name lists no home account (<span className="mono">atl:nativeId</span>). The address below is the agent's account on this chain, and nothing on chain says it is the agent's home.</span></>}
+        </dd>
+        <dt>On this chain</dt>
+        <dd>
+          <span className="mono break">{id.here.account}</span> <Copy value={id.here.account} label="account on this chain" /><br />
+          <span className="quiet">{id.here.role === 'home' ? 'This is the agent’s home account: the canonical id, on this chain.' : id.here.role === 'satellite' ? `The agent’s account here. It holds the name on this chain (${chainWord(id.here)}) — a satellite, not the canonical id.` : `The agent’s account on ${chainWord(id.here)}; whether it is the home account is not written.`}</span>
+        </dd>
+        {id.estate && <>
+          <dt>Estate and Home</dt>
+          <dd>{id.estate.home ? <a href={id.estate.home} rel="noreferrer">{id.estate.home.replace(/^https?:\/\//, '')}</a> : '—'}{id.estate.id ? <> · the <strong>{id.estate.id}</strong> estate</> : null}{id.estate.town ? <> · the {id.estate.town} town</> : null}{id.estate.name ? <span className="quiet"> · {id.estate.name}</span> : null}<br /><span className="quiet">{id.estate.how === 'declared' ? 'Declared by the agent itself (atl:estate).' : 'Placed by the agent’s own endpoint against the towns’ manifests — an inference, and said so.'}</span></dd>
+        </>}
+        {id.accounts.length > 1 && <>
+          <dt>Accounts by chain</dt>
+          <dd>
+            <ul className="plain">
+              {id.accounts.map((a) => <li key={a.account}><span className="mono break">{a.account}</span> <span className="quiet">· {chainWord(a)} · {roleWord(a.role)}{a.here ? ' · this chain' : ''}</span></li>)}
+            </ul>
+            <span className="quiet">One account per chain, listed on the name (atl:accounts). A grant lives on one chain, so an act is always signed by the account on the chain it runs on; the canonical id says who, the chain’s account says who signed here.</span>
+          </dd>
+        </>}
+      </dl>
+      <p className="public-note">A name is a projection of the agent’s identity, not the identity. The root chain is where the name lives; the home account is where the agent lives.</p>
+    </section>
   );
 }

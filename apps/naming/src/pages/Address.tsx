@@ -3,7 +3,7 @@ import { useApi } from '../api';
 import type { AddressView } from '../api-types';
 import { Link, nameHref } from '../router';
 import { addressScene } from '../scenes';
-import { Banners, Chip, Copy, Glyph, Loading, Scene, Stamped } from '../ui';
+import { Banners, Chip, Copy, Glyph, IdentityBlock, Loading, Scene, Stamped } from '../ui';
 
 export function AddressPage({ address }: { address: string }): ReactNode {
   const v = useApi<AddressView>(`/api/address/${address}`);
@@ -22,6 +22,7 @@ export function AddressPage({ address }: { address: string }): ReactNode {
           </div>
         </section>
         <Banners banners={a.banners} />
+        <IdentityBlock identity={a.identity} />
         <section>
           <h2>Names it holds</h2>
           {a.held.length === 0 ? <p className="quiet">This address has claimed no name under any open ending in this town.</p> : (
