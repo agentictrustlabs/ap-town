@@ -68,6 +68,11 @@ clerk-signed. The estate runs it (`ap-home scripts/add-naming-gate.mts`, which a
 can revoke one Home's gate without touching another's. Names are chain-wide: the roots, prices and the domain rule
 (`<label>.com`/`.org` exists ⇒ verified email there) are the same for every estate.
 
+An estate in a town that roots its names elsewhere (`chain.namesRootedAt`, hopenet) has no gate here: priced naming is
+the root town's, so the estate's people claim their names on the root and the name points at their account on each
+chain (`atl:accounts`). The estate's own `.estate` and service names go in the town's local table. A name's home account
+is "not declared" until its holder declares it once from the Home's naming page.
+
 ## 6. The heartbeat and the Pulse (specs 436/437)
 
 The town agent pulls each estate's heartbeat from its runtime (`/estate/heartbeat`, through the lane) with a

@@ -25,7 +25,7 @@ Vectorize sit inside included tiers. Watch VM memory, not money (below).
 | a private chain, or a public testnet? | a second private Besu/QBFT chain | a public testnet has no SHQ, no AKCS and metered gas — it would test a different thing |
 | which estate moves? | impact-agent (a demo estate: no real users, five demo personas) | the twin needs an estate on each chain, and moving a demo estate costs a vault reset rather than a migration |
 | where is neutral ground? | **stays on faithchain** (`EstateProjectionRegistry 0xb4E116F5…`) | the whole value of the twin is that both estates anchor to the SAME registry on a chain neither of them is moving to. `Deploy.s.sol` deploys a registry on the new chain too — **it must never be used** |
-| naming | faithchain stays the one universal root | the new chain's naming contracts are its own local table, for the `.estate`/service names the bootstrap needs |
+| naming | faithchain stays the one universal root (`chain.namesRootedAt: faithchain`) | the new chain's naming contracts are a local table for the `.estate`/service names the bootstrap needs; its typed roots are closed to claims; its naming service answers existence from the root and shows the local table as "on this chain" |
 | hostnames | `hopechain-<service>.agentkg.io` | **⚠ ONE subdomain level.** See §2 |
 
 ---
@@ -178,8 +178,9 @@ either side: `maya-fernandes.me` on 34348 and on 34349, each naming her account 
 
 ## 8. What is not done here
 
-The twin itself (the door taking chain per estate, the gates parameterised per estate) and federated naming
-across chains. Both are the next wave, and the door is the one place "no verifier code" was optimistic. Also
-open: the registry's agent is not a chartered `.registry` SA on this chain (its card says "hopenet registry" and
-claims no name), there is no gateway agent for the connector's `invoke_agent`, and the Pulse's day is not recorded
-(no context agents here).
+The twin runs across the two chains (`gate:twin`, both directions), and naming across chains answers existence from the
+root with a local table on the rooted chain (§0, U2b). What stays open on naming is U3: a name a Home claims on this
+chain is carried to the root through the estate's gate; until then `rich-impact.me` stays free on the root and the
+pages say so. Also open: the registry's agent is not a chartered `.registry` SA on this chain (its card says "hopenet
+registry" and claims no name), there is no gateway agent for the connector's `invoke_agent`, and the Pulse's day is not
+recorded (no context agents here).

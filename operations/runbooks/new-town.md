@@ -99,6 +99,14 @@ naming agent, revocable per Home. The design and the cutover are
 [spec 431](../../specs/431-paid-names-sheqel-treasuries-and-the-domain-rule.md) and
 [the priced-names cutover](431-priced-names-cutover.md).
 
+The third choice is to **root the town's names at another town** (`chain.namesRootedAt: <town>`), which is what hopenet
+does. The typed namespace stays one namespace with one root: this town's naming service answers "does it exist, is it
+free" from the root town and shows this chain's table only as "on this chain". What it implies: the `NAMING` binding on
+this town's apps stays unbound (`gen:town` leaves it out); the chain's local typed roots are closed to claims
+(`pnpm naming:close-local-roots`, the root owner's act) so a parallel `.me` cannot grow; nothing here sells a name; and
+a name a Home claims here is carried to the root through the estate's gate (U3, still owed — until then the root shows
+it as free and the pages say so). A town rooted elsewhere keeps its `.estate` and service names in its local table.
+
 ## 6. Decide what the town will never do
 
 Write this into the manifest's comments while it is still cheap, because every one of them is a pressure you will
