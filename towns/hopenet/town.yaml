@@ -18,6 +18,10 @@ chain:
   # No `coin`: the Sheqel and the priced roots are faithchain's (spec 440 §C — one universal namespace, rooted
   # there). This chain's naming contracts are its own LOCAL table, for the .estate and service names the
   # bootstrap needs. Nothing here sells a name.
+  # ROOTED AT FAITHCHAIN (2026-10-16): this town's naming service answers "does this name exist / is it free" from the
+  # root town, and shows this chain's table only as "on this chain". Before this line, names.hopenet.town read its local
+  # table as a root and offered `alice.me` — registered on the root since the first town — as available (spec 440 C6).
+  namesRootedAt: faithchain
 
 # The same accounts as the first town: this is one operator's second town, not a second operator.
 accounts:

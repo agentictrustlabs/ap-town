@@ -47,6 +47,13 @@ export function validateTown(raw: unknown): TownValidation {
   if (!c || !isUrl(c.rpc)) errors.push('chain.rpc: an https URL');
   if (c?.coin && (!/^0x[0-9a-fA-F]{40}$/.test(String(c.coin.address)) || typeof c.coin.symbol !== 'string' || !Number.isInteger(c.coin.decimals))) errors.push('chain.coin: { address, symbol, decimals }');
   if (!c || typeof c.deployment !== 'string' || !/^[a-z][a-z0-9-]*$/.test(c.deployment)) errors.push('chain.deployment: the network key in @agenticprimitives/contracts/deployments');
+  // A chain whose names are rooted elsewhere (spec 440 §C) is a local table: it names the root town, which is not itself,
+  // and it sells nothing — a coin beside it would be a second root under another name.
+  if (c?.namesRootedAt !== undefined) {
+    if (typeof c.namesRootedAt !== 'string' || !ID.test(c.namesRootedAt)) errors.push('chain.namesRootedAt: a town id');
+    else if (c.namesRootedAt === t.town) errors.push('chain.namesRootedAt: a town is not rooted at itself — leave it unset for a root');
+    if (c.coin) errors.push('chain.coin: a town whose names are rooted elsewhere sells none — remove the coin or the namesRootedAt');
+  }
 
   const estates = Array.isArray(t.estates) ? t.estates : [];
   if (estates.length === 0) errors.push('estates: a town has at least one estate');

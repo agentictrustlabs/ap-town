@@ -155,6 +155,33 @@ Header: the name, its type in words, the status chip, the agent's address, and t
 Banners, when they apply: type mismatch · type undeclared · points at an agent presenting another name · expired ·
 legacy root (never type-checked) · no address record (resolves to the owner).
 
+### 3.2a One namespace, one root — a town's place in it (amended 2026-10-16)
+
+A name is one across the federation and has ONE root chain (ap-federation spec 440 §C1; faithchain today). Every other
+chain's naming contracts are a **local table**, and its manifest says so: `chain.namesRootedAt: <root town>`
+(`packages/town-model`; `check:town` holds the root to be a root, to run a naming service, and the rooted Worker to bind it).
+The service puts each chain in its place, and never lets a table pose as a root — which is exactly what happened before
+this section: `names.hopenet.town` read hopechain's table as a root and offered `alice.me`, registered on faithchain
+since the first town, as *available* (C6: "no town runs a parallel `.me`").
+
+- **A town rooted elsewhere** answers "does it exist / is it free" from the **root town's** naming service (§C4 wave 1:
+  a direct read of the root through its read API, by service binding `PEER_<ROOT>`). Every answer carries `rootedAt
+  { town, chainId, block, host }` beside this town's own stamp. Its own table appears on the name page only as
+  **`local`** — "on this chain" — with a banner: a *copy* when the root holds the name too (warn when the copy points
+  elsewhere), *claimed only on this chain* when the root reads it free. A free name's "who could claim it" names a Home
+  on the root town, and the register button goes there: until wave U3, a Home on this chain cannot claim into the root.
+  A root that cannot be asked is an **error**, never a fall-through to the table (ADR-0013).
+- **The root**, whose chain reads a name free, asks the other towns' tables (`?local=1`, which answers from the table
+  alone, so the ask never comes back around) and says **`claimedElsewhere`** on the name page, the label search's rows
+  and the register page: *claimed on hopenet, not on the root*. Such a row is shown held, not offered. A peer that
+  could not be asked is `null` — "could not be asked", never "nowhere". `rich-impact.me` (hopechain, 2026-10-15) is
+  why: the root's page listed it for sale while a Home on the other chain held it.
+- **Names-like** merges the chain of record's hits with every other table's, each of those tagged with the town whose
+  table it is ("in hopenet's table, not on the root").
+
+Closing the table's typed roots to new claims (`AgentNameRegistry.setSubregistry(root, 0)` by the root's owner) is the
+chain-side half: `pnpm naming:close-local-roots`. The read side above stands whether or not it has run.
+
 ### 3.3 Who can do what
 
 Generated from what the contracts check, which is always the caller's address:

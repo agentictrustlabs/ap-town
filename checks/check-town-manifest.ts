@@ -35,5 +35,26 @@ for (const town of towns) {
   if (d.chainId !== undefined && Number(d.chainId) !== town.chain.id) errors.push(`${town.town}: chain.id ${town.chain.id} but deployments-${town.chain.deployment}.json is chain ${d.chainId}`);
   if (recorded !== town.chain.generation) errors.push(`${town.town}: chain.generation "${town.chain.generation}" but deployments-${town.chain.deployment}.json records contractsGeneration ${recorded}`);
 }
+// ONE ROOT (ap-federation spec 440 §C1). A town whose names are rooted at another town names a town that exists, that is
+// itself a root (no chain of roots), and that runs a naming service this town's can ask — otherwise "rooted at" is a
+// sentence with nothing behind it, and the local table would quietly answer as a root again.
+const byId = new Map(towns.map((t) => [t.town, t]));
+for (const town of towns) {
+  const at = town.chain.namesRootedAt;
+  if (!at) continue;
+  const root = byId.get(at);
+  if (!root) { errors.push(`${town.town}: chain.namesRootedAt names "${at}", which is not a town this repository knows`); continue; }
+  if (root.chain.namesRootedAt) errors.push(`${town.town}: rooted at ${at}, which is itself rooted at ${root.chain.namesRootedAt} — a namespace has one root`);
+  if (!root.services.some((s) => s.id === 'naming' && s.hosts.length)) errors.push(`${town.town}: rooted at ${at}, whose manifest lists no naming service host to read the root from`);
+  if (town.services.some((s) => s.id === 'naming' && s.repo === 'ap-town')) {
+    // The rooted town's naming Worker must be able to reach the root's by service binding or its host; the binding is
+    // checked by name here so a missing one is a finding, not a slow public fetch nobody notices.
+    const toml = join(ROOT, 'apps/naming/wrangler.toml');
+    const envs = [...wranglerFacts(toml).values()];
+    const mine = envs.find((f) => f.name === town.services.find((s) => s.id === 'naming')!.worker);
+    const rootWorker = root.services.find((s) => s.id === 'naming')?.worker;
+    if (mine && rootWorker && !mine.services.includes(rootWorker)) errors.push(`${town.town}: apps/naming/wrangler.toml [${mine.name}] does not bind the root town's naming Worker "${rootWorker}" (PEER_${at.toUpperCase().replace(/-/g, '_')})`);
+  }
+}
 if (errors.length) { console.error(`check:town — ${errors.length} finding(s):\n  ${errors.join('\n  ')}`); process.exit(1); }
 console.log(`check:town — ${towns.length} town(s), ${checked} deployed service(s) agree with their apps`);

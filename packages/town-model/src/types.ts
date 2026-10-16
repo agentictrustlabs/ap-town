@@ -21,6 +21,13 @@ export interface TownChain {
   /** The app coin names are bought with on this chain (spec 431), when any. */
   coin?: { address: string; symbol: string; decimals: number };
   /**
+   * The town whose chain is the ROOT of the universal namespace (ap-federation spec 440 §C1) when it is not this one.
+   * Set, it means: this chain's naming contracts are a LOCAL table, never a root — the town's naming service answers
+   * "does this name exist / is it free" from the root town, shows this chain's table only as "on this chain", and
+   * sells nothing (`coin` is refused beside it). A town that is itself a root leaves it unset.
+   */
+  namesRootedAt?: string;
+  /**
    * Addresses recorded on the chain AHEAD of the pinned `@agenticprimitives/contracts` release that will carry them —
    * the same keys as the deployment document (`pricedSubregistries`, `namingFeeTreasury`, …). Merged over the
    * package's document; removed from here once the pin catches up. A bridge, never a second source of truth.

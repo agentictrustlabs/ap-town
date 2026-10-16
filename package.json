@@ -27,6 +27,7 @@
     "probe:town": "tsx checks/probe-town.ts",
     "gen:town": "tsx checks/gen-town.ts",
     "provision:naming": "tsx scripts/provision-naming-service.mts",
+    "naming:close-local-roots": "tsx scripts/close-local-name-roots.mts",
     "card:release": "pnpm --filter @ap-town/town-agent exec tsx scripts/release-card.mts",
     "gate:card-signature": "pnpm --filter @ap-town/town-agent exec tsx scripts/gate-card-signature.mts"
   },

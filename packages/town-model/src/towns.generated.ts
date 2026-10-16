@@ -503,7 +503,8 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
       "id": 34349,
       "generation": "3",
       "rpc": "https://hopechain-rpc-gateway.agentkg.io",
-      "deployment": "hopechain"
+      "deployment": "hopechain",
+      "namesRootedAt": "faithchain"
     },
     "accounts": {
       "cloudflare": [
