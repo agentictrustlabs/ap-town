@@ -8,7 +8,19 @@ export type Address = `0x${string}`;
 /** What the agent itself declares on chain. `noun` is the type as a visitor would say it ('a person'). */
 export interface Declared { agentType: string | null; noun: string | null; serviceRole: string | null; agentKind: string | null; agentSubtype: string | null }
 
-export interface Stamp { town: string; chainId: number; block: number }
+export interface Stamp {
+  town: string; chainId: number; block: number;
+  /** Set when this town's names are ROOTED at another town (spec 440 §C1): the answer was read from that town's chain, and
+   *  `town`/`chainId`/`block` above are still this town's. Absent on a root. */
+  rootedAt?: { town: string; chainId: number; block: number; /** The root town's naming service, where a root name is registered. */ host: string };
+}
+
+/** A name the chain of record reads as free, held in another chain's LOCAL table by a Home there (spec 440 C10). It is not
+ *  the name — the root's record is — but nobody should be offered it, and the page says where it went. */
+export interface ClaimedElsewhere { town: string; chainId: number; agent: Address | null; owner: Address | null }
+
+/** This chain's own table, for a town rooted elsewhere: what a Home HERE wrote for the name, beside the root's answer. */
+export interface LocalTableEntry { town: string; chainId: number; exists: boolean; agent: Address | null; owner: Address | null }
 
 /** One of the four separate signals on a name (spec 430 D5). Never summed, never a score. */
 export interface Signal { state: 'yes' | 'no' | 'warn' | 'unknown'; detail: string }
@@ -144,6 +156,10 @@ export interface NameView extends Stamp {
   /** The agent behind the name — canonical id, this chain's account and its role, every account by chain, the estate and Home. */
   identity: NameIdentity | null;
   estates: EstateRef[];
+  /** On a ROOT, for a free name: other towns whose local table holds it. `null` = a peer could not be asked (never "nowhere"). */
+  claimedElsewhere?: ClaimedElsewhere[] | null;
+  /** On a town ROOTED elsewhere: this chain's own table for the name, beside the root's answer above. */
+  local?: LocalTableEntry | null;
 }
 
 export interface AddressView extends Stamp {
@@ -165,7 +181,7 @@ export interface AddressView extends Stamp {
   estates: EstateRef[];
 }
 
-export interface SearchRow { name: string; tld: string; names: string | null; kind: PlaceKind; status: 'registered' | 'available' | 'expired'; agent: Address | null; by: string; coins: number | null }
+export interface SearchRow { name: string; tld: string; names: string | null; kind: PlaceKind; status: 'registered' | 'available' | 'expired'; agent: Address | null; by: string; coins: number | null; claimedElsewhere?: ClaimedElsewhere | null }
 
 export type SearchView = Stamp & (
   | { kind: 'name'; name: string }

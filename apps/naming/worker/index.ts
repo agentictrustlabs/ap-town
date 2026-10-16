@@ -6,7 +6,11 @@ import { TOWNS, type TownManifest } from '@ap-town/town-model';
 import { isAddress } from 'viem';
 import type { Address, ApiError } from '../src/api-types';
 import { chainFor } from './chain';
-import { addressView, coinsView, displayManyView, displayView, estatesOf, nameView, rootPage, searchView, townView, type Ctx, namesLike } from './views';
+import { peerBindingName, peersOf, type PeerFetcher } from './peers';
+import {
+  addressView, coinsView, displayManyView, displayView, estatesOf, nameView, nameViewLocal, rootPage, rootPageLocal, searchView, searchViewLocal,
+  townView, townViewLocal, namesLike, namesLikeLocal, type Ctx,
+} from './views';
 
 interface Env {
   TOWN: string;
@@ -19,6 +23,8 @@ interface Env {
   /** The town's registry Worker — asked only whether an agent is listed. */
   REGISTRY?: { fetch(req: Request): Promise<Response> };
   LIMITER?: { limit(opts: { key: string }): Promise<{ success: boolean }> };
+  /** `PEER_<TOWN>` — another town's naming Worker, by binding (see peers.ts). Absent, that town is asked over its host. */
+  [peer: `PEER_${string}`]: PeerFetcher | undefined;
 }
 
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, OPTIONS', 'access-control-allow-headers': 'content-type' };
@@ -57,8 +63,14 @@ function rpcUrlForThisRequest(env: Env): string {
 function ctxOf(env: Env): Ctx {
   if (!env.RPC_URL?.trim()) throw new Error('RPC_URL is not configured — the naming service reads no unnamed chain');
   const town = townOf(env);
+  const peers = peersOf(town, env as unknown as Record<string, PeerFetcher | undefined>);
+  // Rooted elsewhere (spec 440 §C1): the root town's naming service is where every existence answer comes from. A root this
+  // build cannot name is refused up front — the local table must never stand in for it (ADR-0013).
+  const rootedAt = town.chain.namesRootedAt ?? null;
+  const root = rootedAt ? peers.find((p) => p.town === rootedAt) ?? null : null;
+  if (rootedAt && !root) throw new Error(`names here are rooted at "${rootedAt}", which this build knows no naming service for (binding ${peerBindingName(rootedAt)}, or a naming host in its manifest)`);
   return {
-    town, chain: chainFor(town, rpcUrlForThisRequest(env), env.CHAIN ? (url, init) => env.CHAIN!.fetch(new Request(url, init)) : undefined),
+    town, peers, root, chain: chainFor(town, rpcUrlForThisRequest(env), env.CHAIN ? (url, init) => env.CHAIN!.fetch(new Request(url, init)) : undefined),
     // One question to the registry. An answer it cannot give is `null` ("could not be asked"), never a guess.
     async listed(agent: Address) {
       if (!env.REGISTRY) return null;
@@ -78,19 +90,22 @@ async function api(url: URL, env: Env): Promise<Response> {
   // Keyless and chain-free: the estates (each one's Home) so the page knows where connect and every hand-off go.
   if (path === '/health') return json({ ok: true, service: 'naming', town: env.TOWN, estates: estatesOf(townOf(env)) }, 200, 300);
   const ctx = ctxOf(env);
-  if (path === '/town') return json(await townView(ctx), 200, 60);
-  if (path === '/search') return json(await searchView(ctx, url.searchParams.get('q') ?? ''), 200, 15);
+  // `?local=1` — THIS CHAIN'S TABLE ALONE, no other town asked. It is how one town asks another (peers.ts): the root asks a
+  // rooted town's table this way, so a rooted town answering the root never turns around and asks the root again.
+  const local = url.searchParams.get('local') === '1';
+  if (path === '/town') return json(await (local ? townViewLocal : townView)(ctx), 200, 60);
+  if (path === '/search') return json(await (local ? searchViewLocal : searchView)(ctx, url.searchParams.get('q') ?? ''), 200, 15);
   // Names that CONTAIN what was typed — a different question from "is this one free", and the one that makes a
   // partial name find anything (spec 430; owner, 2026-10-14).
   if (path === '/names-like') {
     const t = (url.searchParams.get('tld') ?? '').trim().toLowerCase();
-    return json(await namesLike(ctx, url.searchParams.get('q') ?? '', /^[a-z0-9-]{1,63}$/.test(t) ? t : null), 200, 60);
+    return json(await (local ? namesLikeLocal : namesLike)(ctx, url.searchParams.get('q') ?? '', /^[a-z0-9-]{1,63}$/.test(t) ? t : null), 200, 60);
   }
   let m = path.match(/^\/name\/(.+)$/);
   if (m) {
     // A name mid-ceremony (claimed, not yet presented) has met readers that throw on empty answers; say what failed,
     // as JSON, rather than let the platform's error page stand in — the page retries a fresh read.
-    try { return json(await nameView(ctx, m[1]!), 200, 20); }
+    try { return json(await (local ? nameViewLocal : nameView)(ctx, m[1]!), 200, 20); }
     catch (e) { console.error('nameView', m[1], e instanceof Error ? e.stack ?? e.message : String(e)); return fail(502, 'read_failed', `The chain read failed: ${clean(e)}`); }
   }
   m = path.match(/^\/address\/(0x[0-9a-fA-F]{40})$/);
@@ -108,7 +123,7 @@ async function api(url: URL, env: Env): Promise<Response> {
   if (m && !isAddress(m[2]!)) return fail(400, 'not_an_address', 'An address is 0x and forty hex characters.');
   m = path.match(/^\/root\/([a-z0-9-]+)$/);
   if (m) {
-    const page = await rootPage(ctx, m[1]!, Number(url.searchParams.get('page') ?? '1'));
+    const page = await (local ? rootPageLocal : rootPage)(ctx, m[1]!, Number(url.searchParams.get('page') ?? '1'));
     return page ? json(page, 200, 45) : fail(404, 'no_such_root', `This town has no .${m[1]} root.`);
   }
   return fail(404, 'not_found');

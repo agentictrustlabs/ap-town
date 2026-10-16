@@ -43,6 +43,13 @@ service = "faithchain-rpc-gateway"
 binding = "REGISTRY"
 service = "demo-discovery-a2a-faithnet"
 
+# THE OTHER TOWNS' NAMING SERVICES, by binding (spec 440 §C4 wave 1 — "direct read" through the town's own read API).
+# This town is the ROOT: a name free here may still be claimed in another chain's local table (rich-impact.me was born
+# on hopechain while the root said "available"), and the page must say so. One binding per peer, named PEER_<TOWN>.
+[[env.faithnet.services]]
+binding = "PEER_HOPENET"
+service = "hopechain-naming"
+
 # Edge rate limit for the public API (admission, never authority).
 [[env.faithnet.ratelimits]]
 name = "LIMITER"
@@ -71,6 +78,13 @@ service = "hopechain-rpc-gateway"
 [[env.hopenet.services]]
 binding = "REGISTRY"
 service = "hopechain-registry"
+
+# THE ROOT TOWN'S NAMING SERVICE (town.yaml `namesRootedAt: faithchain`). Every "does it exist / is it free" answer this
+# instance gives comes from here; the local table is shown only as "on this chain". Required: with it missing the
+# Worker refuses to answer rather than let the local table pose as a root again (ADR-0013).
+[[env.hopenet.services]]
+binding = "PEER_FAITHCHAIN"
+service = "faithchain-naming"
 
 [[env.hopenet.ratelimits]]
 name = "LIMITER"

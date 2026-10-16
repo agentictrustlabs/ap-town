@@ -1,7 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { PLACE_SHAPES } from '@ap-town/town-scene';
 import { useApi } from '../api';
-import { registeredElsewhere, type Elsewhere } from '../federation';
 import type { NameView } from '../api-types';
 import { Link, nameHref, registerHref, rootHref, useRoute } from '../router';
 import { Waiting, useHomeCeremony } from '../register';
@@ -25,29 +24,19 @@ function Invalid({ v }: { v: NameView }): ReactNode {
 }
 
 function Free({ v }: { v: NameView }): ReactNode {
-  // One name across the federation: the chain says nobody holds it HERE; the resolver says whether another chain's Home
-  // claimed it. Until U3 carries such a claim to the root, this is the only way the root's page can tell the truth.
-  const [elsewhere, setElsewhere] = useState<Elsewhere | null>(null);
-  useEffect(() => {
-    let live = true; setElsewhere(null);
-    if (v.status === 'available' && v.form === 'canonical') void registeredElsewhere(v.name, v.chainId).then((e) => { if (live) setElsewhere(e); });
-    return () => { live = false; };
-  }, [v.name, v.status, v.form, v.chainId]);
+  // One name across the federation: the chain of record says nobody holds it; the service has already asked the other
+  // towns' tables (spec 440 C10) and says, server-side, whether a Home on another chain claimed it. One mechanism.
+  const elsewhere = v.claimedElsewhere?.[0] ?? null;
   return (
     <>
       <section className="title">
         <Glyph kind={v.kind} lit={false} size={72} />
         <div>
           <h1>{v.name} <Chip kind={v.status} /></h1>
-          <p className="lede">{elsewhere ? `Nobody holds this name on this chain — but it is registered on ${elsewhere.town} (eip155:${elsewhere.chainId}).` : v.status === 'available' ? `Nobody holds this name.${v.names ? ` It would name ${v.names}.` : ''}` : v.status === 'expired' ? 'This name has expired and no longer resolves.' : 'This name cannot be claimed here.'}</p>
+          <p className="lede">{elsewhere ? `Nobody holds this name on the root — but a Home on ${elsewhere.town} (eip155:${elsewhere.chainId}) claimed it in that chain’s table.` : v.status === 'available' ? `Nobody holds this name${v.rootedAt ? ` on the root (${v.rootedAt.town})` : ''}.${v.names ? ` It would name ${v.names}.` : ''}` : v.status === 'expired' ? 'This name has expired and no longer resolves.' : 'This name cannot be claimed here.'}</p>
         </div>
       </section>
       <Banners banners={v.banners} />
-      {elsewhere && (
-        <section>
-          <p className="banner banner-warn"><strong>{elsewhere.display}.</strong> A name is one across the federation, and this one was claimed by a Home on {elsewhere.town}{elsewhere.agent ? ` for agent ${elsewhere.agent}` : ''}. The root chain's record for it is not written yet (ap-federation spec 440 U3), so this chain reads it as free — it is not. Nobody else can register it here.</p>
-        </section>
-      )}
       {v.price && (
         <section className="price">
           <div className="price-tag"><span className="price-n">{v.price.coins}</span> <span className="price-coin">{v.price.coin}</span></div>
@@ -64,10 +53,16 @@ function Free({ v }: { v: NameView }): ReactNode {
         <section>
           <h2>Who could {v.price ? 'buy' : 'claim'} it</h2>
           <p><strong>{v.availability.by.charAt(0).toUpperCase() + v.availability.by.slice(1)}.</strong> {v.availability.rule}</p>
-          {v.status === 'available' && v.form === 'canonical' && v.tld && !elsewhere && (
+          {v.status === 'available' && v.form === 'canonical' && v.tld && !elsewhere && !v.rootedAt && (
             <div className="home-cta register">
               <p><strong>Register {v.name}{v.price ? ` for ${v.price.coins} ${v.price.coin}` : ''}.</strong> Four short steps, then your Home signs in a window and this page shows the name as yours.</p>
               <div className="home-cta-row"><Link href={registerHref(v.name)} className="button">Register {v.name} →</Link></div>
+            </div>
+          )}
+          {v.status === 'available' && v.form === 'canonical' && v.tld && !elsewhere && v.rootedAt && (
+            <div className="home-cta register">
+              <p><strong>Registered on the root.</strong> Names are rooted on {v.rootedAt.town}; this town’s table issues none. Register it from the root town’s naming service, at a Home there.</p>
+              <div className="home-cta-row"><a className="button" href={`https://${v.rootedAt.host}/register/${encodeURIComponent(v.name)}`} rel="noreferrer">Register {v.name} on {v.rootedAt.town} →</a></div>
             </div>
           )}
           {v.status === 'available' && v.form !== 'canonical' && <AtYourHome estates={v.estates} verb="Issuing a scoped name" />}
@@ -90,7 +85,7 @@ function Profile({ v }: { v: NameView }): ReactNode {
         {v.displayName && <><dt>Display name</dt><dd>{v.displayName}</dd></>}
         <dt>What it is</dt><dd>{v.declared?.agentType ? `The agent declares itself ${v.declared.noun ?? v.declared.agentType}${v.declared.serviceRole ? ` (role: ${v.declared.serviceRole})` : ''}.` : 'The agent has declared no type.'}</dd>
         {about && <><dt>About</dt><dd>{about.value}</dd></>}
-        <dt>Points at, on this chain</dt><dd>{v.agent ? <><Addr address={v.agent} full />{v.identity?.here?.role === 'satellite' ? <span className="quiet"> · the agent’s account here, not its canonical id</span> : null}</> : 'No agent.'}</dd>
+        <dt>Points at{v.rootedAt ? `, on the root (${v.rootedAt.town})` : ', on this chain'}</dt><dd>{v.agent ? <><Addr address={v.agent} full />{v.identity?.here?.role === 'satellite' ? <span className="quiet"> · the agent’s account here, not its canonical id</span> : null}</> : 'No agent.'}</dd>
         {v.purchase && <><dt>Bought</dt><dd>for {v.purchase.coins} {v.purchase.coin} on {new Date(v.purchase.at * 1000).toISOString().slice(0, 10)}, from its treasury.</dd></>}
         <dt>Presented by the agent</dt><dd>{v.presentsThis ? 'Yes. This is the name the agent shows as its own.' : v.presented ? <>No. It presents <Link href={nameHref(v.presented)}>{v.presented}</Link>.</> : 'No. The agent presents no name.'}</dd>
         {endpoint && <><dt>Reach it at</dt><dd><a href={endpoint.value} rel="noreferrer" className="mono break">{endpoint.value}</a></dd></>}
@@ -239,7 +234,7 @@ export function Name({ name }: { name: string }): ReactNode {
               <h1>{n.name} <Chip kind={mismatch ? 'mismatch' : 'registered'} />{n.legacy && <Chip kind="legacy" />}</h1>
               <p className="lede">{n.displayName ? `${n.displayName}. ` : ''}{n.names ? `A name ending in .${n.tld} names ${n.names}.` : n.form === 'type-node' ? 'A type node: it holds an organization’s scoped names.' : 'An untyped name.'}</p>
               {n.identity?.canonical && <p className="title-addr"><span className="quiet">agent</span> <span className="mono">{n.identity.canonical}</span> <Copy value={n.identity.canonical} label="canonical id" /><span className="quiet"> · its canonical id{n.identity.canonicalTown ? `, home in the ${n.identity.canonicalTown} town` : ''}</span></p>}
-              {n.agent && <p className="title-addr"><span className="quiet">points at, on this chain</span> <Addr address={n.agent} full />{n.identity?.here?.role === 'satellite' ? <span className="quiet"> · the agent’s account here, not its canonical id</span> : null}</p>}
+              {n.agent && <p className="title-addr"><span className="quiet">points at{n.rootedAt ? `, on the root (${n.rootedAt.town})` : ', on this chain'}</span> <Addr address={n.agent} full />{n.identity?.here?.role === 'satellite' ? <span className="quiet"> · the agent’s account here, not its canonical id</span> : null}</p>}
             </div>
           </section>
           {shown && <div className="banner banner-ok" role="status"><strong>{changed ? 'Updated.' : 'Yours.'}</strong> {changed ? 'Changed just now at your Home; this page read it back from the chain.' : 'Registered just now, signed at your Home; this service only read it back from the chain.'}</div>}

@@ -17,13 +17,12 @@ import type { NameView } from './api-types';
 import type { PlaceKind } from '@ap-town/town-scene';
 import { Link, nameHref, registerHref, rootHref, useRoute } from './router';
 import { KIND_OF_TLD } from './register';
-import { registeredElsewhereByLabel, type Elsewhere } from './federation';
 import { Chip, Glyph } from './ui';
 
 const clean = (s: string): string => s.toLowerCase().replace(/[^a-z0-9-]/g, '').slice(0, 63);
 
 /** One root's answer about a label, as `/api/search` gives it. */
-interface LabelRow { name: string; tld: string; names: string | null; kind: PlaceKind; status: 'registered' | 'available' | 'expired'; agent: string | null; by: string; coins: number | null }
+interface LabelRow { name: string; tld: string; names: string | null; kind: PlaceKind; status: 'registered' | 'available' | 'expired'; agent: string | null; by: string; coins: number | null; claimedElsewhere?: { town: string; chainId: number; agent: string | null } | null }
 
 /** The endings a person may charter from here — the same seven the Home's ceremony knows (CHARTER_KINDS). */
 const CHARTERABLE = ['me', 'org', 'team', 'svc', 'church', 'circle', 'household'];
@@ -62,18 +61,15 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
   // label under each root with its status and its price. Only asked in "any kind" mode; with an ending chosen, the
   // single answer above is the answer.
   const [rows, setRows] = useState<LabelRow[] | null>(null);
-  // ONE NAME ACROSS THE FEDERATION: a label this chain reads as free may be registered on another chain (an estate's
-  // Home claims where its agent lives — rich-impact.me on hopechain). The resolver is asked once per label, from the
-  // browser (see federation.ts), and such a row is shown held, not offered.
-  const [elsewhere, setElsewhere] = useState<Record<string, Elsewhere>>({});
   useEffect(() => {
-    if (!any || label.length < 3) { setRows(null); setElsewhere({}); return; }
+    if (!any || label.length < 3) { setRows(null); return; }
     let live = true;
     const t = window.setTimeout(async () => {
       const r = await getJson<{ kind: string; chainId: number; rows?: LabelRow[] }>(`/api/search?q=${encodeURIComponent(label)}`);
       if (!live) return;
+      // ONE NAME ACROSS THE FEDERATION: a row free on the root may be held in another chain's table (an estate's Home
+      // claims where its agent lives — rich-impact.me on hopechain). The service says so on the row (`claimedElsewhere`).
       setRows(r.ok && r.data.kind === 'label' ? r.data.rows ?? [] : []);
-      if (r.ok && r.data.kind === 'label') void registeredElsewhereByLabel(label, r.data.chainId).then((e) => { if (live) setElsewhere(e); });
     }, 300);
     return () => { live = false; window.clearTimeout(t); };
   }, [label, any]);
@@ -83,12 +79,12 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
   // 2026-10-14). This asks the service for the names CONTAINING what was typed, across every ending when the box
   // offers a choice of ending, and within this one on a root page. Two characters is enough: it is a browse aid,
   // and the availability answer beside it is the one anybody acts on.
-  const [like, setLike] = useState<{ hits: Array<{ name: string; tld: string; kind: PlaceKind; names: string | null }>; total: number } | null>(null);
+  const [like, setLike] = useState<{ hits: Array<{ name: string; tld: string; kind: PlaceKind; names: string | null; town?: string }>; total: number } | null>(null);
   useEffect(() => {
     if (label.length < 2) { setLike(null); return; }
     let live = true;
     const t = window.setTimeout(async () => {
-      const r = await getJson<{ hits: Array<{ name: string; tld: string; kind: PlaceKind; names: string | null }>; total: number }>(`/api/names-like?q=${encodeURIComponent(label)}${end ? `&tld=${encodeURIComponent(end)}` : ''}`);
+      const r = await getJson<{ hits: Array<{ name: string; tld: string; kind: PlaceKind; names: string | null; town?: string }>; total: number }>(`/api/names-like?q=${encodeURIComponent(label)}${end ? `&tld=${encodeURIComponent(end)}` : ''}`);
       if (live) setLike(r.ok ? { hits: r.data.hits, total: r.data.total } : null);
     }, 300);
     return () => { live = false; window.clearTimeout(t); };
@@ -138,7 +134,7 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
                 <Glyph kind={h.kind} lit />
                 <span className="row-main">
                   <Link href={nameHref(h.name)} className="row-name">{h.name}</Link>
-                  {h.names && <span className="row-sub">{h.names}</span>}
+                  {(h.names || h.town) && <span className="row-sub">{h.names ?? ''}{h.town ? `${h.names ? ' · ' : ''}in ${h.town}’s table, not on the root` : ''}</span>}
                 </span>
                 <Chip kind="registered" />
               </li>
@@ -156,14 +152,14 @@ export function FindName({ tld, names, choices }: { tld: string; names: string |
           {/* The ones a person may actually charter first; the sort is stable, so inside each group the service's own
               order is kept. */}
           {[...rows].sort((a, b) => (CHARTERABLE.includes(a.tld) ? 0 : 1) - (CHARTERABLE.includes(b.tld) ? 0 : 1)).map((r) => {
-            const far = elsewhere[r.name];
+            const far = r.claimedElsewhere ?? null;
             const mine = CHARTERABLE.includes(r.tld) && r.status === 'available' && !far;
             return (
               <li key={r.name} className="row">
                 <Glyph kind={r.kind} lit={r.status === 'registered' || !!far} />
                 <span className="row-main">
                   <Link href={nameHref(r.name)} className="row-name">{r.name}</Link>
-                  <span className="row-sub">{far ? `registered on ${far.town} (eip155:${far.chainId})${far.agent ? ` by ${far.agent.slice(0, 6)}…${far.agent.slice(-4)}` : ''}` : r.status === 'registered' ? `held${r.agent ? ` by ${r.agent.slice(0, 6)}…${r.agent.slice(-4)}` : ''}` : r.by}</span>
+                  <span className="row-sub">{far ? `claimed on ${far.town} (eip155:${far.chainId})${far.agent ? ` by ${far.agent.slice(0, 6)}…${far.agent.slice(-4)}` : ''} — not on the root` : r.status === 'registered' ? `held${r.agent ? ` by ${r.agent.slice(0, 6)}…${r.agent.slice(-4)}` : ''}` : r.by}</span>
                 </span>
                 <Chip kind={far ? 'registered' : r.status} />
                 {mine && <button type="button" className="button" onClick={() => go(registerHref(r.name))}>Register →</button>}

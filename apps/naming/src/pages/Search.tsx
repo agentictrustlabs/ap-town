@@ -15,20 +15,20 @@ export function Search(): ReactNode {
       <>
         <section>
           <h1>“{s.label}”</h1>
-          <p className="lede">One row per ending in this town. The ending says what kind of agent the name would belong to, so the same label can be a person’s name and an organization’s.</p>
+          <p className="lede">One row per ending{s.rootedAt ? `, read from the root (${s.rootedAt.town})` : ' in this town'}. The ending says what kind of agent the name would belong to, so the same label can be a person’s name and an organization’s.</p>
         </section>
         <section>
           <ul className="rows">
             {s.rows.map((r) => (
               <li key={r.name} className="row">
-                <Glyph kind={r.kind} lit={r.status === 'registered'} />
+                <Glyph kind={r.kind} lit={r.status === 'registered' || !!r.claimedElsewhere} />
                 <span className="row-main">
                   <Link href={nameHref(r.name)} className="row-name">{r.name}</Link>
-                  <span className="row-sub">{r.names ? `${r.status === 'registered' ? 'names' : 'would name'} ${r.names}` : 'legacy root, untyped'}{r.status !== 'registered' && r.by ? ` · ${r.by}` : ''}</span>
+                  <span className="row-sub">{r.claimedElsewhere ? `claimed on ${r.claimedElsewhere.town} (eip155:${r.claimedElsewhere.chainId}) — not on the root` : r.names ? `${r.status === 'registered' ? 'names' : 'would name'} ${r.names}` : 'legacy root, untyped'}{!r.claimedElsewhere && r.status !== 'registered' && r.by ? ` · ${r.by}` : ''}</span>
                 </span>
-                {r.agent && <Addr address={r.agent} />}
-                {r.status !== 'registered' && r.coins !== null && <span className="price-pill">{r.coins} SHQ</span>}
-                <Chip kind={r.status} />
+                {(r.agent ?? r.claimedElsewhere?.agent) && <Addr address={(r.agent ?? r.claimedElsewhere?.agent)!} />}
+                {r.status !== 'registered' && !r.claimedElsewhere && r.coins !== null && <span className="price-pill">{r.coins} SHQ</span>}
+                <Chip kind={r.claimedElsewhere ? 'registered' : r.status} />
               </li>
             ))}
           </ul>

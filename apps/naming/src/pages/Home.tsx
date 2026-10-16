@@ -21,6 +21,7 @@ export function Home(): ReactNode {
       <section className="hero">
         <h1>Every name in the town.</h1>
         <p className="lede">A name is an address card for an agent. Its ending says what the agent is: a person, an organization, a service. A name gives nobody authority.</p>
+        {v.state === 'ready' && v.data.rootedAt && <p className="quiet">Names are one across the federation and rooted on <strong>{v.data.rootedAt.town}</strong>: this page reads the root. What a Home on this chain wrote in this chain’s own table is shown on each name’s page as “on this chain”, never as a name of its own.</p>}
         {/* Find and register, first (owner, 2026-10-06), under ANY ending (owner, 2026-10-14): the box was fixed to
             .me, so the one control on the front page could answer one question of seven. */}
         <FindName tld="me" names="a person" choices={choices} />

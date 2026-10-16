@@ -10,7 +10,6 @@ import type { NameView } from '../api-types';
 import { KIND_OF_TLD, Waiting, connectHref, useHomeCeremony } from '../register';
 import { Link, nameHref, registerHref, rootHref, useRoute } from '../router';
 import { CHARTER_KINDS, handoffHref } from '../session';
-import { registeredElsewhere, type Elsewhere } from '../federation';
 import { Chip, Glyph, Loading, Stamped } from '../ui';
 import { useSession } from '../use-session';
 
@@ -27,13 +26,6 @@ export function RegisterPage({ name }: { name: string }): ReactNode {
   // The payer: the connected person's treasury, read from the chain through this service (430 N6).
   const treasury = useMemo(() => (agents ?? []).find((a) => a.kind === 'person-treasury') ?? null, [agents]);
   const [coins, setCoins] = useState<{ coin: string | null; coins: number | null } | null>(null);
-  // One name across the federation (see Name.tsx): a label claimed by a Home on another chain is not for sale here.
-  const [elsewhere, setElsewhere] = useState<Elsewhere | null>(null);
-  useEffect(() => {
-    let live = true; setElsewhere(null);
-    if (v.state === 'ready' && v.data.status === 'available' && v.data.form === 'canonical') void registeredElsewhere(v.data.name, v.data.chainId).then((e) => { if (live) setElsewhere(e); });
-    return () => { live = false; };
-  }, [v.state === 'ready' ? v.data.name : name, v.state === 'ready' ? v.data.status : '']);
   useEffect(() => {
     if (!treasury) { setCoins(null); return; }
     let live = true;
@@ -78,11 +70,13 @@ export function RegisterPage({ name }: { name: string }): ReactNode {
       if (n.status === 'invalid' || n.form !== 'canonical') {
         return <section><h1>{n.name}</h1><p className="lede">{n.invalid?.detail ?? 'Only a canonical name is registered here.'}</p><p><Link href={nameHref(n.name)}>The name's page →</Link></p></section>;
       }
+      // One name across the federation (see Name.tsx): the service says, server-side, whether another chain's table holds it.
+      const elsewhere = n.claimedElsewhere?.[0] ?? null;
       if (elsewhere) {
         return (
           <section className="title">
             <Glyph kind={n.kind} size={72} />
-            <div><h1>{n.name} <Chip kind="registered" /></h1><p className="lede">Registered on {elsewhere.town} (eip155:{elsewhere.chainId}){elsewhere.agent ? ` for agent ${elsewhere.agent}` : ''}. A name is one across the federation; this chain's record for it is not written yet, so it reads as free here — it is not. <Link href={nameHref(n.name)}>See its page →</Link></p></div>
+            <div><h1>{n.name} <Chip kind="registered" /></h1><p className="lede">Claimed on {elsewhere.town} (eip155:{elsewhere.chainId}){elsewhere.agent ? ` for agent ${elsewhere.agent}` : ''}. A name is one across the federation; that claim has not been carried to the root yet, so the root reads it as free — it is not. <Link href={nameHref(n.name)}>See its page →</Link></p></div>
           </section>
         );
       }

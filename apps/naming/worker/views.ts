@@ -7,11 +7,12 @@ import {
 import { TOWNS, placeAgent, type TownManifest } from '@ap-town/town-model';
 import { concat, isAddress, keccak256 } from 'viem';
 import type {
-  Address, AddressView, Banner, CanRow, DisplayView, EstateOfAgent, EstateRef, Hex, NameRow, NameView, RecordRow,
+  Address, AddressView, Banner, CanRow, ClaimedElsewhere, DisplayView, EstateOfAgent, EstateRef, Hex, NameRow, NameView, RecordRow,
   RootPage, RootView, SearchRow, SearchView, Signal, Stamp, TownView,
 } from '../src/api-types';
 import type { PlaceKind } from '@ap-town/town-scene';
 import { ZERO, ZERO_NODE, type Chain } from './chain';
+import type { Peer } from './peers';
 import { NOUN, RECORD_LABEL, RULE_WORDS, kindOfTld, kindOfType, nounOfTld, typeOfTld } from './words';
 
 export const PAGE_SIZE = 48;
@@ -45,6 +46,10 @@ export interface Ctx {
   chain: Chain;
   /** Ask the town's registry whether it lists an agent. `null` = it could not be asked. */
   listed(agent: Address): Promise<boolean | null>;
+  /** The other towns' naming services (spec 440 §C5's road). Empty when this build knows no other town. */
+  peers: Peer[];
+  /** The ROOT town's naming service when this town's names are rooted elsewhere (`chain.namesRootedAt`); null on a root. */
+  root: Peer | null;
 }
 
 const lower = (a: string): Address => a.toLowerCase() as Address;
@@ -161,7 +166,7 @@ async function rowsUnder(ctx: Ctx, parentOnChain: string, from: number, size: nu
   return { rows, total: hashes.length };
 }
 
-export async function townView(ctx: Ctx): Promise<TownView> {
+export async function townViewLocal(ctx: Ctx): Promise<TownView> {
   const [s, roots] = await Promise.all([stamp(ctx), rootViews(ctx)]);
   const samples = await Promise.all(roots.map((r) => (r.count ? rowsUnder(ctx, r.tld, 0, SAMPLE).then((x) => x.rows) : Promise.resolve([]))));
   let fees: TownView['fees'] = null;
@@ -172,7 +177,7 @@ export async function townView(ctx: Ctx): Promise<TownView> {
   return { ...s, estates: estatesOf(ctx.town), fees, roots: roots.map((r, i) => ({ ...r, sample: samples[i] ?? [] })), total: roots.reduce((n, r) => n + r.count, 0) };
 }
 
-export async function rootPage(ctx: Ctx, tld: string, page: number): Promise<RootPage | null> {
+export async function rootPageLocal(ctx: Ctx, tld: string, page: number): Promise<RootPage | null> {
   const t = tld.toLowerCase();
   if (!/^[a-z0-9-]{1,63}$/.test(t)) return null;
   const node = await ctx.chain.reg<Hex>('rootByLabel', [t]);
@@ -256,7 +261,7 @@ function capabilities(v: { name: string; tld: string | null; owner: Address | nu
   return rows;
 }
 
-export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
+export async function nameViewLocal(ctx: Ctx, input: string): Promise<NameView> {
   const { chain, town } = ctx;
   const s = await stamp(ctx);
   const estates = estatesOf(town);
@@ -538,7 +543,7 @@ export function labelRefusal(label: string): { rule: string; detail: string } | 
   return null;
 }
 
-export async function searchView(ctx: Ctx, query: string): Promise<SearchView> {
+export async function searchViewLocal(ctx: Ctx, query: string): Promise<SearchView> {
   const { chain, town } = ctx;
   const s = await stamp(ctx);
   let q = query.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/\/.*$/, '');
@@ -589,7 +594,8 @@ export async function searchView(ctx: Ctx, query: string): Promise<SearchView> {
 // No log scan and no index of our own — the reads batch forty to an HTTP request, so the whole town is a handful
 // of calls. The answer is CACHED for a few minutes because it is a browse aid; whether a particular name is free
 // is asked uncached, every time, and that is the answer anyone acts on.
-export interface LabelHit { name: string; label: string; tld: string; kind: PlaceKind; names: string | null }
+export interface LabelHit { name: string; label: string; tld: string; kind: PlaceKind; names: string | null; /** Set when the hit comes from another chain's LOCAL table, not the chain of record. */ town?: string }
+export type NamesLikeView = Stamp & { label: string; tld: string | null; hits: LabelHit[]; total: number; scanned: number };
 
 const LABELS_TTL_S = 600;
 /** Labels read per HTTP batch. The client packs forty calls into one request; asking for every label at once
@@ -623,7 +629,7 @@ async function allLabels(ctx: Ctx): Promise<LabelHit[]> {
  * is a property of the names and not of the order the chain happens to hold them in. A type filter is a hard
  * filter here as everywhere: it removes, it never re-orders.
  */
-export async function namesLike(ctx: Ctx, query: string, tld: string | null, limit = 60): Promise<Stamp & { label: string; tld: string | null; hits: LabelHit[]; total: number; scanned: number }> {
+export async function namesLikeLocal(ctx: Ctx, query: string, tld: string | null, limit = 60): Promise<NamesLikeView> {
   const s = await stamp(ctx);
   const q = query.trim().toLowerCase();
   if (q.length < 2 || !/^[a-z0-9-]{2,63}$/.test(q)) return { ...s, label: q, tld, hits: [], total: 0, scanned: 0 };
@@ -635,4 +641,130 @@ export async function namesLike(ctx: Ctx, query: string, tld: string | null, lim
   const inside = pool.filter((h) => !h.label.startsWith(q) && h.label.includes(q)).sort((a, b) => a.label.localeCompare(b.label) || a.tld.localeCompare(b.tld));
   const hits = [...starts, ...inside];
   return { ...s, label: q, tld, hits: hits.slice(0, limit), total: hits.length, scanned: all.length };
+}
+
+// ── ONE NAMESPACE, ONE ROOT (ap-federation spec 440 §C) ──────────────────────────────────────────────────────────
+//
+// The readers above answer from THIS chain. A chain is one of two things to the namespace: the ROOT, whose registry is
+// the record of every typed name, or a LOCAL TABLE on a chain whose names are rooted elsewhere (`chain.namesRootedAt`).
+// The exported views below are what the API serves, and they put each chain in its place:
+//
+//   • A town rooted elsewhere asks the ROOT town for "does it exist / is it free" (every answer carries `rootedAt`), and
+//     shows its own table only as `local` — "on this chain" — never as availability. Before this (2026-10-16),
+//     names.hopenet.town read its table as a root and offered `alice.me`, registered on the root since the first town.
+//   • The root, whose chain says a name is free, asks the OTHER towns' tables whether a Home there claimed it. Until
+//     wave U3 carries such a claim to the root, that is where `rich-impact.me` is — and the root's page says so,
+//     as `claimedElsewhere`, instead of listing it for sale.
+//
+// Peers are asked with `?local=1`, which answers from the table alone, so a root asking a rooted town never comes back
+// around to the root. A peer that cannot be asked is `null` in the answer ("could not be asked"), never "nowhere"; a
+// ROOT that cannot be asked is an error, because a rooted town has no other honest answer (ADR-0013).
+
+const rootUnreachable = (ctx: Ctx, why: string): Error => new Error(`names here are rooted at ${ctx.root!.town}, whose naming service could not be asked — ${why}`);
+
+/** This town's stamp over the root's answer: our chain and block, and the root's as `rootedAt`. */
+async function rootedStamp(ctx: Ctx, rootAnswer: Stamp): Promise<Stamp> {
+  const s = await stamp(ctx);
+  return { ...s, rootedAt: { town: rootAnswer.town, chainId: rootAnswer.chainId, block: rootAnswer.block, host: ctx.root!.host } };
+}
+
+async function fromRoot<T extends Stamp>(ctx: Ctx, path: string): Promise<T> {
+  const r = await ctx.root!.get<T>(path);
+  if (!r.ok) throw rootUnreachable(ctx, r.error);
+  return { ...r.data, ...(await rootedStamp(ctx, r.data)) };
+}
+
+/** On a root: which other towns' tables hold `name`. `null` when any peer could not be asked. */
+async function claimedElsewhereOf(ctx: Ctx, name: string): Promise<ClaimedElsewhere[] | null> {
+  if (!ctx.peers.length) return [];
+  const answers = await Promise.all(ctx.peers.map((p) => p.get<NameView>(`/name/${encodeURIComponent(name)}?local=1`)));
+  if (answers.some((a) => !a.ok)) return null;
+  return answers.flatMap((a, i) => (a.ok && a.data.status === 'registered' ? [{ town: ctx.peers[i]!.town, chainId: ctx.peers[i]!.chainId, agent: a.data.agent, owner: a.data.owner }] : []));
+}
+
+const elsewhereBanner = (rows: ClaimedElsewhere[]): Banner => ({
+  tone: 'warn', title: `Claimed on ${rows.map((r) => r.town).join(' and ')}, not on the root`,
+  body: `A Home on ${rows.map((r) => `${r.town} (eip155:${r.chainId})`).join(' and ')} wrote this name in that chain's table${rows[0]?.agent ? `, pointing at ${rows[0].agent}` : ''}. A name is one across the federation and its record is this chain's; that claim has not been carried here yet (spec 440 U3), so this chain reads the name as free — it is not, and nobody else should register it here.`,
+});
+
+export async function nameView(ctx: Ctx, input: string): Promise<NameView> {
+  if (!ctx.root) {
+    const v = await nameViewLocal(ctx, input);
+    if ((v.status !== 'available' && v.status !== 'expired') || v.form !== 'canonical') return v;
+    const claimedElsewhere = await claimedElsewhereOf(ctx, v.name);
+    const banners = claimedElsewhere?.length ? [elsewhereBanner(claimedElsewhere), ...v.banners] : claimedElsewhere === null ? [...v.banners, { tone: 'info' as const, title: 'The other towns could not be asked', body: 'Whether a Home on another chain has claimed this name in its own table could not be checked just now. This chain’s answer stands; the federation’s does not yet.' }] : v.banners;
+    return { ...v, banners, claimedElsewhere };
+  }
+  // Rooted elsewhere: the root's answer is the answer; this chain's table is shown beside it, never instead of it.
+  const r = await fromRoot<NameView>(ctx, `/name/${encodeURIComponent(input.trim())}`);
+  if (r.status === 'invalid' || r.form === 'root') return { ...r, local: null };
+  const { chain, town } = ctx;
+  const node = r.node;
+  const [exists, ownerRaw, target] = await Promise.all([chain.reg<boolean>('recordExists', [node]), chain.reg<Address>('owner', [node]), chain.ur<Address>('resolveName', [node])]);
+  const local: NonNullable<NameView['local']> = { town: town.town, chainId: town.chain.id, exists, agent: nz(target), owner: nz(ownerRaw) };
+  const banners: Banner[] = [];
+  if (r.status === 'registered' && local.exists) {
+    const differs = !!local.agent && !!r.agent && local.agent !== r.agent;
+    banners.push({
+      tone: differs ? 'warn' : 'info', title: differs ? 'This chain’s table points elsewhere' : 'Also in this chain’s table',
+      body: `This chain (eip155:${town.chain.id}) has its own entry for ${r.name}${local.agent ? `, pointing at ${local.agent}` : ''}. The root’s record above is the name (spec 440 C10); this entry is a copy a Home on this chain wrote${differs ? ' — and it names a different account than the root does. Readers follow the root.' : '.'}`,
+    });
+  } else if (r.status !== 'registered' && local.exists) {
+    banners.push({
+      tone: 'warn', title: 'Claimed only on this chain',
+      body: `A Home on ${town.town} wrote ${r.name} in this chain’s table${local.agent ? `, pointing at ${local.agent}` : ''}, which is not the root. On the root (${ctx.root.town}) the name is free: until this claim is carried there (spec 440 U3), another agent could take it on the root, and the root’s record is the one that counts.`,
+    });
+  }
+  const availability = r.status === 'available' && r.availability
+    ? { by: `an agent, at a Home on the ${ctx.root.town} town`, rule: `Names are rooted on ${ctx.root.town} (spec 440 §C): a claim made at a Home on this chain lands in this chain’s table only and is not the name. Until a Home here can claim into the root (wave U3), a root name is claimed at a Home on ${ctx.root.town}. There: ${r.availability.rule}` }
+    : r.availability;
+  return { ...r, availability, banners: [...banners, ...r.banners], local };
+}
+
+export async function searchView(ctx: Ctx, query: string): Promise<SearchView> {
+  if (ctx.root) return fromRoot<SearchView>(ctx, `/search?q=${encodeURIComponent(query)}`);
+  const v = await searchViewLocal(ctx, query);
+  if (v.kind !== 'label' || !ctx.peers.length || !v.rows.some((r) => r.status !== 'registered')) return v;
+  const answers = await Promise.all(ctx.peers.map((p) => p.get<SearchView>(`/search?q=${encodeURIComponent(v.label)}&local=1`)));
+  const anyUnasked = answers.some((a) => !a.ok);
+  const rows: SearchRow[] = v.rows.map((row) => {
+    if (row.status === 'registered') return row;
+    for (const [i, a] of answers.entries()) {
+      if (!a.ok || a.data.kind !== 'label') continue;
+      const hit = a.data.rows.find((x) => x.name === row.name && x.status === 'registered');
+      if (hit) return { ...row, claimedElsewhere: { town: ctx.peers[i]!.town, chainId: ctx.peers[i]!.chainId, agent: hit.agent, owner: null } };
+    }
+    // Held nowhere else that answered; `null` says a table could not be asked, so "free" is this chain's word only.
+    return anyUnasked ? { ...row, claimedElsewhere: null } : row;
+  });
+  return { ...v, rows };
+}
+
+export async function namesLike(ctx: Ctx, query: string, tld: string | null, limit = 60): Promise<NamesLikeView> {
+  const q = `/names-like?q=${encodeURIComponent(query)}${tld ? `&tld=${encodeURIComponent(tld)}` : ''}&local=1`;
+  // The chain of record first; then every other table, each hit saying whose table it is. A table that cannot be
+  // asked contributes nothing — a browse aid never costs anyone the answer beside it.
+  const [record, others] = await Promise.all([
+    ctx.root ? fromRoot<NamesLikeView>(ctx, q) : namesLikeLocal(ctx, query, tld, limit),
+    Promise.all([
+      ...(ctx.root ? [namesLikeLocal(ctx, query, tld, limit).then((v) => ({ town: ctx.town.town, hits: v.hits })).catch(() => ({ town: ctx.town.town, hits: [] as LabelHit[] }))] : []),
+      ...ctx.peers.filter((p) => p !== ctx.root).map((p) => p.get<NamesLikeView>(q).then((a) => ({ town: p.town, hits: a.ok ? a.data.hits : [] }))),
+    ]),
+  ]);
+  const seen = new Set(record.hits.map((h) => h.name));
+  const extra = others.flatMap((o) => o.hits.filter((h) => !seen.has(h.name) && seen.add(h.name)).map((h) => ({ ...h, town: o.town })));
+  const hits = [...record.hits, ...extra];
+  return { ...record, hits: hits.slice(0, limit), total: hits.length };
+}
+
+export async function townView(ctx: Ctx): Promise<TownView> {
+  return ctx.root ? fromRoot<TownView>(ctx, '/town') : townViewLocal(ctx);
+}
+
+export async function rootPage(ctx: Ctx, tld: string, page: number): Promise<RootPage | null> {
+  if (!ctx.root) return rootPageLocal(ctx, tld, page);
+  const r = await ctx.root.get<RootPage | { error: string }>(`/root/${encodeURIComponent(tld)}?page=${page}`);
+  if (!r.ok) { if (/ 404 /.test(` ${r.error} `)) return null; throw rootUnreachable(ctx, r.error); }
+  if ('error' in r.data) return null;
+  return { ...r.data, ...(await rootedStamp(ctx, r.data)) };
 }

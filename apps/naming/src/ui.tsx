@@ -109,6 +109,7 @@ export function AtYourHome({ estates, verb, claim, name }: { estates: EstateRef[
 }
 
 export function Stamped({ s }: { s: Stamp }): ReactNode {
+  if (s.rootedAt) return <p className="stamp">Names are rooted on {s.rootedAt.town}: read from the root chain {s.rootedAt.chainId} at block {s.rootedAt.block.toLocaleString()}, and this chain {s.chainId} at block {s.block.toLocaleString()}. Nothing sits between this page and either chain.</p>;
   return <p className="stamp">Read from chain {s.chainId} at block {s.block.toLocaleString()}. Nothing sits between this page and the chain.</p>;
 }
 
