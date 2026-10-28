@@ -84,7 +84,7 @@ export function CostTab({ t, perf, window, onWindow }: { t: TownData; perf: Perf
   const byBasis = BASIS_ORDER.map((b) => ({ basis: b, rows: rows.filter((r) => r.basis === b) })).filter((x) => x.rows.length);
   /** How many distinct days a set of rows actually carries — the honest span of a basis total. */
   const daysCovered = (rs: CostRow[]): number => new Set(rs.flatMap((r) => r.days.map((d) => d.day))).size;
-  const runningMonth = perf.months.find((m) => m.toDate);
+  const runningMonth = perf.months.find((m) => m.toDate && m.ok);
   const monthBilled = runningMonth ? { micro: runningMonth.amountMicroUsd, through: runningMonth.throughDay } : null;
   const days = perf.days;
   const dayTotal = (rs: CostRow[], day: string): number => rs.reduce((n, r) => n + (r.days.find((d) => d.day === day)?.amountMicroUsd ?? 0), 0);
@@ -309,9 +309,9 @@ function Months({ months }: { months: PerfView['months'] }): ReactNode {
         <strong> The total is the whole subscription</strong> — this one also pays for work that is not the
         town&rsquo;s — so each month also shows the part billed to a scope <span className="mono">town.yaml</span> claims.
       </SectionHead>
-      {typical !== null && running.length > 0 && (
+      {typical !== null && running.some((m) => m.ok) && (
         <p className="lede">
-          This month through {running[0]!.throughDay}: <strong>{fmtUsd(running[0]!.amountMicroUsd)}</strong>
+          This month through {running.find((m) => m.ok)!.throughDay}: <strong>{fmtUsd(running.find((m) => m.ok)!.amountMicroUsd)}</strong>
           {last && <span className="quiet"> · {last.month} finished at {fmtUsd(last.amountMicroUsd)}</span>}
           <span className="quiet"> · the {recent.length} finished month{recent.length === 1 ? '' : 's'} {recent[0]!.month}–{recent[recent.length - 1]!.month} averaged {fmtUsd(Math.round(typical))}</span>
         </p>
@@ -325,7 +325,7 @@ function Months({ months }: { months: PerfView['months'] }): ReactNode {
           return (
             <tr key={`${m.platform}|${m.account}|${m.month}`}>
               <th scope="row" className="mono">{m.month}{m.toDate && <> <Chip tone="warn">through {m.throughDay.slice(8)}</Chip></>}</th>
-              <td className="num">{m.ok ? fmtUsd(m.amountMicroUsd) : <span className="quiet">unreadable</span>}</td>
+              <td className="num">{m.ok ? fmtUsd(m.amountMicroUsd) : <span className="quiet">could not read</span>}</td>
               <td className="num">{(() => { const t2 = mine(m); return t2 === null ? <span className="quiet">—</span> : <>{fmtUsd(t2)} <span className="quiet">{m.amountMicroUsd > 0 ? `${Math.round((t2 / m.amountMicroUsd) * 100)}%` : ''}</span></>; })()}</td>
               {/* A change of −0.4% printed as "-0%", which reads as a bug rather than as "the same". */}
               <td className="num">{delta === null ? <span className="quiet">—</span> : <span style={{ color: delta > 0.15 ? 'var(--warn-ink, #92400e)' : undefined }}>{Math.round(delta * 100) === 0 ? '0%' : `${delta > 0 ? '+' : ''}${(delta * 100).toFixed(0)}%`}</span>}</td>
@@ -353,7 +353,7 @@ function Months({ months }: { months: PerfView['months'] }): ReactNode {
  * the page says which it is.
  */
 function Worth({ months, rows, days }: { months: PerfView['months']; rows: CostRow[]; days: string[] }): ReactNode {
-  const running = months.find((m) => m.toDate);
+  const running = months.find((m) => m.toDate && m.ok);
   const done = months.filter((m) => !m.toDate);
   const recent = done.slice(-6);
   const baseline = recent.length ? recent.reduce((n, m) => n + m.amountMicroUsd, 0) / recent.length : null;

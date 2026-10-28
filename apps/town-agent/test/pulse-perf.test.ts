@@ -1,10 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import type { CostSampleV1, InfraSampleV1, TownManifest } from '@ap-town/town-model';
+import type { CostMonthV1, CostSampleV1, InfraSampleV1, TownManifest } from '@ap-town/town-model';
 import { readPerformance, daysOf, operatorAuthorized, type InfraRowV1 } from '../worker/pulse-perf';
 
 // The town MCP's stored rows (spec 437 §4): the portal reads these over its service binding and holds no credential.
 const toInfraSample = (s: InfraSampleV1): InfraRowV1 => ({ kind: 'infra', id: `${s.platform}|${s.account}|${s.kind}|${s.resource}`, at: s.at, ok: s.ok, payload: s, ...(s.error ? { error: s.error } : {}) });
 const toCostSample = (c: CostSampleV1): InfraRowV1 => ({ kind: 'cost', id: `${c.platform}|${c.account}|${c.day}|${c.resource}|${c.sku ?? ''}|${c.basis}`, at: c.asOf, ok: c.ok, payload: c, ...(c.error ? { error: c.error } : {}) });
+const toMonth = (m: CostMonthV1): InfraRowV1 => ({ kind: 'cost-month', id: `${m.platform}|${m.account}|${m.month}|${m.basis}`, at: m.asOf, ok: m.ok, payload: m, ...(m.error ? { error: m.error } : {}) });
 import { dayRollup } from '../worker/pulse-record';
 import type { PulseSampleV1 } from '../worker/pulse';
 
@@ -17,6 +18,7 @@ const town = {
 } as unknown as TownManifest;
 const infra = (p: Partial<InfraSampleV1>): InfraSampleV1 => ({ type: 'ap.infra-sample.v1', platform: 'cloudflare', account: 'acctA', resource: 'demo-a2a-faithnet', kind: 'worker', at: new Date(NOW - 60_000).toISOString(), asOf: new Date(NOW - 120_000).toISOString(), lagClass: 'hourly', status: 'up', metrics: { requests: 100, errors: 1 }, ok: true, ...p });
 const cost = (p: Partial<CostSampleV1>): CostSampleV1 => ({ type: 'ap.cost-sample.v1', platform: 'vercel', account: 'team_1', day: '2026-10-09', resource: 'faithnet-home', sku: 'pro', amountMicroUsd: 1_000_000, basis: 'billed', asOf: new Date(NOW - 3_600_000).toISOString(), complete: true, ok: true, ...p });
+const month = (p: Partial<CostMonthV1>): CostMonthV1 => ({ type: 'ap.cost-month.v1', platform: 'azure', account: 'sub1', month: '2026-10', basis: 'billed', amountMicroUsd: 10_000_000, byService: [{ key: 'Virtual Machines', amountMicroUsd: 10_000_000 }], byScope: [{ key: 'rg-a', amountMicroUsd: 10_000_000 }], toDate: true, throughDay: '2026-10-09', asOf: new Date(NOW - 86_400_000).toISOString(), ok: true, ...p });
 const hb = (at: string, completed: number, inferenceMicroUsd: number | null = 500_000, performance?: unknown): PulseSampleV1 => ({ kind: 'estate', id: 'faithnet', at, ok: true, payload: { type: 'ap.estate-heartbeat.v1', estate: 'faithnet', at, window: '24h', generation: '1', versions: {}, agents: { person: 1, org: 1, service: 1 }, homesActive24h: 1, runs: { started: completed, completed, parked: 0, failed: 0, canceled: 0 }, parkedForSignature: 0, modelCalls: 1, tokensIn: 1, tokensOut: 1, inferenceMicroUsd, vaultCalls: 1, doRequests: 1, askLatencyP95Ms: 100, ...(performance ? { performance } : {}) } });
 
 describe('readPerformance (spec 437 §5)', () => {
@@ -135,6 +137,13 @@ describe('readPerformance (spec 437 §5)', () => {
     expect(dayRollup(samples, '2026-10-10')).not.toHaveProperty('pulse');
     // Without the MCP's rows the record still writes, with no infrastructure in it — never a zero dressed as a reading.
     expect((dayRollup(samples, '2026-10-10', town) as { pulse: { infrastructure: unknown[] } }).pulse.infrastructure).toEqual([]);
+  });
+  it('a later failed month read does not hide the last good sample (I3)', () => {
+    const good = month({ asOf: '2026-10-09T06:30:00.000Z', throughDay: '2026-10-09', amountMicroUsd: 10_000_000 });
+    const failed = month({ asOf: '2026-10-10T06:30:00.000Z', throughDay: '2026-10-10', amountMicroUsd: 0, byService: [], byScope: [], ok: false, error: 'answered 429' });
+    const r = readPerformance(town, [], [toMonth(good), toMonth(failed)], { window: '7d', nowMs: NOW, detail: true });
+    expect(r.months[0]).toMatchObject({ ok: true, amountMicroUsd: 10_000_000, throughDay: '2026-10-09' });
+    expect(r.months[0]!.error).toMatch(/later read failed/);
   });
   it('days of a window end today; the operator token is compared in constant time and an unset token admits nobody', () => {
     expect(daysOf('24h', NOW)).toEqual(['2026-10-10']);

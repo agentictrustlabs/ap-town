@@ -56,6 +56,16 @@ export function monthsBack(nowMs: number, n: number): string {
   const d = new Date(nowMs);
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() - (n - 1), 1)).toISOString().slice(0, 10);
 }
+/**
+ * Azure Cost Management refuses a `to` in the future. A pass at 06:30 UTC used to send `todayT23:59:59Z`,
+ * which is still ahead of the clock, and the month history came back as one failed row for the running
+ * month — the table then said "unreadable" (2026-10-18). Clamp to `at`.
+ */
+export function costPeriodEnd(day: string, at: string): string {
+  const end = `${day}T23:59:59Z`;
+  return Date.parse(end) <= Date.parse(at) ? end : at.replace(/\.\d{3}Z$/, 'Z');
+}
+
 /** `[day − days + 1, day]` as `YYYY-MM-DD` for a rolling cost window ending yesterday. */
 export function rollingDays(nowMs: number, days: number): { from: string; to: string; days: string[] } {
   const end = Math.floor(nowMs / 86_400_000) * 86_400_000 - 86_400_000;

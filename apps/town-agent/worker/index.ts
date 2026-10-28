@@ -14,7 +14,7 @@ import { TOWNS, allMcpServers, attributeEndpoint, estateMcpServers, estateOf, es
 import { agentCardHost, contextAgentViews, describe, serviceViews, townSummary, type Probe, type ServiceView } from './signals';
 import { samplePulse, readPulse, type PulseSampleV1, type PulseEnv } from './pulse';
 import { recordDay, pulseRecordReadiness, contextAgents, type PulseRecordEnv } from './pulse-record';
-import { PERF_WINDOWS, operatorAuthorized, readPerformance, type InfraRowV1, type PerfWindow } from './pulse-perf';
+import { PERF_WINDOWS, operatorAuthorized, readPerformance, stepMsOf, type InfraRowV1, type PerfWindow } from './pulse-perf';
 import { readAsOperator, verifyHomeToken } from './steward';
 import { cardContentDigest } from '@agenticprimitives/agent-profile/a2a';
 import faithchainRelease from '../released/faithchain-card.json';
@@ -59,11 +59,14 @@ interface Env {
 /** The capability a context agent offers a stranger (spec 436 §5.5 T3) — the runtime's public lane allows it by this id. */
 const PULSE_PUBLIC_ASK = 'pulse.public.ask';
 
-export async function infraRowsFrom(env: Env, fromMs: number): Promise<{ rows: InfraRowV1[]; unavailable: string | null }> {
+export async function infraRowsFrom(env: Env, fromMs: number, opts: { step?: number; rollup?: 'sku' } = {}): Promise<{ rows: InfraRowV1[]; unavailable: string | null }> {
   if (!env.INFRA) return { rows: [], unavailable: 'the town MCP is not bound on this deployment' };
   if (!env.TOWN_OPS_TOKEN) return { rows: [], unavailable: 'this deployment has no town ops token, so it cannot read the town MCP' };
+  // Ask at the resolution this read draws: one sample per cadence per `step`, and cost days summed over the SKU —
+  // the store holds every sample and every SKU, and a month of those in one answer is what overflowed (2026-10-28).
+  const q = `from=${fromMs}${opts.step ? `&step=${opts.step}` : ''}${opts.rollup ? `&rollup=${opts.rollup}` : ''}`;
   try {
-    const r = await env.INFRA.fetch(new Request(`https://town-mcp/infra/read?from=${fromMs}`, { headers: { accept: 'application/json', authorization: `Bearer ${env.TOWN_OPS_TOKEN}` }, signal: AbortSignal.timeout(15_000) }));
+    const r = await env.INFRA.fetch(new Request(`https://town-mcp/infra/read?${q}`, { headers: { accept: 'application/json', authorization: `Bearer ${env.TOWN_OPS_TOKEN}` }, signal: AbortSignal.timeout(15_000) }));
     if (!r.ok) return { rows: [], unavailable: `the town MCP answered ${r.status}` };
     return { rows: (await r.json()) as InfraRowV1[], unavailable: null };
   } catch (e) { return { rows: [], unavailable: `the town MCP could not be asked: ${e instanceof Error ? e.message : String(e)}` }; }
@@ -457,7 +460,7 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return json({ ok: false, error: 'day must be YYYY-MM-DD' }, 400);
     const store = env.HEARTBEAT.get(env.HEARTBEAT.idFromName(town.town));
     const all = (await (await store.fetch(`https://pulse/read?from=${Date.parse(day)}`)).json()) as PulseSampleV1[];
-    const landed = await recordDay(env as PulseRecordEnv, all, day, fetch, town, (await infraRowsFrom(env, Date.parse(day))).rows);
+    const landed = await recordDay(env as PulseRecordEnv, all, day, fetch, town, (await infraRowsFrom(env, Date.parse(day), { step: stepMsOf('24h'), rollup: 'sku' })).rows);
     await store.fetch('https://pulse/record-outcome', { method: 'POST', body: JSON.stringify({ at: new Date().toISOString(), day, landed }) }).catch(() => undefined);
     return json({ ok: landed.every((l) => l.ok), day, samples: all.length, landed });
   }
@@ -527,7 +530,7 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
       return json({ attribution, source, reading: null, detail }, 200, { 'cache-control': 'public, max-age=300' });
     }
     const from = Date.now() - 24 * 3600_000;
-    const infra = await infraRowsFrom(env, from);
+    const infra = await infraRowsFrom(env, from, { step: stepMsOf('24h'), rollup: 'sku' });
     const resource = attribution.worker ?? attribution.vercelProject!;
     const samples = infra.rows
       .filter((r) => r.kind === 'infra')
@@ -676,7 +679,7 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     const asOperator = byToken ? null : await readAsOperator(town, authorization).catch(() => null);
     const detail = byToken || !!asOperator?.ok;
     const readAs = byToken ? { by: 'token' as const } : asOperator?.ok ? { by: 'connection' as const, name: asOperator.name, agent: asOperator.agent } : undefined;
-    const infra = await infraRowsFrom(env, from);
+    const infra = await infraRowsFrom(env, from, { step: stepMsOf(window), rollup: 'sku' });
     const performance = readPerformance(town, samples, infra.rows, { window, nowMs, detail });
     return json({ ...readPulse(town, samples, window === '90d' ? '30d' : window), performance: { ...performance, ...(infra.unavailable ? { unavailable: infra.unavailable } : {}), ...(readAs ? { readAs } : {}) } }, 200, detail ? { 'cache-control': 'private, no-store' } : { 'cache-control': 'public, max-age=60' });
   }
@@ -781,7 +784,7 @@ export async function takeSample(env: Env, town: TownManifest): Promise<number> 
   if (new Date().getUTCMinutes() < 5 && pulseRecordReadiness(env as PulseRecordEnv).ready) {
     const day = new Date().toISOString().slice(0, 10);
     const all = (await (await store.fetch(`https://pulse/read?from=${Date.parse(day)}`)).json()) as PulseSampleV1[];
-    const landed = await recordDay(env as PulseRecordEnv, all, day, fetch, town, (await infraRowsFrom(env, Date.parse(day))).rows);
+    const landed = await recordDay(env as PulseRecordEnv, all, day, fetch, town, (await infraRowsFrom(env, Date.parse(day), { step: stepMsOf('24h'), rollup: 'sku' })).rows);
     for (const l of landed) if (!l.ok) console.warn(`[pulse-record] ${l.agent} ${l.recordType}: ${l.error}`);
     // KEPT, NOT ONLY LOGGED. A write that the vault refuses is the one thing that makes the Ask answer "I
     // have no record", and until this was stored the only way to see it was the ops token and a log tail.

@@ -147,6 +147,29 @@ describe('azure collector', () => {
     expect(noScope[0]!.error).toMatch(/scope split could not be read/);
   });
 
+  it('a morning pass does not ask Azure for a `to` still in the future', async () => {
+    let seen = '';
+    const answer = json({ properties: { columns: [{ name: 'Cost' }, { name: 'BillingMonth' }, { name: 'ServiceName' }, { name: 'Currency' }], rows: [[10, '2026-10-01T00:00:00', 'Virtual Machines', 'USD']] } });
+    await collectAzureMonths(cfg, 'tok', { from: '2026-09-01', to: '2026-10-13' }, fetchOf((_u, init) => { seen = String((init as RequestInit)?.body ?? ''); return answer; }), '2026-10-13T06:30:00.000Z');
+    expect(JSON.parse(seen).timePeriod.to).toBe('2026-10-13T06:30:00Z');
+  });
+
+  it('yyyyMM BillingMonth is a month, and a history that omits the running month is asked again for this month', async () => {
+    const cols = (dim: string) => [{ name: 'Cost' }, { name: 'BillingMonth' }, { name: dim }, { name: 'Currency' }];
+    const row = (cost: number, month: number, key: string) => [cost, month, key, 'USD'];
+    const ms = await collectAzureMonths(cfg, 'tok', { from: '2026-09-01', to: '2026-10-13' }, fetchOf((_u, init) => {
+      const body = String((init as RequestInit)?.body ?? '');
+      const dim = body.includes('ServiceName') ? 'ServiceName' : 'ResourceGroupName';
+      const mtd = body.includes('"from":"2026-10-01T00:00:00Z"');
+      return json({ properties: { columns: cols(dim), rows: mtd
+        ? [row(10, 202610, dim === 'ServiceName' ? 'Virtual Machines' : 'rg-a')]
+        : [row(100, 202609, dim === 'ServiceName' ? 'Virtual Machines' : 'rg-a')] } });
+    }), '2026-10-13T12:00:00.000Z');
+    expect(ms.map((m) => m.month)).toEqual(['2026-09', '2026-10']);
+    expect(ms[1]).toMatchObject({ month: '2026-10', amountMicroUsd: 10_000_000, toDate: true, ok: true, throughDay: '2026-10-13' });
+    expect(ms[1]!.byScope.map((x) => x.key)).toEqual(['rg-a']);
+  });
+
   it('an unregistered Microsoft.ResourceHealth says so, not "auth"', async () => {
     const body = { code: 'AuthError', message: 'An error occured in authentication or authorization. Make sure the resource provider has been registered with this subscription' };
     const [s] = await collectAzureHealth(cfg, 'tok', [vm], fetchOf(() => json(body, 409)), AT);

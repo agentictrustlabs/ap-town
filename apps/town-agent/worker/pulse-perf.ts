@@ -13,6 +13,9 @@ import { SAMPLE_INTERVAL_MS } from './pulse';
 export type PerfWindow = '24h' | '7d' | '30d' | '90d';
 export const PERF_WINDOWS: PerfWindow[] = ['24h', '7d', '30d', '90d'];
 export const windowMsOf = (w: string): number => (w === '90d' ? 90 : w === '30d' ? 30 : w === '7d' ? 7 : 1) * 86_400_000;
+/** The bucket a window is drawn at — 96 buckets, never finer than a sample. The store is asked at this step so a
+ *  30-day read is 96 samples per tile, not every five-minute sample of the month (the read that overflowed, 2026-10-28). */
+export const stepMsOf = (w: string): number => Math.max(SAMPLE_INTERVAL_MS, Math.round(windowMsOf(w) / 96));
 
 /** What the town MCP's store hands back (`GET /infra/read`): a sample filed by kind, with the moment it was taken. */
 export interface InfraRowV1 { kind: 'infra' | 'cost' | 'cost-month'; id: string; at: string; ok: boolean; payload: InfraSampleV1 | CostSampleV1 | CostMonthV1; error?: string }
@@ -37,7 +40,7 @@ export function daysOf(window: PerfWindow, nowMs: number): string[] {
  */
 export function readPerformance(town: TownManifest, samples: PulseSampleV1[], rows: InfraRowV1[], opts: { window: PerfWindow; nowMs: number; detail: boolean }): PerfViewV1 {
   const ms = windowMsOf(opts.window); const from = opts.nowMs - ms; const days = daysOf(opts.window, opts.nowMs); const daySet = new Set(days);
-  const stepMs = Math.max(SAMPLE_INTERVAL_MS, Math.round(ms / 96));
+  const stepMs = stepMsOf(opts.window);
   const bucket = (at: string): string => new Date(Math.floor(Date.parse(at) / stepMs) * stepMs).toISOString();
 
   // ── Infrastructure: latest per resource AND CADENCE (any age — a quiet source still shows its last word) ──
@@ -83,7 +86,18 @@ export function readPerformance(town: TownManifest, samples: PulseSampleV1[], ro
   //    running month keeps its `toDate` so no surface compares it with a finished one. Not windowed: a baseline
   //    is the point, and it is a handful of rows.
   const latestMonth = new Map<string, { at: string; m: CostMonthV1 }>();
-  for (const s of rows.filter((x) => x.kind === 'cost-month')) { const m = s.payload as CostMonthV1; const cur = latestMonth.get(s.id); if (!cur || cur.at <= s.at) latestMonth.set(s.id, { at: s.at, m }); }
+  const latestFailedMonth = new Map<string, { at: string; m: CostMonthV1 }>();
+  for (const s of rows.filter((x) => x.kind === 'cost-month')) {
+    const m = s.payload as CostMonthV1;
+    if (!m.ok) { const cur = latestFailedMonth.get(s.id); if (!cur || cur.at <= s.at) latestFailedMonth.set(s.id, { at: s.at, m }); continue; }
+    const cur = latestMonth.get(s.id); if (!cur || cur.at <= s.at) latestMonth.set(s.id, { at: s.at, m });
+  }
+  // A later failed read is not a restatement (I3): keep the last good month and say the later pass failed.
+  for (const [id, f] of latestFailedMonth) {
+    const good = latestMonth.get(id);
+    if (good && f.at > good.at) latestMonth.set(id, { at: good.at, m: { ...good.m, error: `a later read failed: ${f.m.error ?? 'unreadable'}` } });
+    else if (!good) latestMonth.set(id, f);
+  }
   // THE PART THAT IS THE TOWN'S, computed HERE because attribution is the manifest's and this is where the
   // manifest is. A subscription pays for more than one thing — this one also carries an App Service and a
   // wallet that are nobody's business of the town's — so a month's total is not "what the town cost" and the

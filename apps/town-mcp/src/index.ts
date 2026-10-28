@@ -94,7 +94,9 @@ export async function runPass(env: Env, which: 'status' | 'hourly' | 'cost', now
       : [];
     pass = await collectCostPass(town, env, fetchImpl, nowMs, prior);
   }
-  const rows = [...pass.samples, ...pass.costs, ...(pass.months ?? [])].map(toRow);
+  // A failed month is not a restatement of billed figures (I3). Storing an `ok:false` placeholder for the
+  // running month under the same id superseded the last good sample, and the Cost table then said "unreadable".
+  const rows = [...pass.samples, ...pass.costs, ...(pass.months ?? []).filter((m) => m.ok)].map(toRow);
   if (store) for (const batch of batched(rows)) await store.fetch('https://infra/put', { method: 'POST', body: JSON.stringify(batch) });
   for (const u of pass.unreadable) console.warn(`[town-mcp:${which}] ${u}`);
   return pass;
@@ -121,13 +123,18 @@ export function batched<T>(rows: readonly T[], maxBytes = PUT_MAX_BYTES, maxRows
   return out;
 }
 
-/** The stored rows for a window, newest-last; the latest of every (kind, id) rides along so a quiet source still shows its last word. */
-async function readRows(env: Env, q: { from: number; to?: number; kind?: string }): Promise<StoredRow[]> {
+/** What a read may ask of the store beyond the window: `step` — one infra sample per cadence per `step` ms, the
+ *  resolution the asker draws at; `rollup: 'sku'` — cost rows summed over the SKU, one per day × resource × basis. */
+export interface ReadOpts { step?: number; rollup?: 'sku' }
+/** The stored rows for a window, newest-last; the latest of every (kind, id, cadence) rides along so a quiet source still shows its last word. */
+async function readRows(env: Env, q: { from: number; to?: number; kind?: string } & ReadOpts): Promise<StoredRow[]> {
   if (!env.INFRA) return [];
   const u = new URL('https://infra/read');
   u.searchParams.set('from', String(q.from));
   if (q.to !== undefined) u.searchParams.set('to', String(q.to));
   if (q.kind) u.searchParams.set('kind', q.kind);
+  if (q.step) u.searchParams.set('step', String(q.step));
+  if (q.rollup) u.searchParams.set('rollup', q.rollup);
   const r = await env.INFRA.get(env.INFRA.idFromName(townOf(env).town)).fetch(u.toString());
   const rows = (await r.json()) as StoredRow[];
   // Asked for one kind, read only that kind. The store's own filter once leaked cost rows into an infra read
@@ -153,8 +160,26 @@ app.get('/infra/read', async (c) => {
   const from = Number(c.req.query('from') ?? Date.now() - 86_400_000);
   const to = c.req.query('to') ? Number(c.req.query('to')) : undefined;
   const kind = c.req.query('kind');
-  return c.json(await readRows(c.env, { from, ...(to !== undefined ? { to } : {}), ...(kind ? { kind } : {}) }));
+  const step = Number(c.req.query('step') ?? 0);
+  const rollup = c.req.query('rollup') === 'sku' ? ('sku' as const) : undefined;
+  return c.json(await readRows(c.env, { from, ...(to !== undefined ? { to } : {}), ...(kind ? { kind } : {}), ...(step > 0 ? { step } : {}), ...(rollup ? { rollup } : {}) }));
 });
+
+/** The store's own account of itself: rows, bytes and span per kind. Reads nothing from a provider. */
+app.get('/infra/store', async (c) => c.json(await storeStats(c.env)));
+
+/** Prune now — what the hourly alarm does: retention, and the restatements a later read superseded (I1). */
+app.post('/infra/prune', async (c) => {
+  if (!c.env.INFRA) return c.json({ ok: false, error: 'no store is bound on this deployment' }, 503);
+  const r = await c.env.INFRA.get(c.env.INFRA.idFromName(townOf(c.env).town)).fetch('https://infra/prune', { method: 'POST' });
+  return c.json(await r.json(), r.status as 200);
+});
+
+export async function storeStats(env: Env): Promise<unknown> {
+  if (!env.INFRA) return { ok: false, error: 'no store is bound on this deployment' };
+  const r = await env.INFRA.get(env.INFRA.idFromName(townOf(env).town)).fetch('https://infra/stats');
+  return r.json();
+}
 
 app.post('/infra/pass', async (c) => {
   const body = (await c.req.json().catch(() => ({}))) as { which?: string };
@@ -188,8 +213,9 @@ async function callTool(env: Env, name: string, args: Record<string, unknown>): 
       ...town.estates.map((e) => ({ kind: 'estate' as const, id: e.id, o: e as ResourceOwnershipV1 })),
       ...town.services.map((s) => ({ kind: (s.kind === 'application' ? 'application' : 'service') as 'service' | 'application', id: s.id, o: { ...(s as ResourceOwnershipV1), workers: [...(s.workers ?? []), ...(s.worker ? [s.worker] : [])] } })),
     ].filter((x) => !want || x.id === want || `${x.kind}:${x.id}` === want);
-    // The last reading per resource, so "declared but never read" is visible as itself.
-    const rows = await readRows(env, { from: Date.now() - 2 * 86_400_000, kind: 'infra' });
+    // The last reading per resource, so "declared but never read" is visible as itself. One sample per cadence
+    // over the two days is all this needs — the latest rides along regardless.
+    const rows = await readRows(env, { from: Date.now() - 2 * 86_400_000, kind: 'infra', step: 2 * 86_400_000 });
     const read = new Set<string>();
     for (const r of rows) { const s = r.payload as InfraSampleV1; if (s.ok) read.add(`${s.platform}|${s.resource}`); }
     const resourcesOf = (o: ResourceOwnershipV1) => [
@@ -203,12 +229,15 @@ async function callTool(env: Env, name: string, args: Record<string, unknown>): 
       town: town.town,
       accounts: town.accounts ?? null,
       credentials: { configured: sources.configured, notConfigured: sources.unconfigured, note: 'names only — a credential value never leaves this Worker, and the town portal holds none of them' },
+      // What the store holds, by kind: the agent's account of its own serving plane, so a read that grows past
+      // what one answer can carry is visible here before it fails there.
+      store: await storeStats(env),
       owners: owners.map((x) => { const rs = resourcesOf(x.o); return { owner: `${x.kind}:${x.id}`, resources: rs, declared: rs.length, readable: rs.filter((r) => r.lastRead).length }; }),
       ...(want ? {} : { unattributedNote: 'a platform resource this manifest lists under nobody shows in the Pulse\'s Unattributed bucket; it is shown, never hidden' }),
     };
   }
   if (name === 'infra_status' || name === 'infra_metrics') {
-    const rows = await readRows(env, { from: Date.now() - 2 * 86_400_000, kind: 'infra' });
+    const rows = await readRows(env, { from: Date.now() - 2 * 86_400_000, kind: 'infra', step: 2 * 86_400_000 });
     const latest = new Map<string, InfraSampleV1>();
     for (const r of rows) { const cur = latest.get(r.id); const s = r.payload as InfraSampleV1; if (!cur || cur.at <= s.at) latest.set(r.id, s); }
     const out = [...latest.values()]
@@ -222,7 +251,8 @@ async function callTool(env: Env, name: string, args: Record<string, unknown>): 
     return { resources: out, unreadable: out.filter((r) => !r.readable).length, sources: infraSources(env) };
   }
   if (name === 'infra_cost') {
-    const rows = await readRows(env, { from: Date.now() - windowMs(args.window), kind: 'cost' });
+    // Grouped by owner and basis below, so the SKU is summed away at the store rather than carried here row by row.
+    const rows = await readRows(env, { from: Date.now() - windowMs(args.window), kind: 'cost', rollup: 'sku' });
     const latest = new Map<string, CostSampleV1>();
     for (const r of rows) { const cur = latest.get(r.id); const c = r.payload as CostSampleV1; if (!cur || cur.asOf <= c.asOf) latest.set(r.id, c); }
     const groups = new Map<string, { owner: string | null; platform: string; basis: string; microUsd: number; days: Set<string>; complete: boolean; asOf: string }>();
@@ -268,19 +298,78 @@ export default {
   fetch: app.fetch,
 };
 
-/** The store. A serving plane (spec 437 I1): 30 days of infra, 400 of cost, pruned by alarm. Wiping it loses trend lines, never a record. */
+/** A cost row summed over its SKUs — what `rollup=sku` hands back: the day × resource × basis a reader groups by anyway. */
+export type CostRollupRow = { platform: string; account: string; day: string; resource: string; scope: string | null; basis: string; amountMicroUsd: number; at: number; ok: number; asOf: string; complete: number; error: string | null };
+export function rollupRow(x: CostRollupRow): StoredRow {
+  const payload: CostSampleV1 = {
+    type: 'ap.cost-sample.v1', platform: x.platform as CostSampleV1['platform'], account: x.account, day: x.day, resource: x.resource,
+    ...(x.scope ? { scope: x.scope } : {}), amountMicroUsd: Number(x.amountMicroUsd ?? 0), basis: x.basis as CostSampleV1['basis'],
+    asOf: x.asOf, complete: !!x.complete, ok: !!x.ok, ...(x.error ? { error: x.error } : {}),
+  };
+  return { kind: 'cost', id: `${x.platform}|${x.account}|${x.day}|${x.resource}||${x.basis}`, at: new Date(x.at).toISOString(), ok: !!x.ok, payload, ...(x.error ? { error: x.error } : {}) };
+}
+
+/** The store's schema generation: `lag` column, the cadence index, the day index, and the superseded restatements pruned once. */
+const SCHEMA = 2;
+const dayOfMs = (ms: number): string => new Date(ms).toISOString().slice(0, 10);
+
+/**
+ * The store. A serving plane (spec 437 I1): 30 days of infra, 400 of cost, pruned by alarm. Wiping it loses trend lines, never a record.
+ *
+ * A READ IS BOUNDED BY WHAT THE ASKER DRAWS, NOT BY WHAT THE STORE HOLDS. The 30-day Pulse read once handed back every
+ * five-minute sample of the month and every restatement of every cost day — the daily pass restates seven days, so each
+ * day's rows were in the store seven times over — as ONE JSON string, and the 30d and 90d windows answered
+ * `RangeError: Invalid string length` from inside this class while 24h and 7d read fine (2026-10-28). Three rules now:
+ *   · a cost or month row SUPERSEDES at write time — one row per id, as I1 says a later read does;
+ *   · `step` hands back one sample per cadence per bucket, the resolution the Pulse draws at (96 buckets a window);
+ *   · `rollup=sku` sums a cost day's SKUs into one row per resource × basis, which is the grain every reader groups to.
+ * The latest sample per (id, cadence) rides along at any age, so a quiet source still shows its last word — per
+ * CADENCE, because a VM read every five minutes and every hour is two tiles with two `asOf`s (I2).
+ */
 export class InfraDO {
   private readonly sql: SqlStorage;
   constructor(private readonly state: DurableObjectState) {
     this.sql = state.storage.sql;
     this.sql.exec(`CREATE TABLE IF NOT EXISTS rows (kind TEXT NOT NULL, id TEXT NOT NULL, at INTEGER NOT NULL, ok INTEGER NOT NULL, day TEXT, json TEXT NOT NULL);
       CREATE INDEX IF NOT EXISTS rows_at ON rows(at); CREATE INDEX IF NOT EXISTS rows_kind_id_at ON rows(kind, id, at);`);
+    state.blockConcurrencyWhile(() => this.migrate());
+  }
+  /** Once per schema generation, in chunks that each commit, so a store too big for one go still gets there. */
+  private async migrate(): Promise<void> {
+    if (((await this.state.storage.get<number>('schema')) ?? 1) >= SCHEMA) return;
+    // The restatements first: they are most of the bulk, and every step after this is cheaper without them.
+    this.pruneSuperseded();
+    try { this.sql.exec('ALTER TABLE rows ADD COLUMN lag TEXT'); } catch { /* already there */ }
+    for (;;) {
+      const n = this.sql.exec("UPDATE rows SET lag = json_extract(json, '$.payload.lagClass') WHERE rowid IN (SELECT rowid FROM rows WHERE kind = 'infra' AND lag IS NULL LIMIT 20000)").rowsWritten;
+      if (!n) break;
+    }
+    this.sql.exec('CREATE INDEX IF NOT EXISTS rows_kind_id_lag_at ON rows(kind, id, lag, at); CREATE INDEX IF NOT EXISTS rows_kind_day ON rows(kind, day)');
+    await this.state.storage.put('schema', SCHEMA);
+  }
+  /** I1 — a later read of the same day or month supersedes the earlier: keep the newest row per (kind, id). */
+  private pruneSuperseded(): number {
+    return this.sql.exec("DELETE FROM rows WHERE kind IN ('cost', 'cost-month') AND at < (SELECT MAX(at) FROM rows r2 WHERE r2.kind = rows.kind AND r2.id = rows.id)").rowsWritten;
+  }
+  private prune(): { expired: number; superseded: number } {
+    const a = this.sql.exec("DELETE FROM rows WHERE kind NOT IN ('cost', 'cost-month') AND at < ?", Date.now() - RETENTION_MS).rowsWritten;
+    const b = this.sql.exec("DELETE FROM rows WHERE kind IN ('cost', 'cost-month') AND at < ?", Date.now() - COST_RETENTION_MS).rowsWritten;
+    return { expired: a + b, superseded: this.pruneSuperseded() };
+  }
+  private stats(): unknown {
+    const kinds = this.sql.exec<{ kind: string; n: number; ids: number; bytes: number; oldest: number; newest: number }>('SELECT kind, COUNT(*) AS n, COUNT(DISTINCT id) AS ids, SUM(LENGTH(json)) AS bytes, MIN(at) AS oldest, MAX(at) AS newest FROM rows GROUP BY kind').toArray();
+    return { ok: true, schema: SCHEMA, databaseBytes: this.sql.databaseSize, kinds: kinds.map((k) => ({ ...k, oldest: new Date(k.oldest).toISOString(), newest: new Date(k.newest).toISOString() })) };
   }
   async fetch(req: Request): Promise<Response> {
     const url = new URL(req.url);
     if (req.method === 'POST' && url.pathname === '/put') {
       const rows = (await req.json()) as StoredRow[];
-      for (const r of rows) this.sql.exec('INSERT INTO rows (kind, id, at, ok, day, json) VALUES (?, ?, ?, ?, ?, ?)', r.kind, r.id, Date.parse(r.at), r.ok ? 1 : 0, r.kind === 'cost' ? String((r.payload as CostSampleV1).day ?? '') : null, JSON.stringify(r));
+      for (const r of rows) {
+        // A cost or month row restates: the earlier read of the same id is superseded, not kept beside it (I1).
+        if (r.kind !== 'infra') this.sql.exec('DELETE FROM rows WHERE kind = ? AND id = ?', r.kind, r.id);
+        const lag = r.kind === 'infra' ? (r.payload as InfraSampleV1).lagClass ?? null : null;
+        this.sql.exec('INSERT INTO rows (kind, id, at, ok, day, json, lag) VALUES (?, ?, ?, ?, ?, ?, ?)', r.kind, r.id, Date.parse(r.at), r.ok ? 1 : 0, r.kind === 'cost' ? String((r.payload as CostSampleV1).day ?? '') : null, JSON.stringify(r), lag);
+      }
       if ((await this.state.storage.getAlarm()) === null) await this.state.storage.setAlarm(Date.now() + 3_600_000);
       return Response.json({ ok: true, stored: rows.length });
     }
@@ -288,29 +377,51 @@ export class InfraDO {
       const from = Number(url.searchParams.get('from') ?? Date.now() - 86_400_000);
       const to = Number(url.searchParams.get('to') ?? Number.MAX_SAFE_INTEGER);
       const kind = url.searchParams.get('kind');
-      const rows = kind
-        ? this.sql.exec<{ json: string }>('SELECT json FROM rows WHERE kind = ? AND at >= ? AND at <= ? ORDER BY at', kind, from, to).toArray()
-        : this.sql.exec<{ json: string }>('SELECT json FROM rows WHERE at >= ? AND at <= ? ORDER BY at', from, to).toArray();
-      // The latest of every (kind, id) rides along even when older than the window, so a quiet source still shows its
-      // last word — but it must honour the SAME kind filter as the window query. It did not, so a `kind=infra` read
-      // also handed back the latest cost rows; a cost payload has no `at`, and the first caller to touch one threw
-      // `Cannot read properties of undefined (reading 'startsWith')` and failed the whole cost pass (2026-10-11).
-      // Latent until an account had both an infra and a cost row for the same platform.
-      const latest = kind
-        ? this.sql.exec<{ json: string }>('SELECT json FROM rows r WHERE kind = ? AND at = (SELECT MAX(at) FROM rows WHERE kind = r.kind AND id = r.id)', kind).toArray()
-        : this.sql.exec<{ json: string }>('SELECT json FROM rows r WHERE at = (SELECT MAX(at) FROM rows WHERE kind = r.kind AND id = r.id)').toArray();
+      const step = Number(url.searchParams.get('step') ?? 0);
+      const rollup = url.searchParams.get('rollup') === 'sku';
+      const want = (k: string): boolean => !kind || kind === k;
+      const out: StoredRow[] = [];
       const seen = new Set<string>();
-      const all = [...rows, ...latest].map((r) => JSON.parse(r.json) as StoredRow).filter((r) => { const k = `${r.kind}|${r.id}|${r.at}`; if (seen.has(k)) return false; seen.add(k); return true; });
-      return Response.json(all);
+      const take = (json: string): void => { if (!seen.has(json)) { seen.add(json); out.push(JSON.parse(json) as StoredRow); } };
+      if (want('infra')) {
+        // The window's samples — every one, or the last good one per cadence per `step` — then the last word per cadence at any age.
+        // The bucket is INTEGER division: a bound JS number arrives as a REAL, and `at / ?` on a REAL is a float
+        // unique to every row — the bench read came back the same 149 MB stepped as raw until the cast was there.
+        // The join is on `=`, which the (kind, id, lag, at) index serves and `IS` does not (22 s against 0.3 s).
+        const series = step > 0
+          ? this.sql.exec<{ json: string }>("SELECT r.json FROM rows r JOIN (SELECT id, lag, MAX(at) AS at FROM rows WHERE kind = 'infra' AND at >= ? AND at <= ? AND ok = 1 GROUP BY id, lag, at / CAST(? AS INTEGER)) s ON r.kind = 'infra' AND r.id = s.id AND r.lag = s.lag AND r.at = s.at ORDER BY r.at", from, to, Math.round(step))
+          : this.sql.exec<{ json: string }>("SELECT json FROM rows WHERE kind = 'infra' AND at >= ? AND at <= ? ORDER BY at", from, to);
+        for (const r of series) take(r.json);
+        for (const r of this.sql.exec<{ json: string }>("SELECT r.json FROM rows r JOIN (SELECT id, lag, MAX(at) AS at FROM rows WHERE kind = 'infra' GROUP BY id, lag) s ON r.kind = 'infra' AND r.id = s.id AND r.lag = s.lag AND r.at = s.at")) take(r.json);
+      }
+      if (want('cost')) {
+        // Cost is filed by the DAY it describes, not the moment it was read: a window of days, the newest read of each.
+        const dayFrom = dayOfMs(from); const dayTo = to >= Number.MAX_SAFE_INTEGER ? '9999-12-31' : dayOfMs(to);
+        const latest = "(SELECT id, MAX(at) AS at FROM rows WHERE kind = 'cost' AND day >= ? AND day <= ? GROUP BY id) s ON r.kind = 'cost' AND r.id = s.id AND r.at = s.at";
+        if (rollup) {
+          const q = `SELECT json_extract(r.json, '$.payload.platform') AS platform, json_extract(r.json, '$.payload.account') AS account, r.day AS day, json_extract(r.json, '$.payload.resource') AS resource, json_extract(r.json, '$.payload.scope') AS scope, json_extract(r.json, '$.payload.basis') AS basis,
+            SUM(CASE WHEN r.ok = 1 THEN json_extract(r.json, '$.payload.amountMicroUsd') ELSE 0 END) AS amountMicroUsd, MAX(r.at) AS at, MIN(r.ok) AS ok, MAX(json_extract(r.json, '$.payload.asOf')) AS asOf, MIN(json_extract(r.json, '$.payload.complete')) AS complete, MAX(json_extract(r.json, '$.payload.error')) AS error
+            FROM rows r JOIN ${latest} GROUP BY platform, account, day, resource, scope, basis ORDER BY at`;
+          for (const x of this.sql.exec<CostRollupRow>(q, dayFrom, dayTo)) out.push(rollupRow(x));
+        } else {
+          for (const r of this.sql.exec<{ json: string }>(`SELECT r.json FROM rows r JOIN ${latest} ORDER BY r.at`, dayFrom, dayTo)) take(r.json);
+        }
+      }
+      if (want('cost-month')) {
+        // Whole months at any age — a baseline is the point, and it is a handful of rows (one per month × basis after supersession).
+        for (const r of this.sql.exec<{ json: string }>("SELECT r.json FROM rows r JOIN (SELECT id, MAX(at) AS at FROM rows WHERE kind = 'cost-month' GROUP BY id) s ON r.kind = 'cost-month' AND r.id = s.id AND r.at = s.at ORDER BY r.at")) take(r.json);
+      }
+      return Response.json(out);
     }
+    if (url.pathname === '/stats') return Response.json(this.stats());
+    if (req.method === 'POST' && url.pathname === '/prune') return Response.json({ ok: true, ...this.prune(), store: this.stats() });
     return Response.json({ error: 'not found' }, { status: 404 });
   }
   async alarm(): Promise<void> {
     // A cost row is kept far longer than a sample, and a MONTH row is the history itself — purging it at the
     // sample retention would delete the baseline a month's figure is read against (`kind != 'cost'` did exactly
-    // that to `cost-month` until it was named here).
-    this.sql.exec("DELETE FROM rows WHERE kind NOT IN ('cost', 'cost-month') AND at < ?", Date.now() - RETENTION_MS);
-    this.sql.exec("DELETE FROM rows WHERE kind IN ('cost', 'cost-month') AND at < ?", Date.now() - COST_RETENTION_MS);
+    // that to `cost-month` until it was named here). The restatements a later read superseded go too (I1).
+    this.prune();
     await this.state.storage.setAlarm(Date.now() + 3_600_000);
   }
 }

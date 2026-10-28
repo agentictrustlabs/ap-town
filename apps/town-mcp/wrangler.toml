@@ -13,6 +13,8 @@
 #   GRAPHDB_MONITOR_TOKEN the full Authorization header value for GraphDB's /rest/monitor endpoints
 name = "town-mcp"
 main = "src/index.ts"
+# No hostname at all: the workers.dev route stays off, or `/health` answers the public internet (it did, 2026-10-28).
+workers_dev = false
 compatibility_date = "2026-05-20"
 compatibility_flags = ["nodejs_compat"]
 
@@ -24,6 +26,7 @@ TOWN = "faithchain"
 
 [env.faithnet]
 name = "faithchain-town-mcp"
+workers_dev = false
 
 [env.faithnet.vars]
 TOWN = "faithchain"
@@ -52,6 +55,7 @@ crons = ["*/5 * * * *", "7 * * * *", "30 6 * * *"]
 # else; the VM and resource group it reports are shared with faithchain, and the manifest says so.
 [env.hopenet]
 name = "hopechain-town-mcp"
+workers_dev = false
 
 [env.hopenet.vars]
 TOWN = "hopenet"

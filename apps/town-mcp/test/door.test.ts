@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import worker, { TOOLS, authorized, batched, infraSources, toRow, PUT_MAX_BYTES, PUT_MAX_ROWS, type Env } from '../src/index';
+import worker, { TOOLS, authorized, batched, infraSources, rollupRow, toRow, PUT_MAX_BYTES, PUT_MAX_ROWS, type Env } from '../src/index';
 import type { CostSampleV1, InfraSampleV1 } from '@ap-town/town-model';
 
 const TOKEN = 'town-ops-token-abc';
@@ -132,5 +132,34 @@ describe('the town MCP door (spec 437 §4 — the only thing that holds a platfo
   it('a resource the manifest lists under nobody is reported with a null owner, never dropped', async () => {
     const out = await tool(envOf([toRow(infra({ resource: 'uupg-org' }))]), 'infra_status');
     expect((out.resources as Array<Record<string, unknown>>)[0]).toMatchObject({ resource: 'uupg-org', owner: null });
+  });
+});
+
+describe('a read is bounded by what the asker draws (2026-10-28: the 30-day read overflowed one JSON string)', () => {
+  it('/infra/read forwards the step and the SKU rollup to the store, and nothing else invents them', async () => {
+    const asked: string[] = [];
+    const store = { idFromName: () => 'id', get: () => ({ fetch: async (u: string | Request) => { asked.push(typeof u === 'string' ? u : u.url); return Response.json([]); } }) };
+    const env: Env = { TOWN: 'faithchain', TOWN_OPS_TOKEN: TOKEN, INFRA: store as unknown as DurableObjectNamespace };
+    const get = (q: string) => worker.fetch(new Request(`https://town-mcp/infra/read?${q}`, { headers: { authorization: `Bearer ${TOKEN}` } }), env, {} as ExecutionContext);
+    expect((await get('from=1&step=900000&rollup=sku')).status).toBe(200);
+    expect((await get('from=1')).status).toBe(200);
+    expect((await get('from=1&rollup=bogus&step=0')).status).toBe(200);
+    const urls = asked.map((u) => new URL(u));
+    expect(urls[0]!.searchParams.get('step')).toBe('900000'); expect(urls[0]!.searchParams.get('rollup')).toBe('sku');
+    expect(urls[1]!.searchParams.has('step')).toBe(false); expect(urls[1]!.searchParams.has('rollup')).toBe(false);
+    expect(urls[2]!.searchParams.has('step')).toBe(false); expect(urls[2]!.searchParams.has('rollup')).toBe(false);
+  });
+  it('a SKU rollup row is a cost sample at the day × resource × basis grain, with its id carrying no SKU and its flags folded', () => {
+    const row = rollupRow({ platform: 'vercel', account: 'team_1', day: '2026-10-27', resource: 'faithnet-home', scope: null, basis: 'effective', amountMicroUsd: 2_750_000, at: Date.parse('2026-10-28T06:30:00.000Z'), ok: 1, asOf: '2026-10-28T06:30:00.000Z', complete: 0, error: null });
+    expect(row.kind).toBe('cost'); expect(row.id).toBe('vercel|team_1|2026-10-27|faithnet-home||effective'); expect(row.at).toBe('2026-10-28T06:30:00.000Z'); expect(row.ok).toBe(true);
+    const c = row.payload as CostSampleV1;
+    expect(c).toMatchObject({ type: 'ap.cost-sample.v1', day: '2026-10-27', resource: 'faithnet-home', basis: 'effective', amountMicroUsd: 2_750_000, complete: false, ok: true });
+    expect('scope' in c).toBe(false); expect('sku' in c).toBe(false);
+    const failed = rollupRow({ platform: 'azure', account: 'sub1', day: '2026-10-27', resource: '*', scope: 'rg-faithnet', basis: 'billed', amountMicroUsd: 0, at: 1, ok: 0, asOf: '2026-10-28T06:30:00.000Z', complete: 0, error: 'token refused' });
+    expect(failed.ok).toBe(false); expect(failed.error).toBe('token refused'); expect((failed.payload as CostSampleV1).scope).toBe('rg-faithnet');
+  });
+  it('infra_config carries the store\'s own account of itself beside the credentials by name', async () => {
+    const out = await tool(envOf([]), 'infra_config');
+    expect(out.store).toEqual({ ok: true });
   });
 });
