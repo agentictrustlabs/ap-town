@@ -31,6 +31,18 @@
       ],
       "keyHash": "b6e60e633a826030b353d857258417a2e74e8c5ce981d87668cb858e3a220a5b",
       "registeredAt": "2026-10-13"
+    },
+    {
+      "principal": "0xbb623926bda1da5c4ecc47694d399b48c68a7eac",
+      "estate": "faithnet",
+      "kind": "application",
+      "label": "Calvary church workspace",
+      "profiles": [
+        "planner-fast",
+        "composer-default"
+      ],
+      "keyHash": "2f01056c16affeebffa207ebd1d78f4fd45996641eba7a8cbe1be8d18a5cb02d",
+      "registeredAt": "2026-11-02"
     }
   ]
 }
