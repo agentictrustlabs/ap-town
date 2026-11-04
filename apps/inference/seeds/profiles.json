@@ -258,5 +258,32 @@
     "privacy": "standard",
     "fallbackOn": [],
     "timeoutMs": 15000
+  },
+  {
+    "id": "composer-evidence",
+    "servesCapability": [
+      "compose"
+    ],
+    "description": "Complete, concise synthesis across attributed agent evidence, with room for reasoning and cited output.",
+    "models": [
+      {
+        "provider": "openai-compat",
+        "model": "gemini-3.5-flash",
+        "endpoint": "https://generativelanguage.googleapis.com/v1beta/openai"
+      },
+      {
+        "provider": "anthropic",
+        "model": "claude-haiku-4-5-20251001"
+      }
+    ],
+    "requiredCapabilities": [],
+    "maxOutputTokens": 8192,
+    "privacy": "standard",
+    "fallbackOn": [
+      "rate-limited",
+      "unavailable",
+      "timeout"
+    ],
+    "timeoutMs": 60000
   }
 ]
