@@ -11,7 +11,8 @@
         "answer-stream",
         "judge-thorough",
         "answer-structured",
-        "selection-structured"
+        "selection-structured",
+        "composer-evidence"
       ],
       "keyHash": "03c8982ebc42688f745c880e8c96cec8ebe01461b3370e41ce9a1143949122ae",
       "registeredAt": "2026-10-10"
