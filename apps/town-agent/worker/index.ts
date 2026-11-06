@@ -666,7 +666,9 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     const window = (PERF_WINDOWS as string[]).includes(url.searchParams.get('window') ?? '') ? (url.searchParams.get('window') as PerfWindow) : '24h';
     const nowMs = Date.now();
     const from = nowMs - (window === '90d' ? 90 : window === '30d' ? 30 : window === '7d' ? 7 : 1) * 86_400_000;
-    const r = await env.HEARTBEAT.get(env.HEARTBEAT.idFromName(town.town)).fetch(`https://pulse/read?from=${from}`);
+    // At the step `readPulse` draws: its 90d answer is its 30d series, since the store keeps samples for 30 days.
+    const r = await env.HEARTBEAT.get(env.HEARTBEAT.idFromName(town.town)).fetch(`https://pulse/read?from=${from}&step=${stepMsOf(window === '90d' ? '30d' : window)}`);
+    if (!r.ok) return json({ error: `the sample store answered ${r.status}` }, 503);
     const samples = (await r.json()) as PulseSampleV1[];
     // Spec 437 / 434 §10: infra STATUS and the provenance block are public; cost amounts and infra metrics are the
     // operator's — withheld, said so (`detail: false`), never zeroed.

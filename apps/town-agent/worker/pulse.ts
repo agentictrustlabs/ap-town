@@ -161,6 +161,27 @@ export function readPulse(town: TownManifest, samples: PulseSampleV1[], window: 
 
 // ── The store ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
+/** One row per (kind, id, bucket): the bucket's last GOOD sample, because each reader draws a bucket from its last good sample, or
+ *  its last sample when none was good. `all_ok` carries what the row alone would lose: a service down at any moment of a bucket. */
+export const BUCKET_READ = `
+  WITH b AS (
+    SELECT kind, id, at / CAST(? AS INTEGER) AS bk, COALESCE(MAX(CASE WHEN ok = 1 THEN at END), MAX(at)) AS pick, MIN(ok) AS all_ok
+    FROM samples WHERE at >= ? GROUP BY kind, id, bk
+  )
+  SELECT s.json AS json, b.all_ok AS all_ok FROM b JOIN samples s ON s.kind = b.kind AND s.id = b.id AND s.at = b.pick ORDER BY s.at`;
+/** Each estate's last good heartbeat of each UTC day. Cost per completed run stands a day on that beat, and a bucket can straddle midnight. */
+export const DAILY_BEATS_READ = `
+  WITH d AS (SELECT id, MAX(at) AS pick FROM samples WHERE kind = 'estate' AND ok = 1 AND at >= ? GROUP BY id, at / 86400000)
+  SELECT s.json AS json FROM d JOIN samples s ON s.kind = 'estate' AND s.id = d.id AND s.at = d.pick ORDER BY s.at`;
+// A type, not an interface: `SqlStorage.exec` wants a row that fits an index signature.
+export type BucketRow = { json: string; all_ok: number };
+
+/** A service row answers for its whole bucket: `readPulse` marks a bucket up only when every sample in it was. */
+export function applyBucket(r: BucketRow): { json: string } {
+  const s = JSON.parse(r.json) as PulseSampleV1;
+  return s.kind === 'service' && s.ok && r.all_ok !== 1 ? { json: JSON.stringify({ ...s, ok: false }) } : { json: r.json };
+}
+
 export class HeartbeatDO {
   private readonly sql: SqlStorage;
   constructor(private readonly state: DurableObjectState) {
@@ -192,7 +213,12 @@ export class HeartbeatDO {
       const kind = url.searchParams.get('kind');
       // One kind in a range (the cost pass reading yesterday's infra rows): rows only, no ride-along.
       if (kind) return Response.json(this.sql.exec<{ json: string }>('SELECT json FROM samples WHERE kind = ? AND at >= ? AND at <= ? ORDER BY at', kind, from, to).toArray().map((r) => JSON.parse(r.json) as PulseSampleV1));
-      const rows = this.sql.exec<{ json: string }>('SELECT json FROM samples WHERE at >= ? ORDER BY at', from).toArray();
+      // A window drawn at `step` reads one row per source per bucket. Every raw sample of a month does not fit in this object's
+      // memory: the 30d read was killed by the isolate limit, a 500 on the Operations page, once the month had filled (2026-11-06).
+      const step = Number(url.searchParams.get('step') ?? 0);
+      const rows = step > 0
+        ? [...this.sql.exec<BucketRow>(BUCKET_READ, step, from).toArray().map(applyBucket), ...this.sql.exec<{ json: string }>(DAILY_BEATS_READ, from).toArray()]
+        : this.sql.exec<{ json: string }>('SELECT json FROM samples WHERE at >= ? ORDER BY at', from).toArray();
       // The latest of every (kind, id) rides along even when older than the window, so a quiet estate still shows its last word.
       const latest = this.sql.exec<{ json: string }>('SELECT json FROM samples s WHERE at = (SELECT MAX(at) FROM samples WHERE kind = s.kind AND id = s.id)').toArray();
       const seen = new Set<string>();
