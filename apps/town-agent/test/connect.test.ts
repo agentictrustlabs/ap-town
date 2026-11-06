@@ -5,22 +5,27 @@
 // the consent screen and the ROOT-passkey ceremony are the SPA served there. And disconnecting cleared
 // this tab only, leaving the person signed in at their Home and at every other app on it.
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { goToHome, disconnectEverywhere, connectionToken } from '../app/Connect';
+import { goToHome, disconnectEverywhere, connectionToken, endIfSignedOut } from '../app/Connect';
 
 const HOME = 'https://www.faithnet.me';
 const store = new Map<string, string>();
+const local = new Map<string, string>();
 let assigned = '';
+let reloads = 0;
 
 beforeEach(() => {
   store.clear();
+  local.clear();
   assigned = '';
+  reloads = 0;
+  vi.stubGlobal('localStorage', { getItem: (k: string) => local.get(k) ?? null });
   vi.stubGlobal('sessionStorage', {
     getItem: (k: string) => store.get(k) ?? null,
     setItem: (k: string, v: string) => void store.set(k, v),
     removeItem: (k: string) => void store.delete(k),
   });
   vi.stubGlobal('window', {
-    location: { origin: 'https://town.faithnet.io', pathname: '/agent/x', search: '', assign: (u: string) => { assigned = u; } },
+    location: { origin: 'https://town.faithnet.io', pathname: '/agent/x', search: '', assign: (u: string) => { assigned = u; }, reload: () => { reloads += 1; } },
     dispatchEvent: () => true,
   });
   vi.stubGlobal('crypto', {
@@ -93,5 +98,40 @@ describe('the teardown', () => {
     disconnectEverywhere({ token: 't', name: null, agent: null, home: 'not a url' });
     expect(connectionToken()).toBeNull();
     expect(assigned).toBe('');
+  });
+});
+
+describe("a Home's sign-out, seen from another tab", () => {
+  const session = (at?: number) => JSON.stringify({ token: 't', name: null, agent: null, home: HOME, ...(at === undefined ? {} : { at }) });
+
+  it('refuses at boot a session older than the marker, and forgets it', () => {
+    store.set('ap-town.home-session', session(1000));
+    local.set('ap-town.signed-out', '2000');
+    expect(connectionToken()).toBeNull();
+    expect(store.has('ap-town.home-session')).toBe(false);
+  });
+
+  it('keeps a session made since the sign-out, and one with no sign-out at all', () => {
+    store.set('ap-town.home-session', session(3000));
+    local.set('ap-town.signed-out', '2000');
+    expect(connectionToken()).toBe('t');
+    local.clear();
+    store.set('ap-town.home-session', session());
+    expect(connectionToken()).toBe('t');
+  });
+
+  it('drops the session and reloads when the marker lands', () => {
+    store.set('ap-town.home-session', session(1000));
+    endIfSignedOut({ key: 'ap-town.signed-out' });
+    expect(store.has('ap-town.home-session')).toBe(false);
+    expect(reloads).toBe(1);
+  });
+
+  it('leaves a tab alone when it holds no session, or the key is another one', () => {
+    endIfSignedOut({ key: 'ap-town.signed-out' });
+    store.set('ap-town.home-session', session(1000));
+    endIfSignedOut({ key: 'something-else' });
+    expect(store.has('ap-town.home-session')).toBe(true);
+    expect(reloads).toBe(0);
   });
 });

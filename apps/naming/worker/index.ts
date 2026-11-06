@@ -2,9 +2,10 @@
 // app for everything else. It READS the chain through the town's gateway and asks the town's registry one question
 // ("is this agent listed?"); it holds no key, stores nothing, and writes nowhere. A claim or a change is signed by the
 // owner's own account at their Home (spec 429 D2).
-import { TOWNS, type TownManifest } from '@ap-town/town-model';
+import { ssoLogoutPage, TOWNS, type TownManifest } from '@ap-town/town-model';
 import { isAddress } from 'viem';
 import type { Address, ApiError } from '../src/api-types';
+import { PENDING_KEY, SESSION_KEY, SIGNED_OUT_KEY } from '../src/session-keys';
 import { chainFor } from './chain';
 import { peerBindingName, peersOf, type PeerFetcher } from './peers';
 import {
@@ -139,6 +140,8 @@ function clean(e: unknown): string {
 export default {
   async fetch(req: Request, env: Env, exec: ExecutionContext): Promise<Response> {
     const url = new URL(req.url);
+    // A Home's sign-out passes through here, ahead of the app, so the page runs before anything restores a session.
+    if (req.method === 'GET' && url.pathname === '/sso-logout') return ssoLogoutPage(townOf(env), url, { marker: SIGNED_OUT_KEY, clear: [SESSION_KEY, PENDING_KEY] });
     if (!url.pathname.startsWith('/api/')) return env.ASSETS.fetch(req);
     if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS });
     if (req.method !== 'GET') return fail(405, 'read_only', 'The naming service only reads. A claim or a change is signed at the owner’s Home.');

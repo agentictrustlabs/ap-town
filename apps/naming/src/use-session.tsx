@@ -3,7 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useApi } from './api';
 import type { EstateRef } from './api-types';
-import { connectAsPersona, connectViaHome, consumeConnectError, disconnect, getSession, listPersonas, listYourAgents, refreshSessionName, signOutEverywhere, type NamesSession, type Persona, type YourAgent } from './session';
+import { connectAsPersona, connectViaHome, consumeConnectError, disconnect, endIfSignedOut, getSession, listPersonas, listYourAgents, refreshSessionName, signOutEverywhere, type NamesSession, type Persona, type YourAgent } from './session';
 
 export interface SessionState {
   readonly session: NamesSession | null;
@@ -33,6 +33,10 @@ export function SessionProvider({ children }: { children: ReactNode }): ReactNod
   const [error, setError] = useState<string | null>(() => consumeConnectError());
   // The redirect leg lands with the session already stored (main.tsx finished it before rendering).
   useEffect(() => { setSession(getSession()); }, []);
+  useEffect(() => {
+    window.addEventListener('storage', endIfSignedOut);
+    return () => window.removeEventListener('storage', endIfSignedOut);
+  }, []);
   // Her agents, through her Home — read once per session and again whenever a ceremony lands.
   const [agents, setAgents] = useState<YourAgent[] | null>(null);
   const [agentsError, setAgentsError] = useState<string | null>(null);
