@@ -256,6 +256,41 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
             "description": "The Home's own MCP and OAuth 2.1 server (spec 397) — the entrance an outside client such as Claude.ai uses to reach a person's agent. It carries her `ask-as-me` delegation, never the bearer, and an act still parks for her signature at her Home."
           }
         ]
+      },
+      {
+        "id": "test-one",
+        "repo": "agentictrustlabs/ap-home",
+        "home": "https://test-one-home.vercel.app",
+        "edge": "https://test-one-edge.richardpedersen3.workers.dev",
+        "a2a": "https://test-one-runtime.richardpedersen3.workers.dev",
+        "lanes": {
+          "test-one-edge.richardpedersen3.workers.dev": "test-one-edge",
+          "test-one-runtime.richardpedersen3.workers.dev": "test-one-runtime"
+        },
+        "nameRoots": [
+          "me",
+          "org",
+          "team",
+          "svc",
+          "workspace",
+          "treasury",
+          "registry",
+          "church",
+          "circle"
+        ],
+        "kms": {
+          "tenant": "test-one"
+        },
+        "workers": [
+          "test-one-runtime",
+          "test-one-vault",
+          "test-one-edge",
+          "test-one-home-mcp",
+          "test-one-approval"
+        ],
+        "vercelProjects": [
+          "test-one-home"
+        ]
       }
     ],
     "services": [
