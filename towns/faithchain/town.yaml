@@ -142,6 +142,22 @@ estates:
     kms: { tenant: test-one }
     workers: [test-one-runtime, test-one-vault, test-one-edge, test-one-home-mcp, test-one-approval]
     vercelProjects: [test-one-home]
+
+  # "test-two" — created with the one-click builder (faithnet.town).
+  # On the town's accounts, on default hosts: no zone of its own, so its agents are reached through its edge by
+  # name, and the town reaches its edge and runtime through the lanes below.
+  - id: test-two
+    repo: agentictrustlabs/ap-home
+    home: https://test-two-home.vercel.app
+    edge: https://test-two-edge.richardpedersen3.workers.dev
+    a2a: https://test-two-runtime.richardpedersen3.workers.dev
+    lanes:
+      "test-two-edge.richardpedersen3.workers.dev": test-two-edge
+      "test-two-runtime.richardpedersen3.workers.dev": test-two-runtime
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
+    kms: { tenant: test-two }
+    workers: [test-two-runtime, test-two-vault, test-two-edge, test-two-home-mcp, test-two-approval]
+    vercelProjects: [test-two-home]
 services:
   # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
   - id: registry
