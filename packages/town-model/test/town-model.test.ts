@@ -94,12 +94,13 @@ describe('generators', () => {
 
   it('lane bindings are per estate, one binding per Worker', () => {
     const { town } = parseTown(faithchain);
-    expect(laneBindings(town!)).toEqual([
+    // faithnet's own lanes, exactly. Other estates listed in the town (one-click ones too) add their own after.
+    expect(laneBindings(town!).filter((b) => b.estate === 'faithnet')).toEqual([
       { binding: 'LANE_FAITHNET_1', service: 'demo-edge-faithnet', pattern: 'edge.faithnet.io', estate: 'faithnet' },
       { binding: 'LANE_FAITHNET_1', service: 'demo-edge-faithnet', pattern: 'demo-edge-faithnet.richardpedersen3.workers.dev', estate: 'faithnet' },
       { binding: 'LANE_FAITHNET_2', service: 'demo-a2a-faithnet', pattern: '*.faithnet.ai', estate: 'faithnet' },
     ]);
-    expect(laneRoutesVar(town!)).toBe('edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2');
+    expect(laneRoutesVar(town!).startsWith('edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2')).toBe(true);
 
     // THE OTHER TOWN, and the invariant this test is named for: numbering restarts within each estate, so
     // impact-agent's first binding is _1 beside faithnet's _1 and the two never collide even though they are
