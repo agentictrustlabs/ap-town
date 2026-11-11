@@ -9,14 +9,13 @@
 import { connectAsQuickConnect, connectViaFedcm, createConnectClient, listQuickConnect, openCentralAuthPopup, relayCodeIfPopupReturn } from '@agenticprimitives/connect-client';
 
 import type { EstateRef } from './api-types';
+import { PENDING_KEY, SESSION_KEY as KEY, SIGNED_OUT_KEY } from './session-keys';
 
 export const CLIENT_ID = 'naming-app';
 export const RELAY_CHANNEL = 'naming-app-connect-relay';
 /** The relying-site delegate the Home scopes its login grant TO — the one every town relying app names. */
 const CONNECT_DELEGATE = '0x89D13c596c45E4eE80Af5ae06C727FE9A820ffD0';
 
-const KEY = 'names.session';
-const PENDING_KEY = 'names.connect.pending';
 const ERROR_KEY = 'names.connect.error';
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 
@@ -77,7 +76,7 @@ export async function refreshSessionName(session: NamesSession): Promise<NamesSe
 }
 
 function persist(session: NamesSession): void {
-  try { sessionStorage.setItem(KEY, JSON.stringify(session)); } catch { /* a private window still gets this page's session */ }
+  try { sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), ...session })); } catch { /* a private window still gets this page's session */ }
 }
 
 function tokenExpiry(token: string): number | null {
@@ -89,11 +88,15 @@ function tokenExpiry(token: string): number | null {
   } catch { return null; }
 }
 
+/** When a Home last signed this browser out of this site (/sso-logout, in any tab); 0 when it has not. */
+const signedOutAt = (): number => { try { return Number(localStorage.getItem(SIGNED_OUT_KEY)) || 0; } catch { return 0; } };
+
 export function getSession(): NamesSession | null {
   try {
     const raw = sessionStorage.getItem(KEY);
     if (!raw) return null;
-    const session = JSON.parse(raw) as NamesSession;
+    const session = JSON.parse(raw) as NamesSession & { at?: number };
+    if ((session.at ?? 0) < signedOutAt()) { sessionStorage.removeItem(KEY); return null; }
     const exp = tokenExpiry(session.token);
     if (exp !== null && exp * 1000 <= Date.now() + 30_000) { sessionStorage.removeItem(KEY); return null; }
     return session;
@@ -102,6 +105,16 @@ export function getSession(): NamesSession | null {
 
 export function disconnect(): void {
   try { sessionStorage.removeItem(KEY); } catch { /* nothing to forget */ }
+}
+
+/** Another tab passed through a Home's sign-out. A tab holding a session drops it and reloads, so nothing read as the person stays on screen. */
+export function endIfSignedOut(e: Pick<StorageEvent, 'key'>): void {
+  if (e.key !== SIGNED_OUT_KEY) return;
+  let held = false;
+  try { held = sessionStorage.getItem(KEY) !== null; } catch { /* no storage: nothing held */ }
+  if (!held) return;
+  disconnect();
+  window.location.reload();
 }
 
 /** Full sign-out: the Home ends its own session and bounces back here. */

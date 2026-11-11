@@ -8,14 +8,16 @@
 //   POST /a2a                              JSON-RPC: SendMessage — a data part {skill:'town.describe'} |
 //                                          {skill:'town.service', id} | any text (matched against service ids)
 //   GET  /api/town · /api/services · /api/services/:id · /api/estates · /api/find?q= · /api/health
+//   GET  /sso-logout                       a Home's sign-out passes through: clears the session, back to the Home
 //   GET  everything else                   the Town portal (the built app in ./dist)
 import { createStandardA2aServer, type AgentCardV1, type MessageV1, type PartV1 } from '@agenticprimitives/a2a/standard';
-import { TOWNS, allMcpServers, attributeEndpoint, estateMcpServers, estateOf, estateRoster, placeAgent, placeAgents, sourceUrlOf, type AgentRosterRow, type InfraSampleV1, type TownManifest } from '@ap-town/town-model';
+import { ssoLogoutPage, TOWNS, allMcpServers, attributeEndpoint, estateMcpServers, estateOf, estateRoster, placeAgent, placeAgents, sourceUrlOf, type AgentRosterRow, type InfraSampleV1, type TownManifest } from '@ap-town/town-model';
 import { agentCardHost, contextAgentViews, describe, serviceViews, townSummary, type Probe, type ServiceView } from './signals';
 import { samplePulse, readPulse, type PulseSampleV1, type PulseEnv } from './pulse';
 import { recordDay, pulseRecordReadiness, contextAgents, type PulseRecordEnv } from './pulse-record';
 import { PERF_WINDOWS, operatorAuthorized, readPerformance, stepMsOf, type InfraRowV1, type PerfWindow } from './pulse-perf';
 import { readAsOperator, verifyHomeToken } from './steward';
+import { PENDING_KEY, SESSION_KEY, SIGNED_OUT_KEY } from '../app/session-keys';
 import { cardContentDigest } from '@agenticprimitives/agent-profile/a2a';
 import faithchainRelease from '../released/faithchain-card.json';
 import { resolveAgentCard, createStandardA2aClient } from '@agenticprimitives/a2a/standard';
@@ -664,7 +666,9 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
     const window = (PERF_WINDOWS as string[]).includes(url.searchParams.get('window') ?? '') ? (url.searchParams.get('window') as PerfWindow) : '24h';
     const nowMs = Date.now();
     const from = nowMs - (window === '90d' ? 90 : window === '30d' ? 30 : window === '7d' ? 7 : 1) * 86_400_000;
-    const r = await env.HEARTBEAT.get(env.HEARTBEAT.idFromName(town.town)).fetch(`https://pulse/read?from=${from}`);
+    // At the step `readPulse` draws: its 90d answer is its 30d series, since the store keeps samples for 30 days.
+    const r = await env.HEARTBEAT.get(env.HEARTBEAT.idFromName(town.town)).fetch(`https://pulse/read?from=${from}&step=${stepMsOf(window === '90d' ? '30d' : window)}`);
+    if (!r.ok) return json({ error: `the sample store answered ${r.status}` }, 503);
     const samples = (await r.json()) as PulseSampleV1[];
     // Spec 437 / 434 §10: infra STATUS and the provenance block are public; cost amounts and infra metrics are the
     // operator's — withheld, said so (`detail: false`), never zeroed.
@@ -809,6 +813,8 @@ export default {
     const url = new URL(req.url);
     const selfHost = new URL(origin).host;
     const card = cardFor(town, origin);
+
+    if (req.method === 'GET' && url.pathname === '/sso-logout') return ssoLogoutPage(town, url, { marker: SIGNED_OUT_KEY, clear: [SESSION_KEY, PENDING_KEY] });
 
     // THE RELEASED CARD, SERVED VERBATIM (spec 347 §4.2). Not rebuilt per request: a signature covers exact bytes,
     // so re-deriving the card here would serve whatever the manifest says this minute under a signature made for

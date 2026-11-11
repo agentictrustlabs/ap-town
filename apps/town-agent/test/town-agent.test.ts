@@ -1,6 +1,7 @@
 import { describe as d, expect, it } from 'vitest';
 import { TOWNS } from '@ap-town/town-model';
-import { answer, api, cardFor, claimedByTown, intentOf, type RosterRead } from '../worker/index';
+import worker, { answer, api, cardFor, claimedByTown, intentOf, type RosterRead } from '../worker/index';
+import toml from '../wrangler.toml?raw';
 import type { MessageV1 } from '@agenticprimitives/a2a/standard';
 
 const town = TOWNS.faithchain!;
@@ -354,5 +355,22 @@ d('what serves an endpoint (spec 437 I4)', () => {
   it('a town service’s own host carries its app directory into the source link', async () => {
     const r = await call('/endpoint?url=https%3A%2F%2Fdiscovery-connector.faithnet.io', rosterOf([]));
     expect(r.body.source).toBe('https://github.com/agentictrustlabs/ap-town/tree/HEAD/apps/discovery-connector');
+  });
+});
+
+d('/sso-logout (a Home sign-out passes through)', () => {
+  const env = () => envWith(undefined) as unknown as Parameters<typeof worker.fetch>[1];
+
+  it('the Worker answers it ahead of the built app', () => {
+    expect(/^run_worker_first = .*"\/sso-logout"/m.test(toml)).toBe(true);
+  });
+
+  it("names this app's keys and returns to the town's Home only", async () => {
+    const page = async (ret: string) => (await worker.fetch(new Request(`https://town.faithnet.io/sso-logout?return=${encodeURIComponent(ret)}`), env())).text();
+    const good = await page('https://www.faithnet.me/logout');
+    expect(good).toContain('location.replace("https://www.faithnet.me/logout")');
+    expect(good).toContain('"ap-town.signed-out"');
+    expect(good).toContain('["ap-town.home-session","ap-town.connecting"]');
+    expect(await page('https://www.faithnet.me.evil.test/logout')).toContain('location.replace("/")');
   });
 });

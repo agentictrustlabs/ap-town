@@ -81,7 +81,7 @@ WATCH_MAX_BLOCKS = "20000"
 DELEGATION_MANAGER = "0x3BBeCcC7a52E1CE04a3BF7E7404D3BCBF566C490"
 UNIVERSAL_SIGNATURE_VALIDATOR = "0x0B4B34b21a4E396489344cDFEe1d15F3EDE7AE4E"
 TIMESTAMP_ENFORCER = "0x5A11D8ff4E5Ef341c66C98dFD2441b5858d8e293"
-LANE_ROUTES = "edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2"  # town:lanes
+LANE_ROUTES = "edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2,test-one-edge.richardpedersen3.workers.dev=LANE_TEST_ONE_1,test-one-runtime.richardpedersen3.workers.dev=LANE_TEST_ONE_2,test-two-edge.richardpedersen3.workers.dev=LANE_TEST_TWO_1,test-two-runtime.richardpedersen3.workers.dev=LANE_TEST_TWO_2,test-three-edge.richardpedersen3.workers.dev=LANE_TEST_THREE_1,test-three-runtime.richardpedersen3.workers.dev=LANE_TEST_THREE_2"  # town:lanes
 
 [env.faithnet.triggers]
 crons = ["* * * * *"]
@@ -123,6 +123,24 @@ service = "demo-edge-faithnet"   # estate faithnet
 [[env.faithnet.services]]
 binding = "LANE_FAITHNET_2"
 service = "demo-a2a-faithnet"   # estate faithnet
+[[env.faithnet.services]]
+binding = "LANE_TEST_ONE_1"
+service = "test-one-edge"   # estate test-one
+[[env.faithnet.services]]
+binding = "LANE_TEST_ONE_2"
+service = "test-one-runtime"   # estate test-one
+[[env.faithnet.services]]
+binding = "LANE_TEST_TWO_1"
+service = "test-two-edge"   # estate test-two
+[[env.faithnet.services]]
+binding = "LANE_TEST_TWO_2"
+service = "test-two-runtime"   # estate test-two
+[[env.faithnet.services]]
+binding = "LANE_TEST_THREE_1"
+service = "test-three-edge"   # estate test-three
+[[env.faithnet.services]]
+binding = "LANE_TEST_THREE_2"
+service = "test-three-runtime"   # estate test-three
 # <<< town:lanes faithnet
 
 # ─────────────────────────────────────────────────────────────────────────────────────────────────

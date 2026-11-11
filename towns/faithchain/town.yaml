@@ -128,6 +128,54 @@ estates:
   # tells one estate's names from another's, so handing it on would make the chain answer confidently with the
   # wrong estate. Residents who want those names on the new chain claim them there; spec 440 §C's universal
   # namespace is what would make that one name rather than two, and it is not built yet.
+
+  # "Test One" — created with the one-click builder (faithnet.town).
+  # On the town's accounts, on default hosts: no zone of its own, so its agents are reached through its edge by
+  # name, and the town reaches its edge and runtime through the lanes below.
+  - id: test-one
+    repo: agentictrustlabs/ap-home
+    home: https://test-one-home.vercel.app
+    edge: https://test-one-edge.richardpedersen3.workers.dev
+    a2a: https://test-one-runtime.richardpedersen3.workers.dev
+    lanes:
+      "test-one-edge.richardpedersen3.workers.dev": test-one-edge
+      "test-one-runtime.richardpedersen3.workers.dev": test-one-runtime
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
+    kms: { tenant: test-one }
+    workers: [test-one-runtime, test-one-vault, test-one-edge, test-one-home-mcp, test-one-approval]
+    vercelProjects: [test-one-home]
+
+  # "test-two" — created with the one-click builder (faithnet.town).
+  # On the town's accounts, on default hosts: no zone of its own, so its agents are reached through its edge by
+  # name, and the town reaches its edge and runtime through the lanes below.
+  - id: test-two
+    repo: agentictrustlabs/ap-home
+    home: https://test-two-home.vercel.app
+    edge: https://test-two-edge.richardpedersen3.workers.dev
+    a2a: https://test-two-runtime.richardpedersen3.workers.dev
+    lanes:
+      "test-two-edge.richardpedersen3.workers.dev": test-two-edge
+      "test-two-runtime.richardpedersen3.workers.dev": test-two-runtime
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
+    kms: { tenant: test-two }
+    workers: [test-two-runtime, test-two-vault, test-two-edge, test-two-home-mcp, test-two-approval]
+    vercelProjects: [test-two-home]
+
+  # "test-three" — created with the one-click builder (faithnet.town).
+  # On the town's accounts, on default hosts: no zone of its own, so its agents are reached through its edge by
+  # name, and the town reaches its edge and runtime through the lanes below.
+  - id: test-three
+    repo: agentictrustlabs/ap-home
+    home: https://test-three-home.vercel.app
+    edge: https://test-three-edge.richardpedersen3.workers.dev
+    a2a: https://test-three-runtime.richardpedersen3.workers.dev
+    lanes:
+      "test-three-edge.richardpedersen3.workers.dev": test-three-edge
+      "test-three-runtime.richardpedersen3.workers.dev": test-three-runtime
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
+    kms: { tenant: test-three }
+    workers: [test-three-runtime, test-three-vault, test-three-edge, test-three-home-mcp, test-three-approval]
+    vercelProjects: [test-three-home]
 services:
   # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
   - id: registry

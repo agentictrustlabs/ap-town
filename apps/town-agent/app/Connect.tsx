@@ -16,11 +16,9 @@
 //     and conflating them would let a town secret pass for somebody's identity.
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { Chip } from '@ap-town/town-ui';
+import { PENDING_KEY as PENDING, SESSION_KEY as KEY, SIGNED_OUT_KEY } from './session-keys';
 
-const KEY = 'ap-town.home-session';
 const EVENT = 'ap-town:connection';
-/** The leg in flight: which Home, and the PKCE verifier only this tab knows. Dropped the moment it lands. */
-const PENDING = 'ap-town.connecting';
 const CLIENT_ID = 'town-app';
 const REDIRECT = () => `${window.location.origin}/connected`;
 
@@ -88,18 +86,23 @@ export async function completeConnection(params: URLSearchParams): Promise<{ ok:
   } catch (e) { return { ok: false, error: `your Home could not be reached: ${(e as Error).message}` }; }
 }
 
-export interface Connection { token: string; name: string | null; agent: string | null; home: string }
+export interface Connection { token: string; name: string | null; agent: string | null; home: string; /** When this tab connected; a Home sign-out since then ends it. */ at?: number }
+
+/** When a Home last signed this browser out of the town (/sso-logout, in any tab); 0 when it has not. */
+const signedOutAt = (): number => { try { return Number(localStorage.getItem(SIGNED_OUT_KEY)) || 0; } catch { return 0; } };
 
 const read = (): Connection | null => {
   try {
     const raw = sessionStorage.getItem(KEY);
     if (!raw) return null;
     const c = JSON.parse(raw) as Connection;
-    return c?.token ? c : null;
+    if (!c?.token) return null;
+    if ((c.at ?? 0) < signedOutAt()) { sessionStorage.removeItem(KEY); return null; }
+    return c;
   } catch { return null; }
 };
 const write = (c: Connection | null): void => {
-  try { if (c) sessionStorage.setItem(KEY, JSON.stringify(c)); else sessionStorage.removeItem(KEY); } catch { /* no storage: the page still works, unconnected */ }
+  try { if (c) sessionStorage.setItem(KEY, JSON.stringify({ at: Date.now(), ...c })); else sessionStorage.removeItem(KEY); } catch { /* no storage: the page still works, unconnected */ }
   window.dispatchEvent(new Event(EVENT));
 };
 
@@ -138,9 +141,20 @@ export function useConnection(): { conn: Connection | null } {
     const sync = () => setConn(read());
     sync();
     window.addEventListener(EVENT, sync);
-    return () => window.removeEventListener(EVENT, sync);
+    window.addEventListener('storage', endIfSignedOut);
+    return () => { window.removeEventListener(EVENT, sync); window.removeEventListener('storage', endIfSignedOut); };
   }, []);
   return { conn };
+}
+
+/** Another tab passed through a Home's sign-out. A tab holding a session drops it and reloads, so nothing read as the person stays on screen. */
+export function endIfSignedOut(e: Pick<StorageEvent, 'key'>): void {
+  if (e.key !== SIGNED_OUT_KEY) return;
+  let held = false;
+  try { held = sessionStorage.getItem(KEY) !== null; } catch { /* no storage: nothing held */ }
+  if (!held) return;
+  write(null);
+  window.location.reload();
 }
 
 /** The bearer to put on a relayed ask, or nothing. Never read straight from storage elsewhere. */

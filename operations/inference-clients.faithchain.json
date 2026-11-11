@@ -11,7 +11,8 @@
         "answer-stream",
         "judge-thorough",
         "answer-structured",
-        "selection-structured"
+        "selection-structured",
+        "composer-evidence"
       ],
       "keyHash": "03c8982ebc42688f745c880e8c96cec8ebe01461b3370e41ce9a1143949122ae",
       "registeredAt": "2026-10-10",
@@ -61,6 +62,18 @@
       "registeredAt": "2026-11-09",
       "gen1Principal": "0x840bb6480c7bb37910631db62f7212f0ba73f3a8",
       "repointedAt": "2026-11-11"
+    },
+    {
+      "principal": "0xbb623926bda1da5c4ecc47694d399b48c68a7eac",
+      "estate": "faithnet",
+      "kind": "application",
+      "label": "Calvary church workspace",
+      "profiles": [
+        "planner-fast",
+        "composer-default"
+      ],
+      "keyHash": "2f01056c16affeebffa207ebd1d78f4fd45996641eba7a8cbe1be8d18a5cb02d",
+      "registeredAt": "2026-11-02"
     }
   ]
 }
