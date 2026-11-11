@@ -36,6 +36,15 @@ const allowedProvidersOf = (env: Env): string[] => (env.ALLOWED_PROVIDERS ?? '')
 /** Which provider an OpenAI-compatible host is, in the deployment's words: Gemini's endpoint is `gemini`; any other host is named by its hostname. */
 const providerOfBase = (base: string): string => (new URL(base).origin === new URL(GEMINI_OPENAI).origin ? 'gemini' : new URL(base).hostname.toLowerCase());
 
+/** A candidate's provider in the words ALLOWED_PROVIDERS uses: an endpoint URL is named by `providerOfBase` (Gemini's
+ *  OpenAI-compatible host is `gemini`), any other endpoint string as given, else the provider kind. The gateway compared
+ *  the raw URL before, so every OpenAI-compatible candidate was skipped (model-gateway 0.0.0-alpha.21's providerName port). */
+const providerName = (c: { provider: string; endpoint?: string }): string => {
+  const e = c.endpoint?.trim();
+  if (!e) return c.provider.toLowerCase();
+  try { return /^https?:\/\//i.test(e) ? providerOfBase(e) : e.toLowerCase(); } catch { return e.toLowerCase(); }
+};
+
 function adaptersFor(env: Env) {
   const allowedProviders = allowedProvidersOf(env);
   const compatClients = new Map<string, OpenAiCompatLike>();
@@ -85,7 +94,7 @@ function ledgerFor(env: Env, log: (l: string) => void): { ledger: ReceiptLedgerP
 function handlerFor(env: Env, ctx: ExecutionContext): { handler: GatewayHandler; vault: ReturnType<typeof vaultLedgerReadiness> } {
   const log = (l: string) => console.log(`[inference] ${l}`);
   const { ledger, vault } = ledgerFor(env, log);
-  return { vault, handler: createGatewayHandler({ resolver: kvPrincipalResolver(env), policy: kvPolicyStore(env), meter: meterFor(env), ledger, adapters: adaptersFor(env), waitUntil: (p) => ctx.waitUntil(p), log }) };
+  return { vault, handler: createGatewayHandler({ resolver: kvPrincipalResolver(env), policy: kvPolicyStore(env), meter: meterFor(env), ledger, adapters: adaptersFor(env), providerName, waitUntil: (p) => ctx.waitUntil(p), log }) };
 }
 
 const credentialOf = (req: Request): CallerCredentialV1 | null => {

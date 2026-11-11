@@ -21,7 +21,7 @@
     "@agenticprimitives/content-primitives": "1.0.0-alpha.42",
     "@agenticprimitives/harness": "0.0.0-alpha.32",
     "@agenticprimitives/key-custody": "1.0.0-alpha.48",
-    "@agenticprimitives/model-gateway": "0.0.0-alpha.20",
+    "@agenticprimitives/model-gateway": "0.0.0-alpha.21",
     "@agenticprimitives/orchestration-anthropic": "0.0.0-alpha.15",
     "@agenticprimitives/orchestration-openai-compat": "0.0.0-alpha.16",
     "@agenticprimitives/verifiable-credentials": "0.0.0-alpha.45"
@@ -40,7 +40,7 @@
     "vault-is-the-record-apps-hold-references": "sha256:e6a6e859a16071dff5c30a7b7dc2d4cb0b8307e19dc416387cf181084236e685",
     "vault-records-are-ontology-shaped": "sha256:6a739d1a10d5b62e4ab5ed910fdccc67b9c024dd519c9c3e1fea916b3899a90b"
   },
-  "devkit": "0.0.0-alpha.35",
+  "devkit": "0.0.0-alpha.36",
   "template": {
     "name": "product-repo",
     "revision": "2026-09-16.1"

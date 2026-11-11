@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@agenticprimitives/delegation": "1.0.0-alpha.48",
-    "@agenticprimitives/model-gateway": "0.0.0-alpha.20",
+    "@agenticprimitives/model-gateway": "0.0.0-alpha.21",
     "@agenticprimitives/orchestration-anthropic": "0.0.0-alpha.15",
     "@agenticprimitives/orchestration-openai-compat": "0.0.0-alpha.16",
     "viem": "2.52.2"
