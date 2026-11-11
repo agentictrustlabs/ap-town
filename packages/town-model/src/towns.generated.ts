@@ -263,7 +263,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "repo": "ap-town",
         "app": "apps/registry",
         "worker": "demo-discovery-a2a-faithnet",
-        "agentName": "discovery.registry",
+        "agentName": "faithnet-discovery.registry",
         "hosts": [
           "discovery-a2a.faithnet.town",
           "discovery-a2a.faithnet.io"
@@ -564,9 +564,9 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "projection": {
           "registry": "0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9",
           "registryChainId": 34348,
-          "governance": "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015",
-          "estateId": "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84",
-          "signer": "0xAdcd7257De9686061C0838154cA77790C79a9EfD",
+          "governance": "0x4387E4efF41AC0F1e509B06c06E8acBdbFC1E02C",
+          "estateId": "0xd726fc0a91546cf93b2b16fde10a0a852de77200614cfaaf0d9892fe93b4a7c4",
+          "signer": "0x78D4609024B4aA3b68B0eD6E92a96f1212ffcc69",
           "declaredOnChain": true
         },
         "workers": [

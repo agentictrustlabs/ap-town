@@ -135,7 +135,9 @@ services:
     repo: ap-town
     app: apps/registry
     worker: demo-discovery-a2a-faithnet
-    agentName: discovery.registry
+    # Generation 4 (2026-11-11): `discovery.registry` is refused by the domain rule (discovery.com exists), so the agent
+    # 0xD97AE3DE… is named faithnet-discovery.registry. The ARD service id (`…:registry:discovery.registry`) is not a name and stays.
+    agentName: faithnet-discovery.registry
     hosts: [discovery-a2a.faithnet.town, discovery-a2a.faithnet.io]
     probe: https://discovery-a2a.faithnet.town/health
     card: https://discovery-a2a.faithnet.town/.well-known/agent-card.json

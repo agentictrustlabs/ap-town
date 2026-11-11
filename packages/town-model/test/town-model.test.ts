@@ -32,8 +32,8 @@ describe('town manifest', () => {
     expect(impactAgent?.projection).toMatchObject({
       registry: '0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9',
       registryChainId: 34348,
-      governance: '0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015',
-      estateId: '0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84',
+      governance: '0x4387E4efF41AC0F1e509B06c06E8acBdbFC1E02C',   // imbnet.estate on faithchain generation 4 (gen 1: 0x4457aadf…)
+      estateId: '0xd726fc0a91546cf93b2b16fde10a0a852de77200614cfaaf0d9892fe93b4a7c4',
       declaredOnChain: true,
     });
   });
