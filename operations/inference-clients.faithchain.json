@@ -1,7 +1,7 @@
 {
   "clients": [
     {
-      "principal": "0xd34c3fbc89706dd57d426546dcebd3ba926ede35",
+      "principal": "0x4d4e08989f779226a7cbde5afc5e6fc0b43e2069",
       "estate": "faithnet",
       "kind": "estate-app",
       "label": "faithnet-runtime",
@@ -14,7 +14,9 @@
         "selection-structured"
       ],
       "keyHash": "03c8982ebc42688f745c880e8c96cec8ebe01461b3370e41ce9a1143949122ae",
-      "registeredAt": "2026-10-10"
+      "registeredAt": "2026-10-10",
+      "gen1Principal": "0xd34c3fbc89706dd57d426546dcebd3ba926ede35",
+      "repointedAt": "2026-11-11"
     },
     {
       "principal": "0x193b496d366113b765c70bf9230687d685cc7a92",
@@ -31,6 +33,34 @@
       ],
       "keyHash": "b6e60e633a826030b353d857258417a2e74e8c5ce981d87668cb858e3a220a5b",
       "registeredAt": "2026-10-13"
+    },
+    {
+      "principal": "0x863bd39e938ac593c8d67a11f2f6c12d824b2526",
+      "estate": "faithnet",
+      "kind": "estate-app",
+      "label": "Calvary sermon processor",
+      "profiles": [
+        "answer-structured"
+      ],
+      "keyHash": "4c2524be7f7a925e5a7215d6873c893c9ed55bcabc12cc9d9c92f1ce0ffe661d",
+      "registeredAt": "2026-11-03"
+    },
+    {
+      "principal": "0x81dc1177dca4c177e227796fc0c3b251c42a3b3b",
+      "kind": "estate-app",
+      "label": "one-click new estates (shared, town-hosted)",
+      "profiles": [
+        "planner-fast",
+        "composer-default",
+        "answer-stream",
+        "judge-thorough",
+        "answer-structured",
+        "selection-structured"
+      ],
+      "keyHash": "11b062592eab01c43c1929da48083a6e3e9355ff5637b630756069401a8e90d2",
+      "registeredAt": "2026-11-09",
+      "gen1Principal": "0x840bb6480c7bb37910631db62f7212f0ba73f3a8",
+      "repointedAt": "2026-11-11"
     }
   ]
 }
