@@ -359,6 +359,41 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "vercelProjects": [
           "test-three-home"
         ]
+      },
+      {
+        "id": "isl-1",
+        "repo": "agentictrustlabs/ap-home",
+        "home": "https://isl-1-home.vercel.app",
+        "edge": "https://isl-1-edge.richardpedersen3.workers.dev",
+        "a2a": "https://isl-1-runtime.richardpedersen3.workers.dev",
+        "lanes": {
+          "isl-1-edge.richardpedersen3.workers.dev": "isl-1-edge",
+          "isl-1-runtime.richardpedersen3.workers.dev": "isl-1-runtime"
+        },
+        "nameRoots": [
+          "me",
+          "org",
+          "team",
+          "svc",
+          "workspace",
+          "treasury",
+          "registry",
+          "church",
+          "circle"
+        ],
+        "kms": {
+          "tenant": "isl-1"
+        },
+        "workers": [
+          "isl-1-runtime",
+          "isl-1-vault",
+          "isl-1-edge",
+          "isl-1-home-mcp",
+          "isl-1-approval"
+        ],
+        "vercelProjects": [
+          "isl-1-home"
+        ]
       }
     ],
     "services": [

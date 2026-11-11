@@ -176,6 +176,22 @@ estates:
     kms: { tenant: test-three }
     workers: [test-three-runtime, test-three-vault, test-three-edge, test-three-home-mcp, test-three-approval]
     vercelProjects: [test-three-home]
+
+  # "ISL-1" — created with the one-click builder (faithnet.town).
+  # On the town's accounts, on default hosts: no zone of its own, so its agents are reached through its edge by
+  # name, and the town reaches its edge and runtime through the lanes below.
+  - id: isl-1
+    repo: agentictrustlabs/ap-home
+    home: https://isl-1-home.vercel.app
+    edge: https://isl-1-edge.richardpedersen3.workers.dev
+    a2a: https://isl-1-runtime.richardpedersen3.workers.dev
+    lanes:
+      "isl-1-edge.richardpedersen3.workers.dev": isl-1-edge
+      "isl-1-runtime.richardpedersen3.workers.dev": isl-1-runtime
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
+    kms: { tenant: isl-1 }
+    workers: [isl-1-runtime, isl-1-vault, isl-1-edge, isl-1-home-mcp, isl-1-approval]
+    vercelProjects: [isl-1-home]
 services:
   # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
   - id: registry
