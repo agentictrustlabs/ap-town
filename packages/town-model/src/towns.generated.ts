@@ -217,9 +217,9 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "projection": {
           "registry": "0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9",
           "registryChainId": 34348,
-          "governance": "0x3273f419FDfc7eA1Bf14372C4A9CA5fC43818F64",
-          "estateId": "0x465f13a19d48b6bd58e9c792956cbf477cd35ed395fdd38dbe8250e262e40264",
-          "signer": "0x9d0C710b73a9E0CD103A1A7034F871C852d8657e",
+          "governance": "0x1ee254011bab5e1Fcf3cdb015c9D55212f562b0C",
+          "estateId": "0x342b7442256ef34a68f420bb5f63ce6ac604d8766acb185a519efeccb8969417",
+          "signer": "0xB3a7038efc6c4ED12cF9C633a59A215Ca0F82A2e",
           "declaredOnChain": true
         },
         "kms": {

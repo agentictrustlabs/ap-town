@@ -33,7 +33,7 @@ import { cardFor, townOf } from '../worker/index.js';
 const arg = (k: string): string | undefined => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : undefined; };
 const townId = arg('town') ?? 'faithchain';
 const origin = (arg('origin') ?? 'https://town.faithnet.io').replace(/\/$/, '');
-const agent = (arg('agent') ?? '0xabAbAD83E69B4cFbf1B90C1c70561D6D770bEef4').toLowerCase() as Address;
+const agent = (arg('agent') ?? '0xcFd3119574a5fB2DA234b9c16eb2146F9F68D406').toLowerCase() as Address;
 const by = arg('by') ?? 'demo-admin';
 const home = (arg('home') ?? 'https://www.faithnet.me').replace(/\/$/, '');
 const days = Number(arg('days') ?? 365);
