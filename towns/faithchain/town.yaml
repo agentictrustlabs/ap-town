@@ -5,7 +5,7 @@ town: faithchain
 status: live
 chain:
   id: 34348
-  generation: "1"
+  generation: "4"   # spec 445 estate reset (2026-11-11): faithchain re-deployed at generation 4; gen-1 agents are orphaned history
   rpc: https://rpc.faithnet.io
   deployment: faithchain   # @agenticprimitives/contracts/deployments — the one source of addresses
   coin: { address: "0xa14E4a9447607c1233DcE34dB6Ead47C094f6141", symbol: SHQ, decimals: 6 }   # Sheqel — names are bought with it (spec 431)
@@ -43,8 +43,8 @@ vendors:
 # Listing somebody here GRANTS THEM NOTHING (429 D2): it unlocks a read of aggregate numbers this deployment
 # already holds — no Home, no person's record, no act. Absent or empty means nobody, which is the safe reading.
 operators:
-  - { sa: '0x840bb6480c7bb37910631db62f7212f0ba73f3a8', label: Town Operator, note: 'operates the faithchain town services; custodian of discovery.registry' }
-  - { sa: '0x6142b0fca982f6701cf2248bf368ab44a48c5725', label: Demo Admin, note: 'charters the town and estate context agents (spec 436 §5.5)' }
+  - { sa: '0x81Dc1177Dca4C177E227796FC0C3B251C42A3b3B', label: Town Operator, note: 'operates the faithchain town services; custodian of discovery.registry' }
+  - { sa: '0xee2c3c8c299c86C64375Aa34A1447dB384f3d4b0', label: Demo Admin, note: 'charters the town and estate context agents (spec 436 §5.5)' }
 
 estates:
   - id: faithnet

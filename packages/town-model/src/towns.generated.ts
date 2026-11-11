@@ -58,7 +58,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
     "status": "live",
     "chain": {
       "id": 34348,
-      "generation": "1",
+      "generation": "4",
       "rpc": "https://rpc.faithnet.io",
       "deployment": "faithchain",
       "coin": {
@@ -178,12 +178,12 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
     ],
     "operators": [
       {
-        "sa": "0x840bb6480c7bb37910631db62f7212f0ba73f3a8",
+        "sa": "0x81Dc1177Dca4C177E227796FC0C3B251C42A3b3B",
         "label": "Town Operator",
         "note": "operates the faithchain town services; custodian of discovery.registry"
       },
       {
-        "sa": "0x6142b0fca982f6701cf2248bf368ab44a48c5725",
+        "sa": "0xee2c3c8c299c86C64375Aa34A1447dB384f3d4b0",
         "label": "Demo Admin",
         "note": "charters the town and estate context agents (spec 436 §5.5)"
       }

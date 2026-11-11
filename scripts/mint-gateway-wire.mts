@@ -28,10 +28,10 @@ import { readFileSync, writeFileSync } from 'node:fs';
 const HOME = 'https://www.faithnet.me';
 const CHAIN = 34348;
 // faithchain (Ring 0 deployments-faithchain.json) — the gateway agent's chain.
-const DM = '0x710cb1bF08C234Df397e0910331e0A29710EF4F7' as Address;
-const TIMESTAMP = '0x73A7B878168b7DE48677617179A8bE894f0Dfe96' as Address;
-const ALLOWED_METHODS = '0xdBb2E47793393C499efB0f3fcbf6Ca8669791a41' as Address;
-const ALLOWED_TARGETS = '0x2156311097A936de1916a878bF53Bfd43c7b5715' as Address;
+const DM = '0x3BBeCcC7a52E1CE04a3BF7E7404D3BCBF566C490' as Address;
+const TIMESTAMP = '0x5A11D8ff4E5Ef341c66C98dFD2441b5858d8e293' as Address;
+const ALLOWED_METHODS = '0x2d1C7730D29Ba8aEE1D02f59eF0BBE88b439560e' as Address;
+const ALLOWED_TARGETS = '0x8421F81d4F5f7f64F2e518d8b2a12ef4C1d11088' as Address;
 const ENV = 'apps/discovery-connector/.env.gateway.local';
 const arg = (k: string): string | undefined => { const i = process.argv.indexOf(`--${k}`); return i >= 0 ? process.argv[i + 1] : undefined; };
 const TARGET = (arg('target') ?? '').toLowerCase() as Address;
