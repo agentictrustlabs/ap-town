@@ -326,6 +326,41 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "vercelProjects": [
           "test-two-home"
         ]
+      },
+      {
+        "id": "test-three",
+        "repo": "agentictrustlabs/ap-home",
+        "home": "https://test-three-home.vercel.app",
+        "edge": "https://test-three-edge.richardpedersen3.workers.dev",
+        "a2a": "https://test-three-runtime.richardpedersen3.workers.dev",
+        "lanes": {
+          "test-three-edge.richardpedersen3.workers.dev": "test-three-edge",
+          "test-three-runtime.richardpedersen3.workers.dev": "test-three-runtime"
+        },
+        "nameRoots": [
+          "me",
+          "org",
+          "team",
+          "svc",
+          "workspace",
+          "treasury",
+          "registry",
+          "church",
+          "circle"
+        ],
+        "kms": {
+          "tenant": "test-three"
+        },
+        "workers": [
+          "test-three-runtime",
+          "test-three-vault",
+          "test-three-edge",
+          "test-three-home-mcp",
+          "test-three-approval"
+        ],
+        "vercelProjects": [
+          "test-three-home"
+        ]
       }
     ],
     "services": [
