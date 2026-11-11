@@ -33,7 +33,7 @@ REGISTRY_ORIGIN = "https://discovery-a2a.faithnet.io"
 # RECEIVING AGENT — GATEWAY_SESSION_WIRE_<agent address, 40 hex, lower case, no 0x> (scripts/mint-gateway-wire.mts
 # --target 0x…). Ring 0 spec 445 / RUN-9: a receiving host refuses a wire that does not name its own agent, so the single
 # untargeted GATEWAY_SESSION_WIRE is retired and no longer read; delete it once every target has its own.
-GATEWAY_AGENT = "0x3d9af054981994e7e321d545139e68361873f90a"
+GATEWAY_AGENT = "0x6bBB9dE142527080703b6C3BB2bd87A54B0145c0"   # faithnet-gateway.svc (generation 4, 2026-11-11)
 
 [[env.faithnet.services]]
 binding = "DISCOVERY"
@@ -61,7 +61,7 @@ workers_dev = true
 
 [env.richcanvas.vars]
 REGISTRY_ORIGIN = "https://discovery-a2a.faithnet.io"
-GATEWAY_AGENT = "0x3d9af054981994e7e321d545139e68361873f90a"
+GATEWAY_AGENT = "0x6bBB9dE142527080703b6C3BB2bd87A54B0145c0"   # faithnet-gateway.svc (generation 4, 2026-11-11)
 
 [[env.richcanvas.ratelimits]]
 name = "LIMITER"
