@@ -183,7 +183,7 @@ const TOOLS = [
   },
   {
     name: 'get_agent',
-    description: 'Get the full A-box node (all on-chain facets) for one agent by name (e.g. "lbsb.impact") or Smart Agent address (0x…).',
+    description: 'Get the full A-box node (all on-chain facets) for one agent by name (e.g. "lbsb.svc") or Smart Agent address (0x…).',
     inputSchema: { type: 'object', properties: { key: { type: 'string' } }, required: ['key'] },
   },
   {

@@ -19,7 +19,6 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "edge": "https://edge.impact-agent.io",
         "a2a": "https://a2a.impact-agent.io",
         "nameRoots": [
-          "impact",
           "agent"
         ]
       }
@@ -59,7 +58,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
     "status": "live",
     "chain": {
       "id": 34348,
-      "generation": "1",
+      "generation": "4",
       "rpc": "https://rpc.faithnet.io",
       "deployment": "faithchain",
       "coin": {
@@ -179,12 +178,12 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
     ],
     "operators": [
       {
-        "sa": "0x840bb6480c7bb37910631db62f7212f0ba73f3a8",
+        "sa": "0x81Dc1177Dca4C177E227796FC0C3B251C42A3b3B",
         "label": "Town Operator",
         "note": "operates the faithchain town services; custodian of discovery.registry"
       },
       {
-        "sa": "0x6142b0fca982f6701cf2248bf368ab44a48c5725",
+        "sa": "0xee2c3c8c299c86C64375Aa34A1447dB384f3d4b0",
         "label": "Demo Admin",
         "note": "charters the town and estate context agents (spec 436 §5.5)"
       }
@@ -211,17 +210,16 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "treasury",
           "registry",
           "church",
-          "circle",
-          "impact"
+          "circle"
         ],
         "estateName": "faithnet.estate",
         "namingGate": "0x640D577Bcb3fd860743ED315620085704c1483E9",
         "projection": {
-          "registry": "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b",
+          "registry": "0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9",
           "registryChainId": 34348,
-          "governance": "0x3273f419FDfc7eA1Bf14372C4A9CA5fC43818F64",
-          "estateId": "0x465f13a19d48b6bd58e9c792956cbf477cd35ed395fdd38dbe8250e262e40264",
-          "signer": "0x9d0C710b73a9E0CD103A1A7034F871C852d8657e",
+          "governance": "0x1ee254011bab5e1Fcf3cdb015c9D55212f562b0C",
+          "estateId": "0x342b7442256ef34a68f420bb5f63ce6ac604d8766acb185a519efeccb8969417",
+          "signer": "0xB3a7038efc6c4ED12cF9C633a59A215Ca0F82A2e",
           "declaredOnChain": true
         },
         "kms": {
@@ -370,7 +368,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "repo": "ap-town",
         "app": "apps/registry",
         "worker": "demo-discovery-a2a-faithnet",
-        "agentName": "discovery.registry",
+        "agentName": "faithnet-discovery.registry",
         "hosts": [
           "discovery-a2a.faithnet.town",
           "discovery-a2a.faithnet.io"
@@ -606,7 +604,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
     "status": "demo",
     "chain": {
       "id": 34349,
-      "generation": "3",
+      "generation": "4",
       "rpc": "https://hopechain-rpc-gateway.agentkg.io",
       "deployment": "hopechain",
       "namesRootedAt": "faithchain"
@@ -669,11 +667,11 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         ],
         "estateName": "imbnet.estate",
         "projection": {
-          "registry": "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b",
+          "registry": "0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9",
           "registryChainId": 34348,
-          "governance": "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015",
-          "estateId": "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84",
-          "signer": "0xAdcd7257De9686061C0838154cA77790C79a9EfD",
+          "governance": "0x4387E4efF41AC0F1e509B06c06E8acBdbFC1E02C",
+          "estateId": "0xd726fc0a91546cf93b2b16fde10a0a852de77200614cfaaf0d9892fe93b4a7c4",
+          "signer": "0x78D4609024B4aA3b68B0eD6E92a96f1212ffcc69",
           "declaredOnChain": true
         },
         "workers": [

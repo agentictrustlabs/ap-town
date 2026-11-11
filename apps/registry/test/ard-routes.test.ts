@@ -2,6 +2,8 @@ import { describe, it, expect, afterEach, vi } from 'vitest';
 import app from '../src/index.js';
 
 const SA = '0x' + 'b'.repeat(40);
+// COR-4 (spec 445): an agent's ARD identifier is derived from its canonical Smart Agent address, never from a host or a name label.
+const ALICE_ID = `urn:air:agenticprimitives.dev:sa:${SA}`;
 const rows = [
   { agent: 'urn:a', name: 'alice.me', smartAgent: SA, facets: ['naming', 'profile'], shaclConforms: true, displayName: 'Alice', description: 'Estate planning help', capabilityIds: ['adv:estate-planning'], agentType: 'person', tld: 'me', a2aEndpoint: 'https://alice.faithnet.io', distribution: { acp: true, version: '1.0.0', npx: { package: '@alice/agent@1.0.0' } } },
   { agent: 'urn:b', name: 'bob.org', smartAgent: '0x' + 'c'.repeat(40), facets: ['naming'], shaclConforms: true, displayName: 'Bob Org', agentType: 'org', tld: 'org', a2aEndpoint: null },
@@ -26,7 +28,7 @@ describe('ARD + ACP routes on the discovery registry', () => {
     expect(r.status).toBe(200);
     const m = await r.json() as { entries: Array<{ identifier: string; type: string }> };
     expect(m.entries[0]).toMatchObject({ identifier: 'urn:air:discovery-a2a.example:registry:discovery.registry', type: 'application/ai-registry+json' });
-    expect(m.entries.map((e) => e.identifier)).toEqual(['urn:air:discovery-a2a.example:registry:discovery.registry', 'urn:air:alice.faithnet.io:agent:alice']);
+    expect(m.entries.map((e) => e.identifier)).toEqual(['urn:air:discovery-a2a.example:registry:discovery.registry', ALICE_ID]);
   });
 
   it('POST /search returns ARD results whose score is relevance only', async () => {
@@ -35,7 +37,7 @@ describe('ARD + ACP routes on the discovery registry', () => {
     expect(r.status).toBe(200);
     const j = await r.json() as { results: Array<{ identifier: string; score: number; source: string; 'ap:trustEvidence': unknown }> };
     expect(j.results).toHaveLength(1);
-    expect(j.results[0]).toMatchObject({ identifier: 'urn:air:alice.faithnet.io:agent:alice', source: 'https://discovery-a2a.example/search' });
+    expect(j.results[0]).toMatchObject({ identifier: ALICE_ID, source: 'https://discovery-a2a.example/search' });
     expect(j.results[0]!.score).toBeGreaterThanOrEqual(0);
     expect(j.results[0]!['ap:trustEvidence']).toBeTruthy();
     const bad = await call('/search', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pageSize: 500 }) });
@@ -48,7 +50,7 @@ describe('ARD + ACP routes on the discovery registry', () => {
     const ex = await (await call('/explore', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ resultType: { facets: [{ field: 'ap:agentType' }] } }) })).json() as { facets: Record<string, { buckets: unknown[] }> };
     expect(ex.facets['ap:agentType']!.buckets).toHaveLength(2);
     const list = await (await call('/agents?filter=' + encodeURIComponent('tags:"person"'))).json() as { items: Array<{ identifier: string }> };
-    expect(list.items.map((a) => a.identifier)).toEqual(['urn:air:alice.faithnet.io:agent:alice']);
+    expect(list.items.map((a) => a.identifier)).toEqual([ALICE_ID]);
     const acp = await call('/registry/v1/latest/registry.json');
     expect(acp.status).toBe(200);
     expect(await acp.json()).toEqual({ version: '1.0.0', agents: [{ id: 'alice', name: 'Alice', version: '1.0.0', description: 'Estate planning help', distribution: { npx: { package: '@alice/agent@1.0.0' } } }] });

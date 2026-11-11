@@ -17,6 +17,7 @@ tag = "v1"
 new_sqlite_classes = ["BudgetDO"]
 
 # Secrets (wrangler secret put <NAME> --env faithnet):
+#   (ALLOWED_PROVIDERS is a var, above — not a secret)
 #   ANTHROPIC_API_KEY · GEMINI_API_KEY · OPENAI_COMPAT_KEYS (JSON endpoint-origin → key, optional) · TOWN_OPS_TOKEN
 #   VAULT_GRANT · VAULT_SESSION_LEAF · INFERENCE_SIGNER_KEY (the ledger: inference.svc writes its receipts to its vault)
 # KV CACHE rows: policy:profiles · policy:catalog (W6 writes; absent ⇒ seeds) · client:<sha256(appKey)> · entitlement:<sa> · clients:principals
@@ -36,6 +37,8 @@ CHAIN_ID = "34348"
 VAULT_URL = "https://mcp.faithnet.io"
 VAULT_AUDIENCE = "urn:mcp:server:person"
 INFERENCE_AGENT_NAME = "inference.svc"
+# Spec 445 decision 8: the providers this deployment may call. Explicit — unset means no provider client is built.
+ALLOWED_PROVIDERS = "anthropic,gemini"
 [[env.faithnet.kv_namespaces]]
 binding = "CACHE"
 id = "62a0d85224c44c188f4af66406a66645"

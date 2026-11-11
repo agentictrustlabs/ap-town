@@ -49,6 +49,15 @@ rotate the guardian, renounce the timelock admin, and write down who holds what.
 is `docs/runbooks/deploy-governance-handoff.md` in the source monorepo; its acceptance list is what "production"
 means for a chain.
 
+**Before anyone holds the guardian role, decide who can lift a pause** (audit H-3, 2026-11-10). On the current
+contract generation `AgenticGovernance.unpause()` is callable only by the timelock, and every outbound call of an
+`AgentAccount` is blocked while its factory's governance is paused. So if the timelock's only proposers or executors
+are `AgentAccount`s of the factory this governance pauses, **a pause cannot be lifted and every account of that
+factory stays frozen**. Until the substrate ships the exemption (its spec 445 §1.2), at least one proposer and one
+executor must be an address the pause does not reach. The warning, the pre-flight that checks it, and the pause
+procedure are in `docs/operators/runbooks/pause-and-unpause.md` in the source monorepo — run the pre-flight when
+the roles are assigned, write the choice in the manifest's governance notes, and never pause a town where it fails.
+
 ## 3. Write the manifest
 
 `towns/<chain>/town.yaml` — copy `towns/base-sepolia/town.yaml` for the small shape or `towns/faithchain/town.yaml`

@@ -122,12 +122,12 @@ export interface TownEstate {
    * root it reads itself. Nothing here is authority: a presentation is evidence (ADR-0056), and the
    * receiving estate still decides under its own mandate, per step.
    *
-   * WHY THE MANIFEST CARRIES IT AT ALL. `register(estateId, signer)` is first-come-wins — public ground
-   * cannot verify who governs an estate on another chain, so it cannot refuse a squatter. A verifier that
-   * trusts `signerOf` alone trusts whoever registered first. This row is a PUBLIC, REVIEWED declaration to
-   * cross-check it against, and `declaredOnChain` says plainly whether the stronger check exists yet: when
-   * the estate agent writes `atl:projectionSigner` itself (spec 439 F2.5), a verifier reads the estate's own
-   * chain and this row stops being load-bearing.
+   * WHY THE MANIFEST CARRIES IT AT ALL. Since generation 4 (spec 445 / REG-2) the registry keeps a row per
+   * `(estateId, signer)` and no longer says which row is the estate's — nobody can open a victim's row first,
+   * but a verifier must be told which signer to read. The estate says so itself: `atl:projectionSigner` on its
+   * agent (spec 439 F2.5), read on the estate's own chain; a verifier reads ONLY that signer's row. This row is a
+   * PUBLIC, REVIEWED declaration to cross-check it against, and `declaredOnChain` says plainly whether the
+   * estate has made that declaration yet.
    *
    * `estateId` is `keccak256("eip155:<chainId>:<governance>")` and is PERMANENT, which is why `governance`
    * is the estate agent's Smart Agent address and never a key (ADR-0010). An estate without one is absent

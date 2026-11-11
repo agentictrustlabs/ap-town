@@ -1,7 +1,7 @@
 // agent-indexer CLI — backfill every named Smart Agent into the discovery A-box.
 //
 //   GRAPHDB_URL=… npx tsx src/main.ts        # → SPARQL/GraphDB (agentkg.io) if set, else JSON-LD file
-//   RPC_URL=… TLDS=impact,agent npx tsx src/main.ts
+//   RPC_URL=… TLDS=me,org,svc npx tsx src/main.ts
 
 import { readFileSync, existsSync } from 'node:fs';
 import { DiscoveryIndexer, type IndexerConfig } from './indexer.js';
@@ -46,7 +46,7 @@ const cfg: IndexerConfig = {
   profileResolver: (process.env.PROFILE_RESOLVER ?? '0xfcd37F8dca26ead889922b22C169c21370bd352a') as Address,
   relationship: (process.env.RELATIONSHIP ?? '0x0AF2455e3f76594E81d9042aD5FE22A5A35dc57f') as Address,
   attestationRegistry: (process.env.ATTESTATION_REGISTRY ?? '0xD57f2e52395b9C99fAE8Abf823578faFe038f5B7') as Address,
-  tlds: (process.env.TLDS ?? 'impact,agent').split(',').map((s) => s.trim()).filter(Boolean),
+  tlds: (process.env.TLDS ?? 'agent').split(',').map((s) => s.trim()).filter(Boolean),
   discoveryRegistryId: process.env.DISCOVERY_REGISTRY_ID ?? 'urn:ap:registry:impact-agents',
   maxDepth: Number(process.env.MAX_DEPTH ?? 3),
   concurrency: Number(process.env.CONCURRENCY ?? 8),

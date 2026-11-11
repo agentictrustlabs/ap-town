@@ -58,10 +58,13 @@ for (const name of names) {
   const prov = (await j(await fetch(`${MCP}/custody/vault-key/provision`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ owner: sa, issuedAt, proof: await sign(challenge) }) }))) as { ok?: boolean; kmsKeyRef?: string; error_description?: string; detail?: string };
   if (!prov.ok || !prov.kmsKeyRef) { console.log(`  ${name} — provision refused: ${prov.error_description ?? prov.detail ?? JSON.stringify(prov).slice(0, 140)}`); continue; }
 
+  // No placeholder delegate (spec 445: a delegate of `0x…01` is refused). The vault key to bind is the SERVER's, named by
+  // `server-info`; a server that names none has nothing to be bound to, and that is said, not papered over.
+  if (!/^0x[0-9a-fA-F]{40}$/.test(String(info.serverKey ?? '')) || /^0x0{0,39}[0-9a-fA-F]?$/.test(String(info.serverKey))) { console.log(`  ${name} — the server names no vault key for this owner (serverKey ${String(info.serverKey ?? 'absent')}) — not bound`); continue; }
   const params = {
     vaultId: String(info.serverId ?? '').trim() || 'demo-mcp',
     kmsKeyRef: prov.kmsKeyRef,
-    serverKey: (info.serverKey ?? '0x0000000000000000000000000000000000000001') as Address,
+    serverKey: info.serverKey as Address,
     allowedResources: info.defaultResources ?? ['person-pii', 'org-sensitive', 'profile', 'vault:*'],
     classificationCeiling: info.classificationCeiling ?? 'regulated.high',
     ops: info.ops ?? (['read', 'write'] as ('read' | 'write')[]),

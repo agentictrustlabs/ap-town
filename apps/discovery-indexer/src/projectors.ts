@@ -68,7 +68,7 @@ const naming: FacetProjector = {
     if (registeredAt > 0n) data[PREDICATE.nameRegisteredAt] = Number(registeredAt);
     const expiry = (await client.readContract({ address: nameRegistry, abi: NAME_REGISTRY_ABI, functionName: 'expiry', args: [node] }).catch(() => 0n)) as bigint;
     if (expiry > 0n) data[PREDICATE.nameExpiry] = Number(expiry);
-    // spec 346 §8.5 — the root suffix of the on-chain name (`.impact` / `.agent` = untyped legacy; the seven typed
+    // spec 346 §8.5 — the root suffix of the on-chain name (`.agent` = untyped legacy; the typed
     // roots name a derived type). A projection of the string, never parsed as authority.
     if (name) { const tld = name.split('.').pop(); if (tld) data[PREDICATE.tld] = tld; }
     return { kind: 'naming', present: true, shapeIri: SHAPE.CanonicalAgentId, conforms: !!name, data };

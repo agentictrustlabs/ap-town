@@ -12,12 +12,12 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agenticprimitives/registry-kit": "0.0.0-alpha.20",
-    "@agenticprimitives/types": "1.0.0-alpha.36",
+    "@agenticprimitives/registry-kit": "0.0.0-alpha.29",
+    "@agenticprimitives/types": "1.0.0-alpha.48",
     "@noble/hashes": "2.2.0",
     "hono": "4.13.0",
     "viem": "2.52.2",
-    "@agenticprimitives/a2a": "0.0.0-alpha.33"
+    "@agenticprimitives/a2a": "0.0.0-alpha.50"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260605.1",

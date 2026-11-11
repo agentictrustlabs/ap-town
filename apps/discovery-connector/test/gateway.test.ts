@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { mintHandle, verifyHandle } from '../src/gateway/handle.js';
 import { translateTask } from '../src/gateway/a2a-client.js';
-import { discoverAgents, invokeAgent, continueTask, inspectAgent } from '../src/gateway/tools.js';
+import { discoverAgents, invokeAgent, continueTask, inspectAgent, sessionWireVarFor } from '../src/gateway/tools.js';
 import { parseSessionAuthorization, callerAssertionDigest, requestBodyHash } from '@agenticprimitives/a2a/standard';
 import { parseSessionWrappedSignature } from '@agenticprimitives/a2a';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
@@ -14,8 +14,10 @@ const AGENT = '0x' + '3d'.repeat(20);
 const WIRE = { delegator: AGENT, delegate: KEY, authority: '0x' + '0'.repeat(64), caveats: [], salt: '1', signature: '0xabcd' };
 const b64 = (s: string) => Buffer.from(s).toString('base64url');
 const CARD = { name: 'Ask Ligonier', protocolVersion: '1.0', supportedInterfaces: [{ url: 'https://edge.faithnet.io/api/a2a/ligonier.svc', protocolBinding: 'JSONRPC', protocolVersion: '1.0' }], skills: [{ id: 'gc:CFnDiscipleshipCurricula', name: 'Study plans' }] };
-const ENTRY = { identifier: 'urn:air:ligonier-svc.faithnet.ai:agent:ligonier', displayName: 'Ligonier Ministries', url: 'https://ligonier-svc.faithnet.ai/.well-known/agent-card.json', capabilities: ['gc:CFnDiscipleshipCurricula'], 'ap:canonicalAgentId': '0x' + 'a'.repeat(40), score: 85, trustManifest: { identity: 'https://ligonier-svc.faithnet.ai', identityType: 'https-fqdn' } };
-const env = { HANDLE_SECRET: SECRET, GATEWAY_AGENT: AGENT, GATEWAY_PRIVATE_KEY: PK, GATEWAY_SESSION_WIRE: b64(JSON.stringify(WIRE)), REGISTRY_ORIGIN: 'https://discovery-a2a.faithnet.io', DISCOVERY: { fetch: async () => new Response(JSON.stringify({ results: [ENTRY] }), { headers: { 'content-type': 'application/json' } }) } };
+const ENTRY = { identifier: `urn:air:agenticprimitives.dev:sa:${'0x' + 'a'.repeat(40)}`, displayName: 'Ligonier Ministries', url: 'https://ligonier-svc.faithnet.ai/.well-known/agent-card.json', capabilities: ['gc:CFnDiscipleshipCurricula'], 'ap:canonicalAgentId': '0x' + 'a'.repeat(40), score: 85, trustManifest: { identity: '0x' + 'a'.repeat(40), identityType: 'ap-smart-agent-address' } };
+// RUN-9: one wire per receiving agent, held under a secret named for that agent (the registry's canonical address).
+const TARGET = '0x' + 'a'.repeat(40);
+const env = { HANDLE_SECRET: SECRET, GATEWAY_AGENT: AGENT, GATEWAY_PRIVATE_KEY: PK, [sessionWireVarFor(TARGET)]: b64(JSON.stringify(WIRE)), REGISTRY_ORIGIN: 'https://discovery-a2a.faithnet.io', DISCOVERY: { fetch: async () => new Response(JSON.stringify({ results: [ENTRY] }), { headers: { 'content-type': 'application/json' } }) } };
 const calls: Array<{ url: string; init?: RequestInit }> = [];
 const net = (card = CARD): typeof fetch => (async (url: string | URL | Request, init?: RequestInit) => {
   const u = String(url); calls.push({ url: u, init });
@@ -79,6 +81,19 @@ describe('spec 387 — the AP gateway', () => {
     expect(((await invokeAgent(env, { target: 'https://evil/x', message: 'hi' }, net())) as { refused?: string }).refused).toMatch(/not a handle this gateway minted/);
     const insp = await inspectAgent(env, { target: found.agents[0]!.target }, net(moved)) as { endpointMatchesPin: boolean; cardMatchesPin: boolean };
     expect(insp.endpointMatchesPin).toBe(false);
+  });
+
+  it('RUN-9 — one wire per target: no wire minted for THIS agent is a refusal that names it; another agent\'s wire and the retired untargeted wire are never used', async () => {
+    const found = await discoverAgents(env, { topic: 'justification' }, net()) as { agents: Array<{ target: string }> };
+    const { [sessionWireVarFor(TARGET)]: _mine, ...bare } = env;
+    const other = '0x' + 'b'.repeat(40);
+    for (const e of [bare, { ...bare, [sessionWireVarFor(other)]: b64(JSON.stringify(WIRE)) }, { ...bare, GATEWAY_SESSION_WIRE: b64(JSON.stringify(WIRE)) }]) {
+      calls.length = 0;
+      const out = await invokeAgent(e as typeof env, { target: found.agents[0]!.target, message: 'hi' }, net()) as { refused?: string };
+      expect(out.refused).toMatch(new RegExp(`holds no session wire minted for Ligonier Ministries \\(${TARGET}\\)`));
+      expect(calls.some((c) => c.url.endsWith('/api/a2a/ligonier.svc'))).toBe(false);
+    }
+    expect(((await invokeAgent({ ...bare, GATEWAY_SESSION_WIRE: b64(JSON.stringify(WIRE)) } as typeof env, { target: found.agents[0]!.target, message: 'hi' }, net())) as { refused?: string }).refused).toMatch(/untargeted GATEWAY_SESSION_WIRE that is set is retired/);
   });
 
   it('translateTask names a need for input or authority', () => {

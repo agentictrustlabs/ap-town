@@ -20,7 +20,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { createPublicClient, encodeFunctionData, http, keccak256, toBytes, type Address, type Hex } from 'viem';
 import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
 import { AgentAccountClient, buildExecuteBatchCallData, type ContractCall } from '@agenticprimitives/agent-account';
-import { buildDeclareAgentTypeCalls, buildTypedClaimCalls, namehash, agentNameUniversalResolverAbi, agentProfileResolverTypeAbi } from '@agenticprimitives/agent-naming';
+import { buildDeclareAgentTypeCalls, buildTypedClaimCalls, generateClaimSecret, SUBREGISTRY_MIN_COMMIT_AGE_SECONDS, namehash, agentNameUniversalResolverAbi, agentProfileResolverTypeAbi } from '@agenticprimitives/agent-naming';
 import { getDeployments } from '@agenticprimitives/contracts/deployments';
 
 const HOME = process.env.HOME_URL ?? 'https://www.faithnet.me';
@@ -82,9 +82,15 @@ for (const a of AGENTS) {
   if (current === a.name) { console.log(`${a.id}: presents ${a.name}`); continue; }
   const registered = (await pc.readContract({ address: d.agentProfileResolver, abi: agentProfileResolverTypeAbi, functionName: 'isRegistered', args: [addr] })) as boolean;
   const declare = buildDeclareAgentTypeCalls({ profileResolver: d.agentProfileResolver, agent: addr, agentType: a.type, registered, displayName: a.displayName });
-  const claim = buildTypedClaimCalls({ name: a.name, owner: addr, registry: d.agentNameRegistry, resolver: d.agentNameResolver, subregistries: d.permissionlessSubregistries, agentType: a.type, records: { displayName: a.displayName, description: a.description } });
-  console.log(`${a.id}: claiming ${a.name} …`);
-  const tx = await execute(addr, [...declare, claim.claim, claim.primaryName, ...claim.records]);
+  // Spec 445 / generation 4 (REG-5): a claim is COMMIT then REVEAL — two transactions, the reveal at least
+  // SUBREGISTRY_MIN_COMMIT_AGE_SECONDS (and at most a day) after the commit. The secret is this run's and never leaves it.
+  const secret = generateClaimSecret();
+  const claim = buildTypedClaimCalls({ name: a.name, owner: addr, registry: d.agentNameRegistry, resolver: d.agentNameResolver, subregistries: d.permissionlessSubregistries, agentType: a.type, chainId: CHAIN_ID, secret, records: { displayName: a.displayName, description: a.description } });
+  console.log(`${a.id}: committing to ${a.name} …`);
+  const committed = await execute(addr, [...declare, claim.commit]);
+  console.log(`${a.id}: commit ${committed}; revealing after ${SUBREGISTRY_MIN_COMMIT_AGE_SECONDS + 5}s`);
+  await new Promise((r) => setTimeout(r, (SUBREGISTRY_MIN_COMMIT_AGE_SECONDS + 5) * 1000));
+  const tx = await execute(addr, [claim.claim, claim.primaryName, ...claim.records]);
   console.log(`${a.id}: ${a.name} ← ${addr} (${tx})`);
 }
 

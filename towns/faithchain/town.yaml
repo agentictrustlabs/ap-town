@@ -5,7 +5,7 @@ town: faithchain
 status: live
 chain:
   id: 34348
-  generation: "1"
+  generation: "4"   # spec 445 estate reset (2026-11-11): faithchain re-deployed at generation 4; gen-1 agents are orphaned history
   rpc: https://rpc.faithnet.io
   deployment: faithchain   # @agenticprimitives/contracts/deployments — the one source of addresses
   coin: { address: "0xa14E4a9447607c1233DcE34dB6Ead47C094f6141", symbol: SHQ, decimals: 6 }   # Sheqel — names are bought with it (spec 431)
@@ -43,8 +43,8 @@ vendors:
 # Listing somebody here GRANTS THEM NOTHING (429 D2): it unlocks a read of aggregate numbers this deployment
 # already holds — no Home, no person's record, no act. Absent or empty means nobody, which is the safe reading.
 operators:
-  - { sa: '0x840bb6480c7bb37910631db62f7212f0ba73f3a8', label: Town Operator, note: 'operates the faithchain town services; custodian of discovery.registry' }
-  - { sa: '0x6142b0fca982f6701cf2248bf368ab44a48c5725', label: Demo Admin, note: 'charters the town and estate context agents (spec 436 §5.5)' }
+  - { sa: '0x81Dc1177Dca4C177E227796FC0C3B251C42A3b3B', label: Town Operator, note: 'operates the faithchain town services; custodian of discovery.registry' }
+  - { sa: '0xee2c3c8c299c86C64375Aa34A1447dB384f3d4b0', label: Demo Admin, note: 'charters the town and estate context agents (spec 436 §5.5)' }
 
 estates:
   - id: faithnet
@@ -60,7 +60,7 @@ estates:
       edge.faithnet.io: demo-edge-faithnet
       demo-edge-faithnet.richardpedersen3.workers.dev: demo-edge-faithnet
       "*.faithnet.ai": demo-a2a-faithnet
-    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle, impact]
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
     # The estate's own agent on this chain. A person's agent carries this NAME in `atl:estate`, and this
     # agent carries the Home's URL in `atl:homepage` — the name is stable, the URL moves.
     estateName: faithnet.estate
@@ -73,11 +73,13 @@ estates:
     # and is NOT `faith-estate.workspace`, which stays the Pulse's context agent (436 §5.5). It declared its
     # projection signer on this chain, so the registration is chain-verifiable both ways.
     projection:
-      registry: "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b"
+      registry: "0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9"
       registryChainId: 34348
-      governance: "0x3273f419FDfc7eA1Bf14372C4A9CA5fC43818F64"   # faithnet.estate
-      estateId: "0x465f13a19d48b6bd58e9c792956cbf477cd35ed395fdd38dbe8250e262e40264"
-      signer: "0x9d0C710b73a9E0CD103A1A7034F871C852d8657e"
+      # GENERATION 4 (2026-11-11, spec 445 estate reset): faithnet.estate re-chartered (salt 2 over demo-admin) and its
+      # registry agent (salt 3) with it; the estate id moved with the governance address. Gen 1: 0x3273f419… / 0x465f13a1….
+      governance: "0x1ee254011bab5e1Fcf3cdb015c9D55212f562b0C"   # faithnet.estate
+      estateId: "0x342b7442256ef34a68f420bb5f63ce6ac604d8766acb185a519efeccb8969417"
+      signer: "0xB3a7038efc6c4ED12cF9C633a59A215Ca0F82A2e"   # faithnet's registry agent — matches ap-federation federation.yaml
       declaredOnChain: true
     kms: { tenant: faithnet }
     # Spec 437 I4 — the estate's own Cloudflare Workers (its A2A runtime, its vault, its edge, its Home MCP, its
@@ -181,7 +183,9 @@ services:
     repo: ap-town
     app: apps/registry
     worker: demo-discovery-a2a-faithnet
-    agentName: discovery.registry
+    # Generation 4 (2026-11-11): `discovery.registry` is refused by the domain rule (discovery.com exists), so the agent
+    # 0xD97AE3DE… is named faithnet-discovery.registry. The ARD service id (`…:registry:discovery.registry`) is not a name and stays.
+    agentName: faithnet-discovery.registry
     hosts: [discovery-a2a.faithnet.town, discovery-a2a.faithnet.io]
     probe: https://discovery-a2a.faithnet.town/health
     card: https://discovery-a2a.faithnet.town/.well-known/agent-card.json

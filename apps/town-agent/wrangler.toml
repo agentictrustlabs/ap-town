@@ -49,12 +49,13 @@ TOWN = "faithchain"
 # cannot fetch; the lane carries the request. Edit towns/*/town.yaml, never this line.
 LANE_ROUTES = "edge.faithnet.io=LANE_FAITHNET_1,demo-edge-faithnet.richardpedersen3.workers.dev=LANE_FAITHNET_1,*.faithnet.ai=LANE_FAITHNET_2,test-one-edge.richardpedersen3.workers.dev=LANE_TEST_ONE_1,test-one-runtime.richardpedersen3.workers.dev=LANE_TEST_ONE_2,test-two-edge.richardpedersen3.workers.dev=LANE_TEST_TWO_1,test-two-runtime.richardpedersen3.workers.dev=LANE_TEST_TWO_2,test-three-edge.richardpedersen3.workers.dev=LANE_TEST_THREE_1,test-three-runtime.richardpedersen3.workers.dev=LANE_TEST_THREE_2"  # town:lanes
 PUBLIC_ORIGIN = "https://town.faithnet.io"
-# The Town Ask (spec 436 §5.5 T1). Both chartered on faithchain 2026-10-11 under demo-admin:
-#   faith-town.workspace   0xabAbAD83E69B4cFbf1B90C1c70561D6D770bEef4
-#   faith-estate.workspace 0x137Bd996eE74c4288DC8EF2ecEAD5Ee5b448a49C
-#   imb-estate.workspace   0xc0D82CdD178Ce2362346e1985127E4ade851Df0A
+# The Town Ask (spec 436 §5.5 T1). Re-chartered on faithchain GENERATION 4 (2026-11-11, spec 445 estate reset) under demo-admin:
+#   faith-town.workspace   0xcFd3119574a5fB2DA234b9c16eb2146F9F68D406   (gen 1: 0xabAbAD83…)
+#   faith-estate.workspace 0xbF8D5f19278ee393B71a7d7EAa9d49375cd6dd94   (gen 1: 0x137Bd996…)
+# imb-estate.workspace is gone from this list: impact-agent left this town for hopenet (2026-10-14), and its gen-1
+# faithchain agent has no name on generation 4.
 # secrets CONTEXT_AGENT_CREDENTIALS ({name:{grant,leaf}}) + TOWN_SIGNER_KEY once the stewards issue them (T2).
-CONTEXT_AGENTS = "{\"town\":\"faith-town.workspace\",\"estates\":{\"faithnet\":\"faith-estate.workspace\",\"impact-agent\":\"imb-estate.workspace\"}}"
+CONTEXT_AGENTS = "{\"town\":\"faith-town.workspace\",\"estates\":{\"faithnet\":\"faith-estate.workspace\"}}"
 CONTEXT_AGENT_ZONE = "faithnet.ai"
 VAULT_URL = "https://mcp.faithnet.io"
 VAULT_AUDIENCE = "urn:mcp:server:person"

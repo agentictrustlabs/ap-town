@@ -161,7 +161,7 @@ export async function connectViaHome(estate: EstateRef, estates: EstateRef[], re
   const home = estate.home.replace(/\/$/, '');
   try {
     const fedcm = await connectViaFedcm(home, CLIENT_ID);
-    return await finishFromIdToken(c, estate, fedcm.authOrigin, fedcm.idToken);
+    return await finishFromIdToken(c, estate, fedcm.authOrigin, fedcm.idToken, fedcm.nonce); // the nonce FedCM sent and the id_token must echo (spec 445 / ING-15)
   } catch { /* no FedCM, or no Home session yet — the ceremony next */ }
   const start = await c.startEnrollment('');
   const popup = await openCentralAuthPopup(withPopupMode(start.url), start.state, start.authOrigin, RELAY_CHANNEL, onProgress, undefined, c.isAllowedIssuerOrigin);

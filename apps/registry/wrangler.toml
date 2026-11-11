@@ -40,7 +40,7 @@ CATALOG_URN = "urn:air:faithnet.io:catalog:root"
 CATALOG_CARDS = "https://town.faithnet.io/.well-known/agent-card.json,https://scripture.faithnet.io/.well-known/agent-card.json"
 # spec 346: the discovery agent IS the `.registry` operator — a typed name claimed on 34348 by a service SA that
 # declared `atl:agentType = registry` and created `urn:ap:registry:faithnet-agents` on AgentRegistryBase.
-AGENT_NAME = "discovery.registry"  # town:agent
+AGENT_NAME = "faithnet-discovery.registry"  # town:agent
 A2A_PUBLIC_ORIGIN = "https://discovery-a2a.faithnet.io"
 
 [[env.faithnet.services]]

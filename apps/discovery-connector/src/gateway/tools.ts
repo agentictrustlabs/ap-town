@@ -12,8 +12,16 @@ export interface GatewayEnv extends DiscoveryEnv {
   /** The gateway agent's session-wire DELEGATE key (spec 387 W2): no authority of its own. A raw Worker secret today;
    *  audit gateway-raw-delegate-key (accepted-risk) schedules the KMS-backed signer + a re-issued wire. */
   GATEWAY_PRIVATE_KEY?: string;
+  /** RETIRED (Ring 0 spec 445 / RUN-9): the one wire that named no target. A receiving host now refuses a session
+   *  wire that does not name ITS OWN agent, so the gateway holds ONE WIRE PER RECEIVING AGENT, each a secret named
+   *  `GATEWAY_SESSION_WIRE_<the agent's address, 40 hex, lower case, no 0x>` (`sessionWireVarFor`). This var is
+   *  never read; when it is the only one set the refusal says so. */
   GATEWAY_SESSION_WIRE?: string;
 }
+
+const ADDRESS = /^0x[0-9a-fA-F]{40}$/;
+/** The secret that holds the gateway's session wire FOR ONE receiving agent (scripts/mint-gateway-wire.mts --target). */
+export const sessionWireVarFor = (target: string): string => `GATEWAY_SESSION_WIRE_${target.toLowerCase().replace(/^0x/, '')}`;
 
 const GATEWAY_NOTE = 'The gateway acts as its own agent of the estate and spends no authority: a read or an informational skill answers; an act waits at the target for its stewards. Discovery authorizes nothing.';
 
@@ -48,12 +56,20 @@ function lastArtifact(artifacts: Array<{ name?: string; data?: unknown }>, name:
   return hit && hit.data && typeof hit.data === 'object' ? hit.data as Record<string, unknown> : undefined;
 }
 
-function identityOf(env: GatewayEnv): GatewayIdentity | { refused: string } {
-  if (!env.GATEWAY_AGENT || !env.GATEWAY_PRIVATE_KEY || !env.GATEWAY_SESSION_WIRE) return { refused: 'this gateway has no agent identity configured (GATEWAY_AGENT, GATEWAY_PRIVATE_KEY, GATEWAY_SESSION_WIRE) — it cannot speak to anyone as itself' };
+/** The gateway as a caller OF ONE AGENT: its key and the wire its custodian minted for exactly that receiving agent
+ *  (the handle's `anchor` — the canonical address the registry named). ONE WIRE PER TARGET (RUN-9): a wire is a
+ *  credential only at the host it names, so a stolen one works at one agent. No wire for this target is a refusal
+ *  that names the target — never another agent's wire, and never the retired untargeted one (ADR-0013). */
+function identityFor(env: GatewayEnv, target: { anchor: string; name: string }): GatewayIdentity | { refused: string } {
+  if (!env.GATEWAY_AGENT || !env.GATEWAY_PRIVATE_KEY) return { refused: 'this gateway has no agent identity configured (GATEWAY_AGENT, GATEWAY_PRIVATE_KEY) — it cannot speak to anyone as itself' };
+  if (!ADDRESS.test(target.anchor)) return { refused: `the registry named no canonical agent address for ${target.name} — a session wire is minted for one receiving agent, so the gateway cannot call an agent it cannot name by address` };
+  const name = sessionWireVarFor(target.anchor);
+  const b64 = (env as unknown as Record<string, unknown>)[name];
+  if (typeof b64 !== 'string' || !b64) return { refused: `this gateway holds no session wire minted for ${target.name} (${target.anchor.toLowerCase()}) — its custodian mints one per receiving agent (scripts/mint-gateway-wire.mts --target ${target.anchor.toLowerCase()}; secret ${name})${env.GATEWAY_SESSION_WIRE ? '. The untargeted GATEWAY_SESSION_WIRE that is set is retired: a receiving agent refuses a wire that does not name it' : ''}` };
   try {
-    const wire = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(env.GATEWAY_SESSION_WIRE.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (env.GATEWAY_SESSION_WIRE.length % 4)) % 4)), (c) => c.charCodeAt(0))));
+    const wire = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(b64.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (b64.length % 4)) % 4)), (c) => c.charCodeAt(0))));
     return { agent: env.GATEWAY_AGENT, privateKey: env.GATEWAY_PRIVATE_KEY as `0x${string}`, wire };
-  } catch { return { refused: 'the gateway\'s session wire is unreadable' }; }
+  } catch { return { refused: `the gateway's session wire for ${target.name} is unreadable (${name})` }; }
 }
 
 /** The registry search of spec 386, each match carrying a handle bound to the card it names. */
@@ -101,7 +117,7 @@ export async function continueTask(env: GatewayEnv, args: { target?: string; tas
   if (!answer || !Object.keys(answer).length) return { refused: 'answer is required — an object keyed by the prompt\'s field names (task.prompt.fields), e.g. { "id": "…" }', note: GATEWAY_NOTE };
   const v = await verifyHandle(env.HANDLE_SECRET, String(args.target ?? ''));
   if (!v.ok) return { refused: v.refused, note: GATEWAY_NOTE };
-  const id = identityOf(env);
+  const id = identityFor(env, v.payload);
   if ('refused' in id) return { refused: id.refused, note: GATEWAY_NOTE };
   const c = await fetchCard(v.payload.cardUrl, fetchImpl);
   if (!c.ok) return { refused: c.refused, note: GATEWAY_NOTE };
@@ -124,7 +140,7 @@ export async function invokeAgent(env: GatewayEnv, args: { target?: string; mess
   if (!text) return { refused: 'message is required — what to ask the agent, in words', note: GATEWAY_NOTE };
   const v = await verifyHandle(env.HANDLE_SECRET, String(args.target ?? ''));
   if (!v.ok) return { refused: v.refused, note: GATEWAY_NOTE };
-  const id = identityOf(env);
+  const id = identityFor(env, v.payload);
   if ('refused' in id) return { refused: id.refused, note: GATEWAY_NOTE };
   // The card is read AGAIN and must still name the endpoint the handle pinned — a changed card is said, not followed.
   const c = await fetchCard(v.payload.cardUrl, fetchImpl);
@@ -156,7 +172,7 @@ export async function getTaskTool(env: GatewayEnv, args: { target?: string; task
   if (!env.HANDLE_SECRET) return { refused: 'no handle secret configured', note: GATEWAY_NOTE };
   const v = await verifyHandle(env.HANDLE_SECRET, String(args.target ?? ''));
   if (!v.ok) return { refused: v.refused, note: GATEWAY_NOTE };
-  const id = identityOf(env);
+  const id = identityFor(env, v.payload);
   if ('refused' in id) return { refused: id.refused, note: GATEWAY_NOTE };
   const taskId = String(args.task ?? '').trim();
   if (!taskId) return { refused: 'task is required', note: GATEWAY_NOTE };
