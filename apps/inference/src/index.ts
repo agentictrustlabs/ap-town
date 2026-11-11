@@ -24,12 +24,20 @@ export interface Env extends PolicyEnv, VaultLedgerEnv {
   OPENAI_COMPAT_KEYS?: string;
   /** The town's ops token (the Pulse sampler); a steward session is W6. */
   TOWN_OPS_TOKEN?: string;
+  /** Spec 445 decision 8 — the providers this deployment may call, comma-separated (`anthropic,gemini`). Explicit and never
+   *  defaulted: the provider clients refuse to be built for a provider not listed, before any request. A var, not a secret. */
+  ALLOWED_PROVIDERS?: string;
 }
 
 const GEMINI_OPENAI = 'https://generativelanguage.googleapis.com/v1beta/openai';
 const json = (b: unknown, status = 200, headers: Record<string, string> = {}): Response => Response.json(b, { status, headers: { 'cache-control': 'no-store', ...headers } });
 
+const allowedProvidersOf = (env: Env): string[] => (env.ALLOWED_PROVIDERS ?? '').split(',').map((p) => p.trim().toLowerCase()).filter(Boolean);
+/** Which provider an OpenAI-compatible host is, in the deployment's words: Gemini's endpoint is `gemini`; any other host is named by its hostname. */
+const providerOfBase = (base: string): string => (new URL(base).origin === new URL(GEMINI_OPENAI).origin ? 'gemini' : new URL(base).hostname.toLowerCase());
+
 function adaptersFor(env: Env) {
+  const allowedProviders = allowedProvidersOf(env);
   const compatClients = new Map<string, OpenAiCompatLike>();
   const keys = (() => { try { return JSON.parse(env.OPENAI_COMPAT_KEYS ?? '{}') as Record<string, string>; } catch { return {}; } })();
   const clientFor = (endpoint: string | undefined): OpenAiCompatLike => {
@@ -38,13 +46,14 @@ function adaptersFor(env: Env) {
     if (!c) {
       const origin = new URL(base).origin;
       const apiKey = keys[base] ?? keys[origin] ?? (origin === new URL(GEMINI_OPENAI).origin ? env.GEMINI_API_KEY : undefined) ?? '';
-      c = createFetchOpenAiCompatClient({ baseUrl: base, apiKey });
+      c = createFetchOpenAiCompatClient({ baseUrl: base, apiKey, provider: providerOfBase(base), allowedProviders });
       compatClients.set(base, c);
     }
     return c;
   };
   return {
-    ...(env.ANTHROPIC_API_KEY ? { anthropic: anthropicAdapter({ client: createFetchAnthropicClient({ apiKey: env.ANTHROPIC_API_KEY }) }) } : {}),
+    // A provider the deployment did not list is not built at all (the client would refuse it): no key is wired for it.
+    ...(env.ANTHROPIC_API_KEY && allowedProviders.includes('anthropic') ? { anthropic: anthropicAdapter({ client: createFetchAnthropicClient({ apiKey: env.ANTHROPIC_API_KEY, allowedProviders }) }) } : {}),
     'openai-compat': openAiCompatAdapter({ clientFor }),
   };
 }
@@ -105,7 +114,7 @@ export default {
 
     if (path === '/healthz' || path === '/health') {
       const seeds = seededPolicy();
-      return json({ ok: true, service: 'inference', town: env.TOWN, profiles: seeds.profiles.map((p) => p.id), catalog: seeds.catalog.filter((c) => c.enabled).map((c) => `${c.provider}/${c.model}`), providers: { anthropic: !!env.ANTHROPIC_API_KEY, gemini: !!env.GEMINI_API_KEY }, vault: vaultLedgerReadiness(env), seedErrors: seeds.errors });
+      return json({ ok: true, service: 'inference', town: env.TOWN, profiles: seeds.profiles.map((p) => p.id), catalog: seeds.catalog.filter((c) => c.enabled).map((c) => `${c.provider}/${c.model}`), providers: { anthropic: !!env.ANTHROPIC_API_KEY, gemini: !!env.GEMINI_API_KEY }, allowedProviders: allowedProvidersOf(env), vault: vaultLedgerReadiness(env), seedErrors: seeds.errors });
     }
 
     if (path === '/v1/ops/summary' && req.method === 'GET') {

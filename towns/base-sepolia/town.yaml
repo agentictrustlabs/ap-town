@@ -14,7 +14,7 @@ estates:
     home: https://www.impact-agent.me
     edge: https://edge.impact-agent.io
     a2a: https://a2a.impact-agent.io
-    nameRoots: [impact, agent]
+    nameRoots: [agent]
 
 services:
   - id: registry

@@ -41,7 +41,7 @@ const projectProfile = (profileDescription: string, nameDescription: string) => 
     client: stubClient(profileDescription, nameDescription),
     chainId: 84532,
     sa: '0x000000000000000000000000000000000000dEaD' as Address,
-    name: 'someone.impact',
+    name: 'someone.me',
     node: `0x${'11'.repeat(32)}` as Hex,
     nameRegistry: '0x0000000000000000000000000000000000000001' as Address,
     resolver: '0x0000000000000000000000000000000000000002' as Address,

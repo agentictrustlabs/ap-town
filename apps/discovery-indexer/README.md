@@ -27,5 +27,5 @@ cp .env.example .env   # fill GRAPHDB_USER / GRAPHDB_PASSWORD (gitignored)
 pnpm --filter @ap-town/discovery-indexer index           # enumerate → A-box
 pnpm --filter @ap-town/discovery-indexer load-ontology    # load T-box + C-box into GraphDB
 ```
-Verified vs Base Sepolia + GraphDB: 16 `.impact` agents (incl. `lbsb`/`fbsb`) + the full ontology
+Verified vs Base Sepolia + GraphDB (2026, before the `.impact` name root was retired on 2026-11-10): 16 named agents (incl. `lbsb`/`fbsb`) + the full ontology
 (94 `owl:Class`, 11 `sh:NodeShape`) in the `smart-agents` repo.

@@ -736,11 +736,13 @@ export async function api(path: string, url: URL, env: Env, town: TownManifest, 
       // identity at somebody else's Home.
       const relay = (authorization ?? '').trim();
       const carry = /^Bearer\s+[\w-]+\.[\w-]+\.[\w-]+$/i.test(relay) && !operatorAuthorized(env.TOWN_OPS_TOKEN, authorization) ? relay : null;
+      // RUNB-9 (spec 445): the relayed session goes as a HEADER with the card's origin named, so the client refuses to send it
+      // to an endpoint the (unpinned) card names on ANOTHER origin — a card is a claim about where an agent listens, and
+      // a person's session is not sent wherever a card says. (It used to ride a wrapped `fetch`, which no guard could see.)
       const client = createStandardA2aClient({
         endpoint: resolved.endpoint,
-        fetch: carry
-          ? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers).entries()), authorization: carry } }))
-          : fetch,
+        fetch,
+        ...(carry ? { headers: { authorization: carry }, card: { url: resolved.cardUrl, pinned: false } } : {}),
       });
       // THE QUESTION GOES AS A STRANGER (spec 436 §5.5 T4). A stranger's message is admitted only on the public
       // lane, which takes a NAMED capability — so the question travels as words AND as the one capability it is

@@ -4,10 +4,10 @@ import { planFindServices } from '../src/plan.js';
 import { shapeService } from '../src/catalog.js';
 
 const LIGONIER = {
-  identifier: 'urn:air:ligonier-svc.faithnet.io:agent:ligonier', displayName: 'Ligonier Ministries', type: 'application/a2a-agent-card+json',
+  identifier: `urn:air:agenticprimitives.dev:sa:${'0x' + 'a'.repeat(40)}`, displayName: 'Ligonier Ministries', type: 'application/a2a-agent-card+json',
   url: 'https://ligonier-svc.faithnet.io/.well-known/agent-card.json', description: 'Reformed teaching, study plans on justification',
   capabilities: ['gc:CFnDiscipleshipCurricula'], tags: ['service', 'justification'],
-  trustManifest: { identity: 'https://ligonier-svc.faithnet.io', identityType: 'https-fqdn', attestations: [{ type: 'ap-registry-receipt', uri: 'https://discovery-a2a.faithnet.io/receipts/1' }] },
+  trustManifest: { identity: '0x' + 'a'.repeat(40), identityType: 'ap-smart-agent-address', attestations: [{ type: 'ap-registry-receipt', uri: 'https://discovery-a2a.faithnet.io/receipts/1' }] },
   'ap:canonicalAgentId': '0x' + 'a'.repeat(40), 'ap:agentType': 'service', 'ap:registryStatus': 'active', 'ap:siteUrl': 'https://www.ligonier.org', score: 0.42, source: 'https://discovery-a2a.faithnet.io/search',
 };
 const seen: Array<{ url: string; body: unknown }> = [];

@@ -40,8 +40,8 @@ id = "fc19d6789ce34373b6a759c819129434"
 # ─────────────────────────────────────────────────────────────────────────────────────────────────
 # FAITHNET (Azure faithchain, chain 34348) — a PARALLEL universe: `wrangler deploy --env faithnet`.
 # Nothing here touches the production Worker above (Base Sepolia + smart-agents). Addresses come from
-# packages/contracts/deployments-faithchain.json (the same table Field/Gather use). Faithnet names are
-# still `.impact` (typed roots — spec 346 — are not yet provisioned on 34348).
+# packages/contracts/deployments-faithchain.json (the same table Field/Gather use). Faithnet names live under the
+# typed roots (spec 346); the untyped `.impact` root is retired (2026-11-10) and is not indexed.
 #
 # Secrets (wrangler secret put <NAME> --env faithnet): GRAPHDB_USER, GRAPHDB_PASSWORD
 #   RPC_URL      — set below as a var: https://a2a.faithnet.io/rpc (the browser-safe read relay Field's Worker uses; Workers
@@ -67,10 +67,12 @@ ATTESTATION_REGISTRY = "0x4c94A0355380b8F5023eDd5f8A8131B020de19FA"
 REGISTRY = "0x0Be172F1b5cfD1d084CEc2cF2Af0A0cE9023Deb1"
 # Every root the town's estates name agents under (GENERATED: towns/faithchain/town.yaml → estates[].nameRoots, `pnpm gen:town`). The cron walks THESE and nothing else, so a root that
 # is missing here has no periodic backstop — its agents are in the knowledge base only for as long as
-# something calls /project for them by hand. This said "impact" alone while the estate had already
+# something calls /project for them by hand. This once named a single legacy root while the estate had already
 # migrated to typed names (spec 346): 36 of 45 indexed agents were on a root the cron never visited.
-# Legacy `impact` stays — the agents still on it are not less real for the rename.
-TLDS = "me,org,team,svc,workspace,treasury,registry,church,circle,impact"  # town:roots
+# The `.impact` name root is RETIRED (owner, 2026-11-10) and is not in this list: `agent-naming` refuses the root
+# (`unknown_tld`), and one refused root would abort the whole walk. An agent whose only name was under it is no
+# longer reached by the cron — see SPEC-445-CONSUMER-NOTES.md, "possible live .impact names".
+TLDS = "me,org,team,svc,workspace,treasury,registry,church,circle"  # town:roots
 DISCOVERY_REGISTRY_ID = "urn:ap:registry:faithnet-agents"
 # RPC_URL + LOGS_RPC_URL are SECRETS here: the town's chain gateway (rpc.faithnet.io) with this Worker's own app token
 # (spec 429 §5 — never the estate runtime's relay). The Worker refuses to run without them; it has no chain default.

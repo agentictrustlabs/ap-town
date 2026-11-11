@@ -60,7 +60,7 @@ estates:
       edge.faithnet.io: demo-edge-faithnet
       demo-edge-faithnet.richardpedersen3.workers.dev: demo-edge-faithnet
       "*.faithnet.ai": demo-a2a-faithnet
-    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle, impact]
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
     # The estate's own agent on this chain. A person's agent carries this NAME in `atl:estate`, and this
     # agent carries the Home's URL in `atl:homepage` — the name is stable, the URL moves.
     estateName: faithnet.estate

@@ -19,7 +19,6 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "edge": "https://edge.impact-agent.io",
         "a2a": "https://a2a.impact-agent.io",
         "nameRoots": [
-          "impact",
           "agent"
         ]
       }
@@ -211,8 +210,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
           "treasury",
           "registry",
           "church",
-          "circle",
-          "impact"
+          "circle"
         ],
         "estateName": "faithnet.estate",
         "namingGate": "0x640D577Bcb3fd860743ED315620085704c1483E9",

@@ -10,7 +10,7 @@ import { Glyph, Loading, Scene, Stamped } from '../ui';
 export function Home(): ReactNode {
   const v = useApi<TownView>('/api/town');
   // THE ENDINGS THIS BOX OFFERS: the ones a person may charter, which is the registrable set and nothing wider —
-  // a legacy root (.impact, .agent) cannot be bought, and .treasury is named when its holder is created, so
+  // the legacy root (.agent) cannot be bought, and .treasury is named when its holder is created, so
   // offering either here would end in a refusal. The list is static so the box is usable on first paint; what a
   // name under each ending NAMES comes from the town's own read as soon as it lands, rather than being restated
   // here (the service is the authority on that sentence).

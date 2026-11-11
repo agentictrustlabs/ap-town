@@ -139,8 +139,8 @@ const ROOT_ORDER = [...AGENT_TLDS, ...LEGACY_TLDS] as readonly string[];
 const rootRank = (tld: string) => { const i = ROOT_ORDER.indexOf(tld); return i < 0 ? 999 : i; };
 
 /**
- * The town's roots as shown: the TYPED ones. The legacy roots (`.impact`, `.agent`) are closed and say nothing about
- * what an agent is, so they are not viewed (owner, 2026-10-06) — not on the home page, the search, or as root pages. A
+ * The town's roots as shown: the TYPED ones. The legacy root (`.agent`) is closed and says nothing about
+ * what an agent is, so it is not viewed (owner, 2026-10-06) — not on the home page, the search, or as root pages. A
  * legacy NAME still answers on its own page, because it resolves, with its banner; an agent's held names still list it.
  */
 export async function rootViews(ctx: Ctx): Promise<RootView[]> {
