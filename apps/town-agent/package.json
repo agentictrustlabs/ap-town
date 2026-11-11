@@ -12,10 +12,10 @@
     "deploy:faithnet": "pnpm build && wrangler deploy --env faithnet"
   },
   "dependencies": {
-    "@agenticprimitives/a2a": "0.0.0-alpha.33",
-    "@agenticprimitives/agent-profile": "1.0.0-alpha.36",
-    "@agenticprimitives/delegation": "1.0.0-alpha.36",
-    "@agenticprimitives/harness": "0.0.0-alpha.13",
+    "@agenticprimitives/a2a": "0.0.0-alpha.49",
+    "@agenticprimitives/agent-profile": "1.0.0-alpha.47",
+    "@agenticprimitives/delegation": "1.0.0-alpha.47",
+    "@agenticprimitives/harness": "0.0.0-alpha.31",
     "@ap-town/town-model": "workspace:*",
     "@ap-town/town-scene": "workspace:*",
     "@ap-town/town-ui": "workspace:*",

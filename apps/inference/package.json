@@ -11,10 +11,10 @@
     "deploy:faithnet": "wrangler deploy --env faithnet"
   },
   "dependencies": {
-    "@agenticprimitives/delegation": "1.0.0-alpha.36",
-    "@agenticprimitives/model-gateway": "0.0.0-alpha.1",
-    "@agenticprimitives/orchestration-anthropic": "0.0.0-alpha.12",
-    "@agenticprimitives/orchestration-openai-compat": "0.0.0-alpha.11",
+    "@agenticprimitives/delegation": "1.0.0-alpha.47",
+    "@agenticprimitives/model-gateway": "0.0.0-alpha.19",
+    "@agenticprimitives/orchestration-anthropic": "0.0.0-alpha.15",
+    "@agenticprimitives/orchestration-openai-compat": "0.0.0-alpha.16",
     "viem": "2.52.2"
   },
   "devDependencies": {

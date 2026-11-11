@@ -32,24 +32,24 @@
     "gate:card-signature": "pnpm --filter @ap-town/town-agent exec tsx scripts/gate-card-signature.mts"
   },
   "devDependencies": {
-    "@agenticprimitives/a2a": "0.0.0-alpha.33",
-    "@agenticprimitives/devkit": "0.0.0-alpha.18",
-    "@agenticprimitives/evaluation": "0.0.0-alpha.5",
-    "@agenticprimitives/mcp-protocol": "0.0.0-alpha.4",
+    "@agenticprimitives/a2a": "0.0.0-alpha.49",
+    "@agenticprimitives/devkit": "0.0.0-alpha.35",
+    "@agenticprimitives/evaluation": "0.0.0-alpha.12",
+    "@agenticprimitives/mcp-protocol": "0.0.0-alpha.5",
     "typescript": "^5.7.3",
     "vitest": "^4.1.8",
     "tsx": "^4.22.4",
     "@types/node": "^22.7.0",
-    "@agenticprimitives/audit": "1.0.0-alpha.36",
-    "@agenticprimitives/connect-auth": "1.0.0-alpha.36",
-    "@agenticprimitives/key-custody": "1.0.0-alpha.36",
-    "@agenticprimitives/ontology": "1.0.0-alpha.36",
-    "@agenticprimitives/agent-account": "1.0.0-alpha.36",
-    "@agenticprimitives/agent-naming": "1.0.0-alpha.36",
-    "@agenticprimitives/contracts": "1.0.0-alpha.36",
-    "@agenticprimitives/delegation": "1.0.0-alpha.36",
+    "@agenticprimitives/audit": "1.0.0-alpha.47",
+    "@agenticprimitives/connect-auth": "1.0.0-alpha.47",
+    "@agenticprimitives/key-custody": "1.0.0-alpha.47",
+    "@agenticprimitives/ontology": "1.0.0-alpha.47",
+    "@agenticprimitives/agent-account": "1.0.0-alpha.47",
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.47",
+    "@agenticprimitives/contracts": "1.0.0-alpha.47",
+    "@agenticprimitives/delegation": "1.0.0-alpha.47",
     "viem": "2.52.2",
-    "@agenticprimitives/types": "1.0.0-alpha.36"
+    "@agenticprimitives/types": "1.0.0-alpha.47"
   },
   "pnpm": {
     "overrides": {

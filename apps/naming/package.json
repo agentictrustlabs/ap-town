@@ -12,15 +12,15 @@
     "deploy:faithnet": "pnpm build && wrangler deploy --env faithnet"
   },
   "dependencies": {
-    "@agenticprimitives/agent-naming": "1.0.0-alpha.36",
-    "@agenticprimitives/contracts": "1.0.0-alpha.36",
+    "@agenticprimitives/agent-naming": "1.0.0-alpha.47",
+    "@agenticprimitives/contracts": "1.0.0-alpha.47",
     "@ap-town/town-model": "workspace:*",
     "@ap-town/town-scene": "workspace:*",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "viem": "2.52.2",
     "@ap-town/town-ui": "workspace:*",
-    "@agenticprimitives/connect-client": "1.0.0-alpha.25"
+    "@agenticprimitives/connect-client": "1.0.0-alpha.37"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "4.20260605.1",
