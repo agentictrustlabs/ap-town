@@ -215,7 +215,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "estateName": "faithnet.estate",
         "namingGate": "0x640D577Bcb3fd860743ED315620085704c1483E9",
         "projection": {
-          "registry": "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b",
+          "registry": "0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9",
           "registryChainId": 34348,
           "governance": "0x3273f419FDfc7eA1Bf14372C4A9CA5fC43818F64",
           "estateId": "0x465f13a19d48b6bd58e9c792956cbf477cd35ed395fdd38dbe8250e262e40264",
@@ -499,7 +499,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
     "status": "demo",
     "chain": {
       "id": 34349,
-      "generation": "3",
+      "generation": "4",
       "rpc": "https://hopechain-rpc-gateway.agentkg.io",
       "deployment": "hopechain",
       "namesRootedAt": "faithchain"
@@ -562,7 +562,7 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         ],
         "estateName": "imbnet.estate",
         "projection": {
-          "registry": "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b",
+          "registry": "0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9",
           "registryChainId": 34348,
           "governance": "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015",
           "estateId": "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84",

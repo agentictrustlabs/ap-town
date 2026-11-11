@@ -30,7 +30,7 @@ describe('town manifest', () => {
     const { town } = parseTown(hopenet);
     const impactAgent = town?.estates.find((e) => e.id === 'impact-agent');
     expect(impactAgent?.projection).toMatchObject({
-      registry: '0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b',
+      registry: '0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9',
       registryChainId: 34348,
       governance: '0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015',
       estateId: '0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84',

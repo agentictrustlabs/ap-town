@@ -73,7 +73,7 @@ estates:
     # and is NOT `faith-estate.workspace`, which stays the Pulse's context agent (436 §5.5). It declared its
     # projection signer on this chain, so the registration is chain-verifiable both ways.
     projection:
-      registry: "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b"
+      registry: "0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9"
       registryChainId: 34348
       governance: "0x3273f419FDfc7eA1Bf14372C4A9CA5fC43818F64"   # faithnet.estate
       estateId: "0x465f13a19d48b6bd58e9c792956cbf477cd35ed395fdd38dbe8250e262e40264"

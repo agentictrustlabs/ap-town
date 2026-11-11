@@ -12,7 +12,7 @@ town: hopenet
 status: demo
 chain:
   id: 34349
-  generation: "3"   # deployments-hopechain.json contractsGeneration — the chain was deployed from the current scripts (spec 410 generation 3), unlike faithchain (1)
+  generation: "4"   # deployments-hopechain.json contractsGeneration — spec 445 estate reset: a FRESH generation-4 deploy (2026-11-11)
   rpc: https://hopechain-rpc-gateway.agentkg.io
   deployment: hopechain   # @agenticprimitives/contracts/deployments-hopechain.json
   # No `coin`: the Sheqel and the priced roots are faithchain's (spec 440 §C — one universal namespace, rooted
@@ -69,7 +69,7 @@ estates:
     # `atl:projectionSigner` itself (spec 439 F2.5), this file and ap-federation's `federation.yaml` are
     # the only public declarations a verifier can hold the registry's answer against.
     projection:
-      registry: "0xb4E116F5C6915a4f1e649E0877e4a0A7a1c1147b"
+      registry: "0x489E2b147C7F13fCf1c9e7A827a4D9Fd7bE2FEb9"
       registryChainId: 34348
       governance: "0x4457aadf6ADeB31bA8F166fafcC0d0579ECd1015"   # imbnet.estate
       estateId: "0xe96d2c36354f5223156e7882903824d2947529860302cbf5c87419dbc0eb4a84"
