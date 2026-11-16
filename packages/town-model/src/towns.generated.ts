@@ -394,6 +394,41 @@ export const TOWNS: Readonly<Record<string, TownManifest>> = {
         "vercelProjects": [
           "isl-1-home"
         ]
+      },
+      {
+        "id": "coach-assist",
+        "repo": "agentictrustlabs/ap-home",
+        "home": "https://coach-assist-home.vercel.app",
+        "edge": "https://coach-assist-edge.richardpedersen3.workers.dev",
+        "a2a": "https://coach-assist-runtime.richardpedersen3.workers.dev",
+        "lanes": {
+          "coach-assist-edge.richardpedersen3.workers.dev": "coach-assist-edge",
+          "coach-assist-runtime.richardpedersen3.workers.dev": "coach-assist-runtime"
+        },
+        "nameRoots": [
+          "me",
+          "org",
+          "team",
+          "svc",
+          "workspace",
+          "treasury",
+          "registry",
+          "church",
+          "circle"
+        ],
+        "kms": {
+          "tenant": "coach-assist"
+        },
+        "workers": [
+          "coach-assist-runtime",
+          "coach-assist-vault",
+          "coach-assist-edge",
+          "coach-assist-home-mcp",
+          "coach-assist-approval"
+        ],
+        "vercelProjects": [
+          "coach-assist-home"
+        ]
       }
     ],
     "services": [

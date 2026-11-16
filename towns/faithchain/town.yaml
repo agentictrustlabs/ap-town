@@ -192,6 +192,22 @@ estates:
     kms: { tenant: isl-1 }
     workers: [isl-1-runtime, isl-1-vault, isl-1-edge, isl-1-home-mcp, isl-1-approval]
     vercelProjects: [isl-1-home]
+
+  # "coach assist" — created with the one-click builder (faithnet.town).
+  # On the town's accounts, on default hosts: no zone of its own, so its agents are reached through its edge by
+  # name, and the town reaches its edge and runtime through the lanes below.
+  - id: coach-assist
+    repo: agentictrustlabs/ap-home
+    home: https://coach-assist-home.vercel.app
+    edge: https://coach-assist-edge.richardpedersen3.workers.dev
+    a2a: https://coach-assist-runtime.richardpedersen3.workers.dev
+    lanes:
+      "coach-assist-edge.richardpedersen3.workers.dev": coach-assist-edge
+      "coach-assist-runtime.richardpedersen3.workers.dev": coach-assist-runtime
+    nameRoots: [me, org, team, svc, workspace, treasury, registry, church, circle]
+    kms: { tenant: coach-assist }
+    workers: [coach-assist-runtime, coach-assist-vault, coach-assist-edge, coach-assist-home-mcp, coach-assist-approval]
+    vercelProjects: [coach-assist-home]
 services:
   # ── The town's own services (deployed from this repository) ───────────────────────────────────────────────
   - id: registry
